@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Equilibrador 5v5</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Futebol com amigos</p>
+          <h1>Equilibrador 5v5</h1>
+        </div>
+        <nav class="tabs" aria-label="Seccoes">
+          <button class="tab active" data-view="today">Hoje</button>
+          <button class="tab" data-view="players">Jogadores</button>
+          <button class="tab" data-view="games">Historico</button>
+        </nav>
+        <div class="account-bar">
+          <span id="data-status">Modo local</span>
+          <button id="admin-login" class="ghost-btn">Admin</button>
+          <button id="admin-logout" class="ghost-btn hidden">Sair</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="view active" id="view-today">
+          <div class="layout-grid">
+            <section class="panel selection-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Passo 1</p>
+                  <h2>Quem vem hoje?</h2>
+                </div>
+                <strong class="counter" id="selected-count">0/13</strong>
+              </div>
+
+              <div class="toolbar">
+                <input id="player-search" type="search" placeholder="Pesquisar jogador">
+                <button id="clear-selection" class="ghost-btn">Limpar</button>
+              </div>
+
+              <div class="guest-row">
+                <input id="guest-name" type="text" placeholder="Convidado">
+                <input id="guest-score" type="number" min="0" max="10" step="0.5" placeholder="0-10">
+                <button id="add-guest" class="primary-btn">Adicionar</button>
+              </div>
+
+              <div class="hint" id="selection-hint">Seleciona entre 10 e 13 jogadores.</div>
+              <div class="player-list" id="player-list"></div>
+            </section>
+
+            <section class="panel suggestions-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Passo 2</p>
+                  <h2>Sugestoes</h2>
+                </div>
+                <button id="generate-teams" class="primary-btn">Gerar</button>
+              </div>
+              <div class="suggestions" id="suggestions"></div>
+            </section>
+
+            <section class="panel game-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Passo 3</p>
+                  <h2>Jogo confirmado</h2>
+                </div>
+                <div class="actions">
+                  <button id="confirm-game" class="primary-btn" disabled>Confirmar jogo</button>
+                  <button id="export-image" class="primary-btn" disabled>PNG</button>
+                </div>
+              </div>
+              <div id="current-game-empty" class="empty-state">
+                Escolhe uma sugestao para pre-visualizar o campo e exportar o PNG.
+              </div>
+              <div id="current-game" class="game-detail hidden">
+                <div class="score-row">
+                  <label>
+                    Equipa A
+                    <input id="score-a" type="number" min="0" step="1" placeholder="-">
+                  </label>
+                  <strong>vs</strong>
+                  <label>
+                    Equipa B
+                    <input id="score-b" type="number" min="0" step="1" placeholder="-">
+                  </label>
+                  <button id="save-score" class="ghost-btn">Guardar</button>
+                </div>
+                <div class="field-card" id="field-card"></div>
+                <div class="edit-tools">
+                  <h3>Editar jogo</h3>
+                  <div class="add-to-game">
+                    <select id="add-player-to-game"></select>
+                    <button id="add-player-game-btn" class="ghost-btn">Adicionar ao jogo</button>
+                  </div>
+                  <div class="roster-editor" id="roster-editor"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-players">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Base editavel</p>
+                <h2>Jogadores</h2>
+              </div>
+              <div class="actions">
+                <button id="export-data" class="ghost-btn">Exportar JSON</button>
+                <label class="file-btn">
+                  Importar
+                  <input id="import-data" type="file" accept="application/json">
+                </label>
+                <button id="reset-data" class="danger-btn">Repor exemplo</button>
+              </div>
+            </div>
+
+            <form id="player-form" class="player-form">
+              <input id="player-id" type="hidden">
+              <input id="form-name" required placeholder="Nome">
+              <input id="form-pace" type="number" min="0" max="100" required placeholder="Ritmo">
+              <input id="form-shooting" type="number" min="0" max="100" required placeholder="Remate">
+              <input id="form-passing" type="number" min="0" max="100" required placeholder="Passe">
+              <input id="form-dribbling" type="number" min="0" max="100" required placeholder="Drible">
+              <input id="form-defending" type="number" min="0" max="100" required placeholder="Defesa">
+              <input id="form-physical" type="number" min="0" max="100" required placeholder="Fisico">
+              <input id="form-overall" type="number" min="0" max="100" required placeholder="Overall">
+              <label class="photo-upload">
+                Foto
+                <input id="form-photo" type="file" accept="image/*">
+              </label>
+              <button id="clear-player-photo" class="ghost-btn" type="button">Sem foto</button>
+              <button class="primary-btn" type="submit">Guardar</button>
+              <button id="cancel-player-edit" class="ghost-btn" type="button">Novo</button>
+            </form>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Foto</th>
+                    <th>Nome</th>
+                    <th>PAC</th>
+                    <th>SHO</th>
+                    <th>PAS</th>
+                    <th>DRI</th>
+                    <th>DEF</th>
+                    <th>PHY</th>
+                    <th>OVR</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="players-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-games">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Historico local</p>
+                <h2>Historico de jogos</h2>
+              </div>
+            </div>
+            <div id="games-list" class="games-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <canvas id="export-canvas" width="1600" height="2200" hidden></canvas>
+    <script src="app-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
