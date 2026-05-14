@@ -33,6 +33,7 @@ let selectedIds = new Set();
 let currentSuggestions = [];
 let currentGameId = state.games[0]?.id || null;
 let previewGame = null;
+let authActionBusy = false;
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
@@ -586,6 +587,7 @@ async function createAccount() {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
+  if (authActionBusy) return;
   const email = prompt("Email:");
   if (!email) return;
   const username = normalizeUsername(prompt("Username:", email.split("@")[0]) || "");
@@ -601,13 +603,20 @@ async function createAccount() {
   const password = prompt("Password:");
   if (!password) return;
   const displayName = prompt("Nome a mostrar:", email.split("@")[0]) || email.split("@")[0];
-  const { data, error } = await supabaseClient.auth.signUp({
-    email,
-    password,
-    options: { data: { display_name: displayName, username } },
-  });
+  setAuthActionBusy(true);
+  let data;
+  let error;
+  try {
+    ({ data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: displayName, username } },
+    }));
+  } finally {
+    setAuthActionBusy(false);
+  }
   if (error) {
-    alert(`Nao consegui criar conta: ${error.message}`);
+    alert(`Nao consegui criar conta: ${formatAuthError(error)}`);
     return;
   }
   if (!data.session) {
@@ -638,6 +647,7 @@ async function requestPasswordReset() {
     alert("Configura primeiro o Supabase.");
     return;
   }
+  if (authActionBusy) return;
   const login = prompt("Email ou username para recuperar password:");
   if (!login) return;
   const email = await resolveLoginEmail(login);
@@ -646,12 +656,43 @@ async function requestPasswordReset() {
     return;
   }
   const redirectTo = window.location.href.split("#")[0].split("?")[0];
-  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  setAuthActionBusy(true);
+  let error;
+  try {
+    ({ error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo }));
+  } finally {
+    setAuthActionBusy(false);
+  }
   if (error) {
-    alert(`Nao consegui enviar recuperacao: ${error.message}`);
+    alert(`Nao consegui enviar recuperacao: ${formatAuthError(error)}`);
     return;
   }
   alert("Email de recuperacao enviado.");
+}
+
+function setAuthActionBusy(isBusy) {
+  authActionBusy = isBusy;
+  document.querySelectorAll("#account-signup, [data-account-signup], [data-password-reset]").forEach((button) => {
+    button.disabled = isBusy;
+    button.classList.toggle("is-busy", isBusy);
+  });
+}
+
+function formatAuthError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("email rate limit") || message.includes("rate limit exceeded")) {
+    return "o limite de emails de confirmacao/recuperacao foi atingido. Tenta novamente mais tarde ou pede ao organizador para configurar o SMTP no Supabase.";
+  }
+  if (message.includes("password")) {
+    return "confirma se a password tem pelo menos 6 caracteres.";
+  }
+  if (message.includes("invalid email")) {
+    return "confirma se o email esta bem escrito.";
+  }
+  if (message.includes("already registered") || message.includes("already exists")) {
+    return "este email ja tem conta. Usa Entrar ou Recuperar password.";
+  }
+  return error?.message || "erro inesperado do Supabase.";
 }
 
 async function changeCurrentPassword() {

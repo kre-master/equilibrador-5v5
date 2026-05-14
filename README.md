@@ -23,6 +23,28 @@ window.FIVE5_CONFIG = {
 };
 ```
 
+### Configurar SMTP para emails de conta
+
+O email interno do Supabase serve apenas para testes e tem um limite muito baixo. Para criar contas, confirmar emails e recuperar passwords sem bater no erro `email rate limit exceeded`, configura um SMTP externo.
+
+Opcao simples para comecar:
+
+1. Cria conta num provider com plano gratis, por exemplo Resend ou Brevo.
+2. No provider, cria/valida o remetente ou dominio.
+3. Copia os dados SMTP: host, port, username, password e remetente.
+4. No Supabase, abre `Authentication > Settings > SMTP`.
+5. Ativa `Enable Custom SMTP`.
+6. Preenche:
+   - `Sender email`: email remetente validado no provider.
+   - `Sender name`: `Equilibrador 5v5`.
+   - `Host`: host SMTP do provider.
+   - `Port`: normalmente `587`.
+   - `Username`: utilizador SMTP/API key indicado pelo provider.
+   - `Password`: password/token SMTP indicado pelo provider.
+7. Guarda e testa criar uma conta nova.
+
+Enquanto a app ainda esta em testes, tambem podes desligar temporariamente a confirmacao por email em `Authentication > Providers > Email > Confirm email`. Para uso real com jogadores, e melhor manter a confirmacao ligada e usar SMTP.
+
 ## Como funciona online
 
 - Visitantes podem ver a app e criar conta.
