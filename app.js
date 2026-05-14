@@ -123,6 +123,7 @@ function player(id, name, pace, shooting, passing, dribbling, defending, physica
     photoDataUrl: "",
     linkedUserId: null,
     isGuest: false,
+    guestScore0To10: null,
   };
 }
 
@@ -188,7 +189,8 @@ function playerFromRow(row) {
     overall: row.overall,
     photoDataUrl: row.photo_data_url,
     linkedUserId: row.linked_user_id,
-    isGuest: false,
+    isGuest: Boolean(row.is_guest),
+    guestScore0To10: row.guest_score_0_to_10,
   }, 0);
 }
 
@@ -205,6 +207,8 @@ function playerToRow(playerData) {
     overall: playerData.overall,
     photo_data_url: playerData.photoDataUrl || "",
     linked_user_id: playerData.linkedUserId || null,
+    is_guest: Boolean(playerData.isGuest),
+    guest_score_0_to_10: playerData.guestScore0To10 ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -312,7 +316,7 @@ async function persistState() {
 
 async function saveRemoteState() {
   if (!supabaseClient) return;
-  const players = state.players.filter((p) => !p.isGuest).map(playerToRow);
+  const players = state.players.map(playerToRow);
   const games = state.games.map(gameToRow);
   const events = (state.events || []).map(eventToRow);
 
@@ -912,6 +916,9 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-cancel]").forEach((button) => {
     button.addEventListener("click", () => updateEventStatus(button.dataset.eventCancel, "cancelled"));
   });
+  els.eventsList.querySelectorAll("[data-event-share]").forEach((button) => {
+    button.addEventListener("click", () => shareEventOnWhatsApp(button.dataset.eventShare));
+  });
   els.eventsList.querySelectorAll("[data-event-add-existing-btn]").forEach((button) => {
     button.addEventListener("click", () => addExistingPlayerToEvent(button.dataset.eventAddExistingBtn));
   });
@@ -952,6 +959,7 @@ function renderEventCard(eventData) {
       </div>
       ${renderEventAdminAdds(eventData)}
       <div class="actions admin-actions">
+        <button class="ghost-btn" data-event-share="${eventData.id}">WhatsApp</button>
         <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
         <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
       </div>
@@ -1138,6 +1146,10 @@ async function addGuestToEvent(eventId) {
 
   state.players.push(guest);
   try {
+    if (remoteEnabled && supabaseClient) {
+      const { error: playerError } = await supabaseClient.from("players").upsert(playerToRow(guest));
+      if (playerError) throw playerError;
+    }
     await saveEventResponseForPlayer(eventId, guest.id, "going");
     currentEventId = eventId;
     saveState();
@@ -1146,6 +1158,39 @@ async function addGuestToEvent(eventId) {
     state.players = state.players.filter((p) => p.id !== guest.id);
     alert(`Nao consegui adicionar convidado: ${error.message}`);
   }
+}
+
+function shareEventOnWhatsApp(eventId) {
+  const eventData = (state.events || []).find((item) => item.id === eventId);
+  if (!eventData) return;
+  const going = getEventPlayers(eventId, "going");
+  const maybe = getEventPlayers(eventId, "maybe");
+  const notGoing = getEventPlayers(eventId, "not_going");
+  const missing = Math.max(0, eventData.minPlayers - going.length);
+  const appUrl = getShareAppUrl();
+  const lines = [
+    `Convocatoria: ${eventData.title}`,
+    formatDate(eventData.startsAt),
+    eventData.location ? `Local: ${eventData.location}` : "",
+    "",
+    `Confirmados: ${going.length}/${eventData.maxPlayers}`,
+    `Vou: ${going.length ? going.map((p) => p.name).join(", ") : "-"}`,
+    maybe.length ? `Talvez: ${maybe.map((p) => p.name).join(", ")}` : "",
+    notGoing.length ? `Nao vou: ${notGoing.map((p) => p.name).join(", ")}` : "",
+    missing ? `Faltam ${missing} para fechar o minimo.` : "Ja temos minimo para jogar.",
+    "",
+    `Responder aqui: ${appUrl}`,
+  ].filter(Boolean);
+
+  const url = `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
+  window.open(url, "_blank", "noopener");
+}
+
+function getShareAppUrl() {
+  if (location.protocol === "file:" || location.hostname === "127.0.0.1" || location.hostname === "localhost") {
+    return "https://kre-master.github.io/equilibrador-5v5/";
+  }
+  return location.href.split("#")[0];
 }
 
 async function updateEventStatus(eventId, status) {

@@ -10,11 +10,19 @@ create table if not exists public.players (
   overall integer not null check (overall between 0 and 100),
   photo_data_url text default '',
   linked_user_id uuid references auth.users(id) on delete set null,
+  is_guest boolean not null default false,
+  guest_score_0_to_10 numeric,
   updated_at timestamptz default now()
 );
 
 alter table public.players
 add column if not exists linked_user_id uuid references auth.users(id) on delete set null;
+
+alter table public.players
+add column if not exists is_guest boolean not null default false;
+
+alter table public.players
+add column if not exists guest_score_0_to_10 numeric;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
