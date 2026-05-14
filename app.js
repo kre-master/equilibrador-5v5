@@ -506,10 +506,40 @@ async function loadRemoteState() {
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
   });
+  await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = state.games[0]?.id || null;
   saveState();
+}
+
+async function repairDuplicatePlayerLinks() {
+  if (!remoteEnabled || !supabaseClient || !isAdmin) return;
+  const byUser = new Map();
+  state.players.forEach((playerData) => {
+    if (!playerData.linkedUserId) return;
+    const list = byUser.get(playerData.linkedUserId) || [];
+    list.push(playerData);
+    byUser.set(playerData.linkedUserId, list);
+  });
+
+  for (const [userId, linkedPlayers] of byUser.entries()) {
+    if (linkedPlayers.length <= 1) continue;
+    const approvedClaims = playerClaims
+      .filter((claim) => claim.user_id === userId && claim.status === "approved")
+      .sort((a, b) => new Date(b.reviewed_at || b.created_at) - new Date(a.reviewed_at || a.created_at));
+    const keepId = approvedClaims[0]?.player_id || linkedPlayers.sort((a, b) => a.name.localeCompare(b.name))[0].id;
+    state.players = state.players.map((playerData) => ({
+      ...playerData,
+      linkedUserId: playerData.linkedUserId === userId && playerData.id !== keepId ? null : playerData.linkedUserId,
+    }));
+    const { error } = await supabaseClient
+      .from("players")
+      .update({ linked_user_id: null, updated_at: new Date().toISOString() })
+      .eq("linked_user_id", userId)
+      .neq("id", keepId);
+    if (error) console.warn("Duplicate link repair failed", error);
+  }
 }
 
 function updateAccessUi(message) {
@@ -718,7 +748,9 @@ function render() {
 
 function getLinkedPlayer() {
   if (!currentSession?.user) return null;
-  return state.players.find((playerData) => playerData.linkedUserId === currentSession.user.id) || null;
+  return [...state.players]
+    .filter((playerData) => playerData.linkedUserId === currentSession.user.id)
+    .sort((a, b) => a.name.localeCompare(b.name))[0] || null;
 }
 
 function getMyPendingClaim() {
@@ -1320,7 +1352,23 @@ async function reviewPlayerClaim(claimId, status) {
   if (status === "approved") {
     const playerIndex = state.players.findIndex((p) => p.id === claim.player_id);
     if (playerIndex >= 0) {
-      state.players[playerIndex].linkedUserId = claim.user_id;
+      state.players = state.players.map((playerData) => ({
+        ...playerData,
+        linkedUserId: playerData.id === claim.player_id
+          ? claim.user_id
+          : playerData.linkedUserId === claim.user_id
+            ? null
+            : playerData.linkedUserId,
+      }));
+      const { error: unlinkError } = await supabaseClient
+        .from("players")
+        .update({ linked_user_id: null, updated_at: new Date().toISOString() })
+        .eq("linked_user_id", claim.user_id)
+        .neq("id", claim.player_id);
+      if (unlinkError) {
+        alert(`Nao consegui limpar ligacoes antigas: ${unlinkError.message}`);
+        return;
+      }
       await persistState();
     }
     await supabaseClient
