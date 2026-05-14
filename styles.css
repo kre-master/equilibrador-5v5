@@ -201,6 +201,8 @@ h3 {
 .score-row input,
 .player-form input,
 .event-form input,
+.event-admin-adds input,
+.event-admin-adds select,
 .add-to-game select {
   min-height: 40px;
   width: 100%;
@@ -405,6 +407,26 @@ h3 {
   margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.event-admin-adds {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(247, 250, 249, 0.7);
+}
+
+.add-existing-row,
+.add-guest-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 8px;
+}
+
+.add-guest-row {
+  grid-template-columns: minmax(160px, 1fr) 90px auto;
 }
 
 .good-pill {
@@ -999,6 +1021,8 @@ th:last-child {
   .layout-grid,
   .events-grid,
   .event-roster,
+  .add-existing-row,
+  .add-guest-row,
   .roster-editor,
   .player-form {
     grid-template-columns: 1fr;

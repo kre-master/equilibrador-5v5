@@ -26,7 +26,9 @@ window.FIVE5_CONFIG = {
 ## Como funciona online
 
 - Visitantes podem ver a app e criar conta.
-- Jogadores criam conta por email/password e depois reclamam o perfil de jogador que ja existe.
+- Jogadores criam conta por email/password, escolhem username e depois reclamam o perfil de jogador que ja existe.
+- O login aceita email ou username.
+- No separador `Conta`, os utilizadores podem definir username, mudar password e pedir recuperacao de password por email.
 - Admin aprova pedidos de associacao entre conta e perfil.
 - Admin lanca convocatorias com data, hora, local e limite de jogadores.
 - Jogadores com perfil associado respondem `Vou`, `Talvez` ou `Nao vou`.

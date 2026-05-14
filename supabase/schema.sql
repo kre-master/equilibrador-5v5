@@ -19,11 +19,19 @@ add column if not exists linked_user_id uuid references auth.users(id) on delete
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
+  username text,
   display_name text,
   role text not null default 'player' check (role in ('player', 'admin')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.profiles
+add column if not exists username text;
+
+create unique index if not exists profiles_username_unique
+on public.profiles (lower(username))
+where username is not null and username <> '';
 
 create table if not exists public.player_claims (
   id uuid primary key default gen_random_uuid(),
@@ -59,6 +67,23 @@ security definer
 set search_path = public
 as $$
   select exists (select 1 from public.profiles);
+$$;
+
+create or replace function public.email_for_login(login_value text)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select case
+    when position('@' in trim(login_value)) > 0 then lower(trim(login_value))
+    else (
+      select email
+      from public.profiles
+      where lower(username) = lower(trim(login_value))
+      limit 1
+    )
+  end;
 $$;
 
 create table if not exists public.games (
@@ -105,6 +130,7 @@ grant select on public.players to anon, authenticated;
 grant select on public.games to anon, authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.player_claims to authenticated;
+grant execute on function public.email_for_login(text) to anon, authenticated;
 grant select on public.events to anon, authenticated;
 grant select on public.event_responses to anon, authenticated;
 grant insert, update, delete on public.events to authenticated;

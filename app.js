@@ -422,11 +422,13 @@ async function loadAccountState() {
   if (!currentProfile) {
     const role = profileRows.length === 0 ? "admin" : "player";
     const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Jogador";
+    const username = normalizeUsername(user.user_metadata?.username || displayName);
     const { data: createdProfile, error } = await supabaseClient
       .from("profiles")
       .insert({
         id: user.id,
         email: user.email,
+        username,
         display_name: displayName,
         role,
       })
@@ -528,8 +530,13 @@ async function adminLogin() {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
-  const email = prompt("Email:");
-  if (!email) return;
+  const login = prompt("Email ou username:");
+  if (!login) return;
+  const email = await resolveLoginEmail(login);
+  if (!email) {
+    alert("Nao encontrei esse email/username.");
+    return;
+  }
   const password = prompt("Password:");
   if (!password) return;
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -550,13 +557,23 @@ async function createAccount() {
   }
   const email = prompt("Email:");
   if (!email) return;
+  const username = normalizeUsername(prompt("Username:", email.split("@")[0]) || "");
+  if (!username) {
+    alert("Escolhe um username valido.");
+    return;
+  }
+  const existingEmail = await resolveLoginEmail(username);
+  if (existingEmail) {
+    alert("Esse username ja esta em uso.");
+    return;
+  }
   const password = prompt("Password:");
   if (!password) return;
   const displayName = prompt("Nome a mostrar:", email.split("@")[0]) || email.split("@")[0];
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName } },
+    options: { data: { display_name: displayName, username } },
   });
   if (error) {
     alert(`Nao consegui criar conta: ${error.message}`);
@@ -569,6 +586,85 @@ async function createAccount() {
   await loadAccountState();
   await loadRemoteState();
   showView("account");
+  updateAccessUi();
+  render();
+}
+
+async function resolveLoginEmail(login) {
+  const clean = String(login || "").trim();
+  if (!clean) return "";
+  if (clean.includes("@") || !remoteEnabled || !supabaseClient) return clean.toLowerCase();
+  const { data, error } = await supabaseClient.rpc("email_for_login", { login_value: clean });
+  if (error) {
+    console.warn("Login lookup failed", error);
+    return "";
+  }
+  return data || "";
+}
+
+async function requestPasswordReset() {
+  if (!remoteEnabled || !supabaseClient) {
+    alert("Configura primeiro o Supabase.");
+    return;
+  }
+  const login = prompt("Email ou username para recuperar password:");
+  if (!login) return;
+  const email = await resolveLoginEmail(login);
+  if (!email) {
+    alert("Nao encontrei esse email/username.");
+    return;
+  }
+  const redirectTo = window.location.href.split("#")[0].split("?")[0];
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) {
+    alert(`Nao consegui enviar recuperacao: ${error.message}`);
+    return;
+  }
+  alert("Email de recuperacao enviado.");
+}
+
+async function changeCurrentPassword() {
+  if (!currentSession || !supabaseClient) {
+    alert("Entra primeiro.");
+    return;
+  }
+  const password = prompt("Nova password:");
+  if (!password) return;
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if (error) {
+    alert(`Nao consegui mudar password: ${error.message}`);
+    return;
+  }
+  alert("Password alterada.");
+}
+
+async function setCurrentUsername() {
+  if (!currentSession || !supabaseClient) {
+    alert("Entra primeiro.");
+    return;
+  }
+  const username = normalizeUsername(prompt("Novo username:", currentProfile?.username || "") || "");
+  if (!username) {
+    alert("Escolhe um username valido.");
+    return;
+  }
+  const existingEmail = await resolveLoginEmail(username);
+  if (existingEmail && existingEmail !== currentSession.user.email) {
+    alert("Esse username ja esta em uso.");
+    return;
+  }
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .update({ username, updated_at: new Date().toISOString() })
+    .eq("id", currentSession.user.id)
+    .select()
+    .single();
+  if (error) {
+    alert(`Nao consegui guardar username: ${error.message}`);
+    return;
+  }
+  currentProfile = data;
+  knownProfiles = knownProfiles.map((profile) => profile.id === data.id ? data : profile);
   updateAccessUi();
   render();
 }
@@ -631,11 +727,11 @@ function renderAccountPanel() {
         <div class="actions">
           <button class="primary-btn" data-account-login>Entrar</button>
           <button class="ghost-btn" data-account-signup>Criar conta</button>
+          <button class="ghost-btn" data-password-reset>Recuperar password</button>
         </div>
       </div>
     `;
-    els.accountPanel.querySelector("[data-account-login]")?.addEventListener("click", adminLogin);
-    els.accountPanel.querySelector("[data-account-signup]")?.addEventListener("click", createAccount);
+    bindAccountPanelActions();
     return;
   }
 
@@ -653,13 +749,16 @@ function renderAccountPanel() {
           <p class="eyebrow">${isAdmin ? "Admin" : "Jogador"}</p>
           <h3>${escapeHtml(linkedPlayer.name)}</h3>
           <p>${escapeHtml(user.email || "")}</p>
+          <p>Username: <strong>${escapeHtml(currentProfile?.username || "por definir")}</strong></p>
         </div>
         <div class="profile-summary">
           ${renderAvatar(linkedPlayer)}
           <strong>${linkedPlayer.overall}</strong>
         </div>
+        ${renderSecurityActions()}
       </div>
     `;
+    bindAccountPanelActions();
     return;
   }
 
@@ -669,8 +768,10 @@ function renderAccountPanel() {
       <div class="account-card warn-card">
         <h3>Pedido pendente</h3>
         <p>Pediste para associar esta conta ao perfil ${escapeHtml(playerData?.name || "selecionado")}. Aguarda aprovacao do admin.</p>
+        ${renderSecurityActions()}
       </div>
     `;
+    bindAccountPanelActions();
     return;
   }
 
@@ -678,6 +779,7 @@ function renderAccountPanel() {
     <div class="account-card">
       <h3>Associar conta a jogador</h3>
       <p>Escolhe o teu perfil. O admin vai aprovar antes de ficares ligado oficialmente.</p>
+      ${renderSecurityActions()}
       <div class="claim-grid">
         ${availablePlayers.map((p) => `
           <button class="claim-card" data-claim-player="${p.id}">
@@ -695,6 +797,24 @@ function renderAccountPanel() {
   els.accountPanel.querySelectorAll("[data-claim-player]").forEach((button) => {
     button.addEventListener("click", () => requestPlayerClaim(button.dataset.claimPlayer));
   });
+  bindAccountPanelActions();
+}
+
+function renderSecurityActions() {
+  return `
+    <div class="actions account-actions">
+      <button class="ghost-btn" data-set-username>Definir username</button>
+      <button class="ghost-btn" data-change-password>Mudar password</button>
+    </div>
+  `;
+}
+
+function bindAccountPanelActions() {
+  els.accountPanel?.querySelector("[data-account-login]")?.addEventListener("click", adminLogin);
+  els.accountPanel?.querySelector("[data-account-signup]")?.addEventListener("click", createAccount);
+  els.accountPanel?.querySelector("[data-password-reset]")?.addEventListener("click", requestPasswordReset);
+  els.accountPanel?.querySelector("[data-change-password]")?.addEventListener("click", changeCurrentPassword);
+  els.accountPanel?.querySelector("[data-set-username]")?.addEventListener("click", setCurrentUsername);
 }
 
 function renderClaimsList() {
@@ -792,6 +912,12 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-cancel]").forEach((button) => {
     button.addEventListener("click", () => updateEventStatus(button.dataset.eventCancel, "cancelled"));
   });
+  els.eventsList.querySelectorAll("[data-event-add-existing-btn]").forEach((button) => {
+    button.addEventListener("click", () => addExistingPlayerToEvent(button.dataset.eventAddExistingBtn));
+  });
+  els.eventsList.querySelectorAll("[data-event-add-guest-btn]").forEach((button) => {
+    button.addEventListener("click", () => addGuestToEvent(button.dataset.eventAddGuestBtn));
+  });
 }
 
 function renderEventCard(eventData) {
@@ -824,6 +950,7 @@ function renderEventCard(eventData) {
         ${renderRosterMini("Talvez", maybe)}
         ${renderRosterMini("Nao vou", notGoing)}
       </div>
+      ${renderEventAdminAdds(eventData)}
       <div class="actions admin-actions">
         <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
         <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
@@ -856,6 +983,30 @@ function renderResponseActions(eventData, myResponse) {
 function renderRosterMini(label, players) {
   const names = players.length ? players.map((p) => p.name).join(", ") : "-";
   return `<div><strong>${label}</strong><span>${escapeHtml(names)}</span></div>`;
+}
+
+function renderEventAdminAdds(eventData) {
+  if (!isAdmin) return "";
+  const assignedIds = new Set(getEventResponses(eventData.id).map((response) => response.playerId));
+  const availablePlayers = state.players
+    .filter((p) => !p.isGuest && !assignedIds.has(p.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return `
+    <div class="event-admin-adds admin-actions">
+      <div class="add-existing-row">
+        <select data-event-add-existing="${eventData.id}">
+          <option value="">Adicionar jogador existente</option>
+          ${availablePlayers.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} - ${p.overall}</option>`).join("")}
+        </select>
+        <button class="ghost-btn" data-event-add-existing-btn="${eventData.id}">Adicionar como Vou</button>
+      </div>
+      <div class="add-guest-row">
+        <input data-event-guest-name="${eventData.id}" placeholder="Amigo novo">
+        <input data-event-guest-score="${eventData.id}" type="number" min="0" max="10" step="0.5" placeholder="0-10">
+        <button class="ghost-btn" data-event-add-guest-btn="${eventData.id}">Adicionar convidado</button>
+      </div>
+    </div>
+  `;
 }
 
 async function saveEventFromForm(event) {
@@ -906,11 +1057,21 @@ async function saveEventResponse(eventId, status) {
     return;
   }
 
-  const existing = getResponseForPlayer(eventId, linkedPlayer.id);
+  try {
+    await saveEventResponseForPlayer(eventId, linkedPlayer.id, status, currentSession.user.id);
+  } catch (error) {
+    alert(`Nao consegui guardar resposta: ${error.message}`);
+    return;
+  }
+  currentEventId = eventId;
+  render();
+}
+
+async function saveEventResponseForPlayer(eventId, playerId, status, userId = null) {
   const row = {
     event_id: eventId,
-    player_id: linkedPlayer.id,
-    user_id: currentSession.user.id,
+    player_id: playerId,
+    user_id: userId,
     status,
     updated_at: new Date().toISOString(),
   };
@@ -919,19 +1080,72 @@ async function saveEventResponse(eventId, status) {
     const { error } = await supabaseClient
       .from("event_responses")
       .upsert(row, { onConflict: "event_id,player_id" });
-    if (error) {
-      alert(`Nao consegui guardar resposta: ${error.message}`);
-      return;
-    }
+    if (error) throw error;
     await loadRemoteState();
-  } else if (existing) {
+    return;
+  }
+
+  const existing = getResponseForPlayer(eventId, playerId);
+  if (existing) {
     existing.status = status;
     existing.updatedAt = row.updated_at;
   } else {
-    eventResponses.unshift(responseFromRow({ ...row, id: `r-${Date.now()}` }));
+    eventResponses.unshift(responseFromRow({ ...row, id: `r-${Date.now()}-${playerId}` }));
   }
-  currentEventId = eventId;
-  render();
+}
+
+async function addExistingPlayerToEvent(eventId) {
+  if (!requireAdmin()) return;
+  const select = els.eventsList?.querySelector(`[data-event-add-existing="${eventId}"]`);
+  const playerId = select?.value;
+  if (!playerId) return;
+  try {
+    await saveEventResponseForPlayer(eventId, playerId, "going");
+    currentEventId = eventId;
+    render();
+  } catch (error) {
+    alert(`Nao consegui adicionar jogador: ${error.message}`);
+  }
+}
+
+async function addGuestToEvent(eventId) {
+  if (!requireAdmin()) return;
+  const nameInput = els.eventsList?.querySelector(`[data-event-guest-name="${eventId}"]`);
+  const scoreInput = els.eventsList?.querySelector(`[data-event-guest-score="${eventId}"]`);
+  const name = nameInput?.value.trim();
+  const score = Number(scoreInput?.value);
+  if (!name || Number.isNaN(score) || score < 0 || score > 10) {
+    alert("Escreve o nome do convidado e uma nota entre 0 e 10.");
+    return;
+  }
+
+  const overall = Math.round(score * 10);
+  const guest = {
+    id: `g-${Date.now()}-${slug(name)}`,
+    name,
+    pace: overall,
+    shooting: overall,
+    passing: overall,
+    dribbling: overall,
+    defending: overall,
+    physical: overall,
+    overall,
+    photoDataUrl: "",
+    linkedUserId: null,
+    isGuest: true,
+    guestScore0To10: score,
+  };
+
+  state.players.push(guest);
+  try {
+    await saveEventResponseForPlayer(eventId, guest.id, "going");
+    currentEventId = eventId;
+    saveState();
+    render();
+  } catch (error) {
+    state.players = state.players.filter((p) => p.id !== guest.id);
+    alert(`Nao consegui adicionar convidado: ${error.message}`);
+  }
 }
 
 async function updateEventStatus(eventId, status) {
@@ -2200,6 +2414,10 @@ function normalize(value) {
 
 function slug(value) {
   return normalize(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "jogador";
+}
+
+function normalizeUsername(value) {
+  return normalize(value).replace(/[^a-z0-9_.-]+/g, "").slice(0, 32);
 }
 
 function clampRating(value) {
