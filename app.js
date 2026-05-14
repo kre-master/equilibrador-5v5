@@ -928,6 +928,9 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-cancel]").forEach((button) => {
     button.addEventListener("click", () => updateEventStatus(button.dataset.eventCancel, "cancelled"));
   });
+  els.eventsList.querySelectorAll("[data-event-delete]").forEach((button) => {
+    button.addEventListener("click", () => deleteEvent(button.dataset.eventDelete));
+  });
   els.eventsList.querySelectorAll("[data-event-share]").forEach((button) => {
     button.addEventListener("click", () => shareEventOnWhatsApp(button.dataset.eventShare));
   });
@@ -972,14 +975,21 @@ function renderEventCard(eventData) {
       ${renderEventAdminAdds(eventData)}
       <div class="actions admin-actions">
         <button class="ghost-btn" data-event-share="${eventData.id}">WhatsApp</button>
-        <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
-        <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
+        ${eventData.status === "cancelled" ? `
+          <button class="danger-btn" data-event-delete="${eventData.id}">Apagar convocatoria</button>
+        ` : `
+          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
+          <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
+        `}
       </div>
     </article>
   `;
 }
 
 function renderResponseActions(eventData, myResponse) {
+  if (eventData.status === "cancelled") {
+    return `<div class="hint warn">Convocatoria cancelada. Podes apagar esta convocatoria do historico de convocatorias.</div>`;
+  }
   const linkedPlayer = getLinkedPlayer();
   if (!currentSession) {
     return `<div class="hint">Entra para responder a esta convocatoria.</div>`;
@@ -1006,7 +1016,7 @@ function renderRosterMini(label, players) {
 }
 
 function renderEventAdminAdds(eventData) {
-  if (!isAdmin) return "";
+  if (!isAdmin || eventData.status === "cancelled") return "";
   const assignedIds = new Set(getEventResponses(eventData.id).map((response) => response.playerId));
   const availablePlayers = state.players
     .filter((p) => !p.isGuest && !assignedIds.has(p.id))
@@ -1209,6 +1219,7 @@ async function updateEventStatus(eventId, status) {
   if (!requireAdmin()) return;
   const eventData = state.events.find((item) => item.id === eventId);
   if (!eventData) return;
+  if (status === "cancelled" && !confirm(`Cancelar a convocatoria "${eventData.title}"?`)) return;
   eventData.status = status;
   if (remoteEnabled && supabaseClient) {
     const { error } = await supabaseClient.from("events").upsert(eventToRow(eventData));
@@ -1216,6 +1227,29 @@ async function updateEventStatus(eventId, status) {
       alert(`Nao consegui atualizar evento: ${error.message}`);
       return;
     }
+  }
+  saveState();
+  render();
+}
+
+async function deleteEvent(eventId) {
+  if (!requireAdmin()) return;
+  const eventData = state.events.find((item) => item.id === eventId);
+  if (!eventData) return;
+  if (!confirm(`Apagar definitivamente a convocatoria "${eventData.title}"?`)) return;
+
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("events").delete().eq("id", eventId);
+    if (error) {
+      alert(`Nao consegui apagar convocatoria: ${error.message}`);
+      return;
+    }
+  }
+
+  state.events = (state.events || []).filter((item) => item.id !== eventId);
+  eventResponses = eventResponses.filter((response) => response.eventId !== eventId);
+  if (currentEventId === eventId) {
+    currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   }
   saveState();
   render();
