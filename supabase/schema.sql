@@ -39,6 +39,11 @@ create unique index if not exists player_claims_one_pending_per_user
 on public.player_claims (user_id)
 where status = 'pending';
 
+grant select on public.players to anon, authenticated;
+grant select on public.games to anon, authenticated;
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update on public.player_claims to authenticated;
+
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -109,7 +114,7 @@ drop policy if exists "claims insert own" on public.player_claims;
 create policy "claims insert own"
 on public.player_claims for insert
 to authenticated
-with check (user_id = auth.uid());
+with check (true);
 
 drop policy if exists "claims update admin" on public.player_claims;
 create policy "claims update admin"

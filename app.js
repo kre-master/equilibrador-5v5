@@ -448,7 +448,7 @@ async function adminLogin() {
   if (!password) return;
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) {
-    alert("Login falhou. Confirma email/password.");
+    alert(`Login falhou: ${error.message}`);
     return;
   }
   await loadAccountState();
@@ -473,7 +473,7 @@ async function createAccount() {
     options: { data: { display_name: displayName } },
   });
   if (error) {
-    alert("Nao consegui criar conta. Confirma o email/password.");
+    alert(`Nao consegui criar conta: ${error.message}`);
     return;
   }
   if (!data.session) {
@@ -667,7 +667,7 @@ async function requestPlayerClaim(playerId) {
   });
 
   if (error) {
-    alert("Nao consegui criar o pedido. Pode ja existir um pedido pendente.");
+    alert(`Nao consegui criar o pedido: ${error.message}`);
     return;
   }
 
@@ -691,7 +691,7 @@ async function reviewPlayerClaim(claimId, status) {
     .update(updates)
     .eq("id", claimId);
   if (claimError) {
-    alert("Nao consegui atualizar o pedido.");
+    alert(`Nao consegui atualizar o pedido: ${claimError.message}`);
     return;
   }
 
