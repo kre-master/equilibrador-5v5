@@ -673,6 +673,16 @@ async function setCurrentUsername() {
   render();
 }
 
+async function unlinkOwnPlayerProfile() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) {
+    alert("Esta conta nao tem perfil associado.");
+    return;
+  }
+  if (!confirm(`Desassociar a tua conta do perfil ${linkedPlayer.name}?`)) return;
+  await unlinkPlayerProfile(linkedPlayer.id);
+}
+
 async function adminLogout() {
   if (supabaseClient) await supabaseClient.auth.signOut();
   isAdmin = false;
@@ -809,6 +819,7 @@ function renderSecurityActions() {
     <div class="actions account-actions">
       <button class="ghost-btn" data-set-username>Definir username</button>
       <button class="ghost-btn" data-change-password>Mudar password</button>
+      <button class="danger-btn" data-unlink-own-player>Desassociar perfil</button>
     </div>
   `;
 }
@@ -819,6 +830,7 @@ function bindAccountPanelActions() {
   els.accountPanel?.querySelector("[data-password-reset]")?.addEventListener("click", requestPasswordReset);
   els.accountPanel?.querySelector("[data-change-password]")?.addEventListener("click", changeCurrentPassword);
   els.accountPanel?.querySelector("[data-set-username]")?.addEventListener("click", setCurrentUsername);
+  els.accountPanel?.querySelector("[data-unlink-own-player]")?.addEventListener("click", unlinkOwnPlayerProfile);
 }
 
 function renderClaimsList() {
@@ -1848,6 +1860,7 @@ function renderPlayersTable() {
       <td>${p.linkedUserId ? "<span class=\"metric\">Ligado</span>" : "<span class=\"metric\">Livre</span>"}</td>
       <td>
         <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
+        ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
         <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
       </td>
     </tr>
@@ -1858,6 +1871,9 @@ function renderPlayersTable() {
   });
   els.playersTable.querySelectorAll("[data-delete-player]").forEach((button) => {
     button.addEventListener("click", () => deletePlayer(button.dataset.deletePlayer));
+  });
+  els.playersTable.querySelectorAll("[data-unlink-player]").forEach((button) => {
+    button.addEventListener("click", () => unlinkPlayerAsAdmin(button.dataset.unlinkPlayer));
   });
 }
 
@@ -1921,6 +1937,34 @@ function deletePlayer(playerId) {
   render();
 }
 
+async function unlinkPlayerAsAdmin(playerId) {
+  if (!requireAdmin()) return;
+  const playerData = findPlayer(playerId);
+  if (!playerData?.linkedUserId) return;
+  if (!confirm(`Desassociar a conta ligada ao perfil ${playerData.name}?`)) return;
+  await unlinkPlayerProfile(playerId);
+}
+
+async function unlinkPlayerProfile(playerId) {
+  const index = state.players.findIndex((p) => p.id === playerId);
+  if (index < 0) return;
+  state.players[index].linkedUserId = null;
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient
+      .from("players")
+      .update({ linked_user_id: null, updated_at: new Date().toISOString() })
+      .eq("id", playerId);
+    if (error) {
+      alert(`Nao consegui desassociar perfil: ${error.message}`);
+      return;
+    }
+  }
+  await loadAccountState();
+  saveState();
+  updateAccessUi();
+  render();
+}
+
 function clearPlayerForm() {
   if (els.playerForm) els.playerForm.reset();
   if (els.playerId) els.playerId.value = "";
@@ -1943,7 +1987,10 @@ function renderGamesList() {
           <strong>${formatDate(game.date)} - ${result}</strong>
           <span>A ${getTeamStats(teamA).total} vs B ${getTeamStats(teamB).total} - ${game.status === "finished" ? "finalizado" : "em aberto"}</span>
         </div>
-        <button class="primary-btn" data-open-game="${game.id}">Abrir</button>
+        <div class="game-actions">
+          <button class="primary-btn" data-open-game="${game.id}">Abrir</button>
+          <button class="danger-btn admin-only" data-delete-game="${game.id}">Apagar</button>
+        </div>
       </article>
     `;
   }).join("");
@@ -1955,6 +2002,24 @@ function renderGamesList() {
       renderCurrentGame();
     });
   });
+  els.gamesList.querySelectorAll("[data-delete-game]").forEach((button) => {
+    button.addEventListener("click", () => deleteGame(button.dataset.deleteGame));
+  });
+}
+
+async function deleteGame(gameId) {
+  if (!requireAdmin()) return;
+  const game = state.games.find((item) => item.id === gameId);
+  if (!game) return;
+  if (!confirm(`Apagar o jogo de ${formatDate(game.date)} do historico?`)) return;
+
+  state.games = state.games.filter((item) => item.id !== gameId);
+  if (currentGameId === gameId) {
+    currentGameId = state.games[0]?.id || null;
+    previewGame = null;
+  }
+  await persistState();
+  render();
 }
 
 async function exportCurrentGameImage() {

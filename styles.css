@@ -984,6 +984,12 @@ th:last-child {
   font-size: 13px;
 }
 
+.game-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 @media (max-width: 1180px) {
   .layout-grid,
   .events-grid {
