@@ -83,6 +83,7 @@ const els = {
   adminLogout: document.querySelector("#admin-logout"),
   accountPanel: document.querySelector("#account-panel"),
   claimsList: document.querySelector("#claims-list"),
+  accountsList: document.querySelector("#accounts-list"),
   eventForm: document.querySelector("#event-form"),
   eventTitle: document.querySelector("#event-title"),
   eventDate: document.querySelector("#event-date"),
@@ -743,6 +744,7 @@ function render() {
   renderGamesList();
   renderAccountPanel();
   renderClaimsList();
+  renderAccountsList();
   renderEventsList();
 }
 
@@ -901,6 +903,49 @@ function renderClaimsList() {
   els.claimsList.querySelectorAll("[data-reject-claim]").forEach((button) => {
     button.addEventListener("click", () => reviewPlayerClaim(button.dataset.rejectClaim, "rejected"));
   });
+}
+
+function renderAccountsList() {
+  if (!els.accountsList) return;
+  if (!isAdmin) {
+    els.accountsList.innerHTML = `<div class="empty-state">So admins conseguem ver contas.</div>`;
+    return;
+  }
+
+  if (!knownProfiles.length) {
+    els.accountsList.innerHTML = `<div class="empty-state">Ainda nao ha contas criadas.</div>`;
+    return;
+  }
+
+  els.accountsList.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Jogador</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${knownProfiles.map((profile) => {
+            const linkedPlayer = state.players.find((p) => p.linkedUserId === profile.id);
+            return `
+              <tr>
+                <td><strong>${escapeHtml(profile.display_name || "-")}</strong></td>
+                <td>${escapeHtml(profile.username || "-")}</td>
+                <td>${escapeHtml(profile.email || "-")}</td>
+                <td><span class="metric">${escapeHtml(profile.role || "player")}</span></td>
+                <td>${linkedPlayer ? `${renderAvatar(linkedPlayer)} <strong>${escapeHtml(linkedPlayer.name)}</strong>` : "<span class=\"metric\">Sem perfil</span>"}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function getNextEvent() {
@@ -1939,7 +1984,7 @@ function renderPlayersTable() {
       <td>${p.defending}</td>
       <td>${p.physical}</td>
       <td><strong>${p.overall}</strong></td>
-      <td>${p.linkedUserId ? "<span class=\"metric\">Ligado</span>" : "<span class=\"metric\">Livre</span>"}</td>
+      <td>${renderLinkedAccountCell(p)}</td>
       <td>
         <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
         ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
@@ -1957,6 +2002,18 @@ function renderPlayersTable() {
   els.playersTable.querySelectorAll("[data-unlink-player]").forEach((button) => {
     button.addEventListener("click", () => unlinkPlayerAsAdmin(button.dataset.unlinkPlayer));
   });
+}
+
+function renderLinkedAccountCell(playerData) {
+  if (!playerData.linkedUserId) return "<span class=\"metric\">Livre</span>";
+  const profile = knownProfiles.find((item) => item.id === playerData.linkedUserId);
+  if (!profile) return "<span class=\"metric\">Ligado</span>";
+  return `
+    <span class="linked-account">
+      <strong>${escapeHtml(profile.username || profile.display_name || "Conta")}</strong>
+      <small>${escapeHtml(profile.email || "")}</small>
+    </span>
+  `;
 }
 
 async function savePlayerFromForm(event) {

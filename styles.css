@@ -498,9 +498,14 @@ h3 {
 }
 
 .account-panel,
-.claims-list {
+.claims-list,
+.accounts-list {
   display: grid;
   gap: 12px;
+}
+
+.accounts-panel {
+  margin-top: 16px;
 }
 
 .account-card,
@@ -562,6 +567,16 @@ h3 {
 .claim-card:hover {
   border-color: var(--green);
   background: var(--green-2);
+}
+
+.linked-account {
+  display: grid;
+  gap: 2px;
+}
+
+.linked-account small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .visitor-mode #player-form,
