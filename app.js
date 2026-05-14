@@ -321,15 +321,11 @@ async function saveRemoteState() {
   const games = state.games.map(gameToRow);
   const events = (state.events || []).map(eventToRow);
 
-  const { error: playerDeleteError } = await supabaseClient.from("players").delete().neq("id", "__never__");
-  if (playerDeleteError) throw playerDeleteError;
   if (players.length) {
     const { error } = await supabaseClient.from("players").upsert(players);
     if (error) throw error;
   }
 
-  const { error: gameDeleteError } = await supabaseClient.from("games").delete().neq("id", "__never__");
-  if (gameDeleteError) throw gameDeleteError;
   if (games.length) {
     const { error } = await supabaseClient.from("games").upsert(games);
     if (error) throw error;
@@ -2062,8 +2058,18 @@ function editPlayer(playerId) {
   showView("players");
 }
 
-function deletePlayer(playerId) {
+async function deletePlayer(playerId) {
   if (!requireAdmin()) return;
+  const playerData = findPlayer(playerId);
+  if (!playerData) return;
+  if (!confirm(`Apagar o jogador ${playerData.name}?`)) return;
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("players").delete().eq("id", playerId);
+    if (error) {
+      alert(`Nao consegui apagar jogador: ${error.message}`);
+      return;
+    }
+  }
   state.players = state.players.filter((p) => p.id !== playerId);
   selectedIds.delete(playerId);
   state.games.forEach((game) => {
@@ -2072,7 +2078,7 @@ function deletePlayer(playerId) {
       game[group] = game[group].filter((id) => id !== playerId);
     });
   });
-  persistState();
+  saveState();
   render();
 }
 
@@ -2152,12 +2158,19 @@ async function deleteGame(gameId) {
   if (!game) return;
   if (!confirm(`Apagar o jogo de ${formatDate(game.date)} do historico?`)) return;
 
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("games").delete().eq("id", gameId);
+    if (error) {
+      alert(`Nao consegui apagar jogo: ${error.message}`);
+      return;
+    }
+  }
   state.games = state.games.filter((item) => item.id !== gameId);
   if (currentGameId === gameId) {
     currentGameId = state.games[0]?.id || null;
     previewGame = null;
   }
-  await persistState();
+  saveState();
   render();
 }
 
