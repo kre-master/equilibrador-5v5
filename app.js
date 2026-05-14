@@ -683,6 +683,9 @@ function formatAuthError(error) {
   if (message.includes("email rate limit") || message.includes("rate limit exceeded")) {
     return "o limite de emails de confirmacao/recuperacao foi atingido. Tenta novamente mais tarde ou pede ao organizador para configurar o SMTP no Supabase.";
   }
+  if (message.includes("error sending confirmation email") || message.includes("error sending recovery email")) {
+    return "o Supabase tentou enviar o email, mas o SMTP falhou. Confirma no Supabase se o host, porta, username, API key e sender email do SendGrid estao corretos.";
+  }
   if (message.includes("password")) {
     return "confirma se a password tem pelo menos 6 caracteres.";
   }
