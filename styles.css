@@ -389,12 +389,80 @@ h3 {
   display: none !important;
 }
 
+.account-panel,
+.claims-list {
+  display: grid;
+  gap: 12px;
+}
+
+.account-card,
+.claim-row {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface-2);
+}
+
+.claim-row {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.claim-row span,
+.account-card p,
+.claim-card small {
+  color: var(--muted);
+}
+
+.good-card {
+  border-color: rgba(31, 122, 77, 0.28);
+  background: var(--green-2);
+}
+
+.warn-card {
+  border-color: rgba(243, 179, 64, 0.42);
+  background: #fff4d7;
+}
+
+.profile-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.claim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.claim-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+}
+
+.claim-card:hover {
+  border-color: var(--green);
+  background: var(--green-2);
+}
+
 .visitor-mode #player-form,
 .visitor-mode .edit-tools,
 .visitor-mode #confirm-game,
 .visitor-mode #save-score,
 .visitor-mode #reset-data,
 .visitor-mode .file-btn,
+.visitor-mode .admin-only,
 .visitor-mode #players-table th:last-child,
 .visitor-mode #players-table td:last-child {
   display: none !important;

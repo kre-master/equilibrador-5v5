@@ -25,9 +25,12 @@ window.FIVE5_CONFIG = {
 
 ## Como funciona online
 
-- Visitantes podem ver jogadores, selecionar presencas, adicionar convidados temporarios, gerar sugestoes e exportar PNG.
+- Visitantes podem ver a app e criar conta.
+- Jogadores criam conta por email/password e depois reclamam o perfil de jogador que ja existe.
+- Admin aprova pedidos de associacao entre conta e perfil.
 - Admin pode editar jogadores/fotos, confirmar jogos, editar resultados e historico.
-- O botao `Admin` faz login com email/password do Supabase.
+- O primeiro utilizador autenticado criado depois de aplicar o schema fica como admin inicial.
+- O botao `Entrar` faz login com email/password do Supabase.
 
 ## Publicar com GitHub Pages
 

@@ -15,12 +15,15 @@
         </div>
         <nav class="tabs" aria-label="Seccoes">
           <button class="tab active" data-view="today">Hoje</button>
+          <button class="tab" data-view="account">Conta</button>
           <button class="tab" data-view="players">Jogadores</button>
+          <button class="tab admin-only" data-view="claims">Pedidos</button>
           <button class="tab" data-view="games">Historico</button>
         </nav>
         <div class="account-bar">
           <span id="data-status">Modo local</span>
-          <button id="admin-login" class="ghost-btn">Admin</button>
+          <button id="admin-login" class="ghost-btn">Entrar</button>
+          <button id="account-signup" class="ghost-btn">Criar conta</button>
           <button id="admin-logout" class="ghost-btn hidden">Sair</button>
         </div>
       </header>
@@ -104,6 +107,18 @@
           </div>
         </section>
 
+        <section class="view" id="view-account">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Perfil</p>
+                <h2>A minha conta</h2>
+              </div>
+            </div>
+            <div id="account-panel" class="account-panel"></div>
+          </section>
+        </section>
+
         <section class="view" id="view-players">
           <section class="panel wide-panel">
             <div class="panel-head">
@@ -153,12 +168,25 @@
                     <th>DEF</th>
                     <th>PHY</th>
                     <th>OVR</th>
+                    <th>Conta</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody id="players-table"></tbody>
               </table>
             </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-claims">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Admin</p>
+                <h2>Pedidos de associacao</h2>
+              </div>
+            </div>
+            <div id="claims-list" class="claims-list"></div>
           </section>
         </section>
 

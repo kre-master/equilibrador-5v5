@@ -23,6 +23,10 @@ let state = loadState();
 let supabaseClient = null;
 let remoteEnabled = false;
 let isAdmin = false;
+let currentSession = null;
+let currentProfile = null;
+let knownProfiles = [];
+let playerClaims = [];
 let selectedIds = new Set();
 let currentSuggestions = [];
 let currentGameId = state.games[0]?.id || null;
@@ -73,7 +77,10 @@ const els = {
   exportCanvas: document.querySelector("#export-canvas"),
   dataStatus: document.querySelector("#data-status"),
   adminLogin: document.querySelector("#admin-login"),
+  accountSignup: document.querySelector("#account-signup"),
   adminLogout: document.querySelector("#admin-logout"),
+  accountPanel: document.querySelector("#account-panel"),
+  claimsList: document.querySelector("#claims-list"),
 };
 
 let pendingPhotoDataUrl = null;
@@ -105,6 +112,7 @@ function player(id, name, pace, shooting, passing, dribbling, defending, physica
     physical,
     overall,
     photoDataUrl: "",
+    linkedUserId: null,
     isGuest: false,
   };
 }
@@ -150,6 +158,7 @@ function normalizePlayerRecord(record, index) {
     physical: clampRating(record.physical ?? fallbackRating),
     overall: fallbackRating,
     photoDataUrl: String(record.photoDataUrl || ""),
+    linkedUserId: record.linkedUserId || null,
     isGuest: Boolean(record.isGuest),
     guestScore0To10: record.guestScore0To10,
   };
@@ -167,6 +176,7 @@ function playerFromRow(row) {
     physical: row.physical,
     overall: row.overall,
     photoDataUrl: row.photo_data_url,
+    linkedUserId: row.linked_user_id,
     isGuest: false,
   }, 0);
 }
@@ -183,6 +193,7 @@ function playerToRow(playerData) {
     physical: playerData.physical,
     overall: playerData.overall,
     photo_data_url: playerData.photoDataUrl || "",
+    linked_user_id: playerData.linkedUserId || null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -283,6 +294,7 @@ function bindEvents() {
   on(els.importData, "change", importData);
   on(els.resetData, "click", resetData);
   on(els.adminLogin, "click", adminLogin);
+  on(els.accountSignup, "click", createAccount);
   on(els.adminLogout, "click", adminLogout);
 }
 
@@ -299,11 +311,80 @@ async function initRemote() {
   }
 
   supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
-  const { data } = await supabaseClient.auth.getSession();
-  isAdmin = Boolean(data?.session);
   remoteEnabled = true;
+  await loadAccountState();
   await loadRemoteState();
   updateAccessUi();
+}
+
+async function loadAccountState() {
+  currentSession = null;
+  currentProfile = null;
+  knownProfiles = [];
+  playerClaims = [];
+  isAdmin = false;
+
+  if (!supabaseClient) return;
+  const { data } = await supabaseClient.auth.getSession();
+  currentSession = data?.session || null;
+  if (!currentSession?.user) return;
+
+  const user = currentSession.user;
+  const { data: profiles, error: profilesError } = await supabaseClient
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (profilesError) {
+    console.warn("Profile load failed", profilesError);
+    return;
+  }
+
+  const profileRows = profiles || [];
+  knownProfiles = profileRows;
+  currentProfile = profileRows.find((profile) => profile.id === user.id) || null;
+  if (!currentProfile) {
+    const role = profileRows.length === 0 ? "admin" : "player";
+    const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Jogador";
+    const { data: createdProfile, error } = await supabaseClient
+      .from("profiles")
+      .insert({
+        id: user.id,
+        email: user.email,
+        display_name: displayName,
+        role,
+      })
+      .select()
+      .single();
+    if (error) {
+      console.warn("Profile create failed", error);
+    } else {
+      currentProfile = createdProfile;
+      knownProfiles = [...profileRows, createdProfile];
+    }
+  }
+
+  isAdmin = currentProfile?.role === "admin";
+  await loadPlayerClaims();
+}
+
+async function loadPlayerClaims() {
+  if (!currentSession?.user || !supabaseClient) {
+    playerClaims = [];
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("player_claims")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("Claims load failed", error);
+    playerClaims = [];
+    return;
+  }
+  playerClaims = data || [];
 }
 
 async function loadRemoteState() {
@@ -340,11 +421,20 @@ async function loadRemoteState() {
 }
 
 function updateAccessUi(message) {
-  const mode = message || (remoteEnabled ? (isAdmin ? "Online: admin" : "Online: visitante") : "Modo local");
+  const linkedPlayer = getLinkedPlayer();
+  let defaultMode = "Modo local";
+  if (remoteEnabled) {
+    if (!currentSession) defaultMode = "Online: visitante";
+    else if (isAdmin) defaultMode = "Online: admin";
+    else if (linkedPlayer) defaultMode = `Online: ${linkedPlayer.name}`;
+    else defaultMode = "Online: conta sem perfil";
+  }
+  const mode = message || defaultMode;
   if (els.dataStatus) els.dataStatus.textContent = mode;
   document.body.classList.toggle("visitor-mode", remoteEnabled && !isAdmin);
-  if (els.adminLogin) els.adminLogin.classList.toggle("hidden", remoteEnabled && isAdmin);
-  if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !remoteEnabled || !isAdmin);
+  if (els.adminLogin) els.adminLogin.classList.toggle("hidden", Boolean(currentSession));
+  if (els.accountSignup) els.accountSignup.classList.toggle("hidden", Boolean(currentSession) || !remoteEnabled);
+  if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !currentSession);
 }
 
 async function adminLogin() {
@@ -352,7 +442,7 @@ async function adminLogin() {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
-  const email = prompt("Email admin:");
+  const email = prompt("Email:");
   if (!email) return;
   const password = prompt("Password:");
   if (!password) return;
@@ -361,8 +451,38 @@ async function adminLogin() {
     alert("Login falhou. Confirma email/password.");
     return;
   }
-  isAdmin = true;
+  await loadAccountState();
   await loadRemoteState();
+  updateAccessUi();
+  render();
+}
+
+async function createAccount() {
+  if (!remoteEnabled || !supabaseClient) {
+    alert("Configura primeiro o Supabase em app-config.js.");
+    return;
+  }
+  const email = prompt("Email:");
+  if (!email) return;
+  const password = prompt("Password:");
+  if (!password) return;
+  const displayName = prompt("Nome a mostrar:", email.split("@")[0]) || email.split("@")[0];
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName } },
+  });
+  if (error) {
+    alert("Nao consegui criar conta. Confirma o email/password.");
+    return;
+  }
+  if (!data.session) {
+    alert("Conta criada. Se o Supabase pedir confirmacao, confirma o email e depois entra na app.");
+    return;
+  }
+  await loadAccountState();
+  await loadRemoteState();
+  showView("account");
   updateAccessUi();
   render();
 }
@@ -370,6 +490,10 @@ async function adminLogin() {
 async function adminLogout() {
   if (supabaseClient) await supabaseClient.auth.signOut();
   isAdmin = false;
+  currentSession = null;
+  currentProfile = null;
+  knownProfiles = [];
+  playerClaims = [];
   updateAccessUi();
   render();
 }
@@ -391,6 +515,208 @@ function render() {
   renderPlayersTable();
   renderCurrentGame();
   renderGamesList();
+  renderAccountPanel();
+  renderClaimsList();
+}
+
+function getLinkedPlayer() {
+  if (!currentSession?.user) return null;
+  return state.players.find((playerData) => playerData.linkedUserId === currentSession.user.id) || null;
+}
+
+function getMyPendingClaim() {
+  if (!currentSession?.user) return null;
+  return playerClaims.find((claim) => claim.user_id === currentSession.user.id && claim.status === "pending") || null;
+}
+
+function renderAccountPanel() {
+  if (!els.accountPanel) return;
+  if (!remoteEnabled) {
+    els.accountPanel.innerHTML = `<div class="empty-state">Configura o Supabase para usar contas e perfis.</div>`;
+    return;
+  }
+
+  if (!currentSession?.user) {
+    els.accountPanel.innerHTML = `
+      <div class="account-card">
+        <h3>Entra ou cria conta</h3>
+        <p>Depois de entrares, podes associar a tua conta ao perfil de jogador que ja existe na base.</p>
+        <div class="actions">
+          <button class="primary-btn" data-account-login>Entrar</button>
+          <button class="ghost-btn" data-account-signup>Criar conta</button>
+        </div>
+      </div>
+    `;
+    els.accountPanel.querySelector("[data-account-login]")?.addEventListener("click", adminLogin);
+    els.accountPanel.querySelector("[data-account-signup]")?.addEventListener("click", createAccount);
+    return;
+  }
+
+  const user = currentSession.user;
+  const linkedPlayer = getLinkedPlayer();
+  const pendingClaim = getMyPendingClaim();
+  const availablePlayers = state.players
+    .filter((p) => !p.isGuest && !p.linkedUserId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (linkedPlayer) {
+    els.accountPanel.innerHTML = `
+      <div class="account-card good-card">
+        <div>
+          <p class="eyebrow">${isAdmin ? "Admin" : "Jogador"}</p>
+          <h3>${escapeHtml(linkedPlayer.name)}</h3>
+          <p>${escapeHtml(user.email || "")}</p>
+        </div>
+        <div class="profile-summary">
+          ${renderAvatar(linkedPlayer)}
+          <strong>${linkedPlayer.overall}</strong>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (pendingClaim) {
+    const playerData = findPlayer(pendingClaim.player_id);
+    els.accountPanel.innerHTML = `
+      <div class="account-card warn-card">
+        <h3>Pedido pendente</h3>
+        <p>Pediste para associar esta conta ao perfil ${escapeHtml(playerData?.name || "selecionado")}. Aguarda aprovacao do admin.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.accountPanel.innerHTML = `
+    <div class="account-card">
+      <h3>Associar conta a jogador</h3>
+      <p>Escolhe o teu perfil. O admin vai aprovar antes de ficares ligado oficialmente.</p>
+      <div class="claim-grid">
+        ${availablePlayers.map((p) => `
+          <button class="claim-card" data-claim-player="${p.id}">
+            ${renderAvatar(p)}
+            <span>
+              <strong>${escapeHtml(p.name)}</strong>
+              <small>OVR ${p.overall}</small>
+            </span>
+          </button>
+        `).join("") || `<div class="hint">Nao ha perfis livres para reclamar.</div>`}
+      </div>
+    </div>
+  `;
+
+  els.accountPanel.querySelectorAll("[data-claim-player]").forEach((button) => {
+    button.addEventListener("click", () => requestPlayerClaim(button.dataset.claimPlayer));
+  });
+}
+
+function renderClaimsList() {
+  if (!els.claimsList) return;
+  if (!isAdmin) {
+    els.claimsList.innerHTML = `<div class="empty-state">So admins conseguem ver pedidos.</div>`;
+    return;
+  }
+
+  const pendingClaims = playerClaims.filter((claim) => claim.status === "pending");
+  if (!pendingClaims.length) {
+    els.claimsList.innerHTML = `<div class="empty-state">Nao ha pedidos pendentes.</div>`;
+    return;
+  }
+
+  els.claimsList.innerHTML = pendingClaims.map((claim) => {
+    const playerData = findPlayer(claim.player_id);
+    const profile = knownProfiles.find((item) => item.id === claim.user_id);
+    return `
+      <article class="claim-row">
+        <div>
+          <strong>${escapeHtml(playerData?.name || "Jogador removido")}</strong>
+          <span>${escapeHtml(profile?.display_name || profile?.email || claim.user_id)} - ${formatDate(claim.created_at)}</span>
+        </div>
+        <div class="actions">
+          <button class="primary-btn" data-approve-claim="${claim.id}">Aprovar</button>
+          <button class="danger-btn" data-reject-claim="${claim.id}">Rejeitar</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  els.claimsList.querySelectorAll("[data-approve-claim]").forEach((button) => {
+    button.addEventListener("click", () => reviewPlayerClaim(button.dataset.approveClaim, "approved"));
+  });
+  els.claimsList.querySelectorAll("[data-reject-claim]").forEach((button) => {
+    button.addEventListener("click", () => reviewPlayerClaim(button.dataset.rejectClaim, "rejected"));
+  });
+}
+
+async function requestPlayerClaim(playerId) {
+  if (!remoteEnabled || !supabaseClient || !currentSession?.user) {
+    alert("Entra primeiro para reclamar um perfil.");
+    return;
+  }
+
+  const playerData = findPlayer(playerId);
+  if (!playerData || playerData.linkedUserId) {
+    alert("Este perfil ja esta associado.");
+    return;
+  }
+
+  const { error } = await supabaseClient.from("player_claims").insert({
+    user_id: currentSession.user.id,
+    player_id: playerId,
+    status: "pending",
+  });
+
+  if (error) {
+    alert("Nao consegui criar o pedido. Pode ja existir um pedido pendente.");
+    return;
+  }
+
+  await loadAccountState();
+  updateAccessUi();
+  render();
+}
+
+async function reviewPlayerClaim(claimId, status) {
+  if (!isAdmin || !supabaseClient) return;
+  const claim = playerClaims.find((item) => item.id === claimId);
+  if (!claim) return;
+
+  const updates = {
+    status,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by: currentSession?.user?.id || null,
+  };
+  const { error: claimError } = await supabaseClient
+    .from("player_claims")
+    .update(updates)
+    .eq("id", claimId);
+  if (claimError) {
+    alert("Nao consegui atualizar o pedido.");
+    return;
+  }
+
+  if (status === "approved") {
+    const playerIndex = state.players.findIndex((p) => p.id === claim.player_id);
+    if (playerIndex >= 0) {
+      state.players[playerIndex].linkedUserId = claim.user_id;
+      await persistState();
+    }
+    await supabaseClient
+      .from("player_claims")
+      .update({
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: currentSession?.user?.id || null,
+      })
+      .eq("player_id", claim.player_id)
+      .eq("status", "pending")
+      .neq("id", claimId);
+  }
+
+  await loadAccountState();
+  await loadRemoteState();
+  updateAccessUi();
+  render();
 }
 
 function renderPlayerList() {
@@ -943,6 +1269,7 @@ function renderPlayersTable() {
       <td>${p.defending}</td>
       <td>${p.physical}</td>
       <td><strong>${p.overall}</strong></td>
+      <td>${p.linkedUserId ? "<span class=\"metric\">Ligado</span>" : "<span class=\"metric\">Livre</span>"}</td>
       <td>
         <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
         <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
