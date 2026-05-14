@@ -27,6 +27,8 @@ let currentSession = null;
 let currentProfile = null;
 let knownProfiles = [];
 let playerClaims = [];
+let eventResponses = [];
+let currentEventId = null;
 let selectedIds = new Set();
 let currentSuggestions = [];
 let currentGameId = state.games[0]?.id || null;
@@ -81,6 +83,13 @@ const els = {
   adminLogout: document.querySelector("#admin-logout"),
   accountPanel: document.querySelector("#account-panel"),
   claimsList: document.querySelector("#claims-list"),
+  eventForm: document.querySelector("#event-form"),
+  eventTitle: document.querySelector("#event-title"),
+  eventDate: document.querySelector("#event-date"),
+  eventLocation: document.querySelector("#event-location"),
+  eventMaxPlayers: document.querySelector("#event-max-players"),
+  eventsList: document.querySelector("#events-list"),
+  loadEventGoing: document.querySelector("#load-event-going"),
 };
 
 let pendingPhotoDataUrl = null;
@@ -129,6 +138,7 @@ function loadState() {
   return migrateState({
     players: samplePlayers,
     games: [],
+    events: [],
   });
 }
 
@@ -140,6 +150,7 @@ function migrateState(saved) {
     saved.players = samplePlayers.map((p) => ({ ...p }));
   }
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
+  saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
   return saved;
 }
 
@@ -230,6 +241,63 @@ function gameToRow(game) {
   };
 }
 
+function normalizeEventRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const startsAt = record.startsAt || record.starts_at || new Date().toISOString();
+  return {
+    id: String(record.id || `e-${Date.now()}`),
+    title: String(record.title || "Jogo 5v5").trim() || "Jogo 5v5",
+    sport: String(record.sport || "futsal"),
+    startsAt,
+    location: String(record.location || ""),
+    minPlayers: Number(record.minPlayers ?? record.min_players ?? 10),
+    maxPlayers: Number(record.maxPlayers ?? record.max_players ?? 13),
+    status: String(record.status || "open"),
+    createdBy: record.createdBy || record.created_by || null,
+  };
+}
+
+function eventFromRow(row) {
+  return normalizeEventRecord({
+    id: row.id,
+    title: row.title,
+    sport: row.sport,
+    startsAt: row.starts_at,
+    location: row.location,
+    minPlayers: row.min_players,
+    maxPlayers: row.max_players,
+    status: row.status,
+    createdBy: row.created_by,
+  });
+}
+
+function eventToRow(eventData) {
+  const clean = normalizeEventRecord(eventData);
+  return {
+    id: clean.id,
+    title: clean.title,
+    sport: clean.sport,
+    starts_at: clean.startsAt,
+    location: clean.location,
+    min_players: clean.minPlayers,
+    max_players: clean.maxPlayers,
+    status: clean.status,
+    created_by: clean.createdBy,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function responseFromRow(row) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    playerId: row.player_id,
+    userId: row.user_id,
+    status: row.status,
+    updatedAt: row.updated_at,
+  };
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -246,6 +314,7 @@ async function saveRemoteState() {
   if (!supabaseClient) return;
   const players = state.players.filter((p) => !p.isGuest).map(playerToRow);
   const games = state.games.map(gameToRow);
+  const events = (state.events || []).map(eventToRow);
 
   const { error: playerDeleteError } = await supabaseClient.from("players").delete().neq("id", "__never__");
   if (playerDeleteError) throw playerDeleteError;
@@ -258,6 +327,11 @@ async function saveRemoteState() {
   if (gameDeleteError) throw gameDeleteError;
   if (games.length) {
     const { error } = await supabaseClient.from("games").upsert(games);
+    if (error) throw error;
+  }
+
+  if (events.length) {
+    const { error } = await supabaseClient.from("events").upsert(events);
     if (error) throw error;
   }
 }
@@ -296,6 +370,8 @@ function bindEvents() {
   on(els.adminLogin, "click", adminLogin);
   on(els.accountSignup, "click", createAccount);
   on(els.adminLogout, "click", adminLogout);
+  on(els.eventForm, "submit", saveEventFromForm);
+  on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
 }
 
 async function initApp() {
@@ -389,13 +465,20 @@ async function loadPlayerClaims() {
 
 async function loadRemoteState() {
   if (!remoteEnabled) return;
-  const [{ data: players, error: playerError }, { data: games, error: gameError }] = await Promise.all([
+  const [
+    { data: players, error: playerError },
+    { data: games, error: gameError },
+    { data: events, error: eventError },
+    { data: responses, error: responseError },
+  ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
+    supabaseClient.from("events").select("*").order("starts_at", { ascending: true }),
+    supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
   ]);
 
-  if (playerError || gameError) {
-    console.warn("Remote load failed", playerError || gameError);
+  if (playerError || gameError || eventError || responseError) {
+    console.warn("Remote load failed", playerError || gameError || eventError || responseError);
     remoteEnabled = false;
     updateAccessUi("Supabase indisponivel, modo local");
     return;
@@ -415,7 +498,10 @@ async function loadRemoteState() {
   state = migrateState({
     players: players.map(playerFromRow),
     games: games.map(gameFromRow),
+    events: (events || []).map(eventFromRow),
   });
+  eventResponses = (responses || []).map(responseFromRow);
+  currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = state.games[0]?.id || null;
   saveState();
 }
@@ -517,6 +603,7 @@ function render() {
   renderGamesList();
   renderAccountPanel();
   renderClaimsList();
+  renderEventsList();
 }
 
 function getLinkedPlayer() {
@@ -646,6 +733,236 @@ function renderClaimsList() {
   els.claimsList.querySelectorAll("[data-reject-claim]").forEach((button) => {
     button.addEventListener("click", () => reviewPlayerClaim(button.dataset.rejectClaim, "rejected"));
   });
+}
+
+function getNextEvent() {
+  const now = Date.now();
+  return [...(state.events || [])]
+    .filter((eventData) => eventData.status !== "completed" && eventData.status !== "cancelled")
+    .sort((a, b) => {
+      const aFuture = new Date(a.startsAt).getTime() >= now ? 0 : 1;
+      const bFuture = new Date(b.startsAt).getTime() >= now ? 0 : 1;
+      return aFuture - bFuture || new Date(a.startsAt) - new Date(b.startsAt);
+    })[0] || null;
+}
+
+function getCurrentEvent() {
+  return (state.events || []).find((eventData) => eventData.id === currentEventId) || getNextEvent();
+}
+
+function getEventResponses(eventId, status) {
+  return eventResponses.filter((response) => response.eventId === eventId && (!status || response.status === status));
+}
+
+function getEventPlayers(eventId, status) {
+  return getEventResponses(eventId, status)
+    .map((response) => findPlayer(response.playerId))
+    .filter(Boolean)
+    .sort((a, b) => b.overall - a.overall || a.name.localeCompare(b.name));
+}
+
+function getResponseForPlayer(eventId, playerId) {
+  return eventResponses.find((response) => response.eventId === eventId && response.playerId === playerId) || null;
+}
+
+function renderEventsList() {
+  if (!els.eventsList) return;
+  if (els.eventDate && !els.eventDate.value) {
+    els.eventDate.value = toDateTimeLocalInput(defaultEventDate());
+  }
+
+  document.body.classList.toggle("player-linked", Boolean(getLinkedPlayer()));
+  const events = [...(state.events || [])].sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  if (!events.length) {
+    els.eventsList.innerHTML = `<div class="empty-state">Ainda nao ha convocatorias. O admin pode lancar o proximo jogo.</div>`;
+    return;
+  }
+
+  els.eventsList.innerHTML = events.map((eventData) => renderEventCard(eventData)).join("");
+
+  els.eventsList.querySelectorAll("[data-event-response]").forEach((button) => {
+    button.addEventListener("click", () => saveEventResponse(button.dataset.eventId, button.dataset.eventResponse));
+  });
+  els.eventsList.querySelectorAll("[data-event-generate]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentEventId = button.dataset.eventGenerate;
+      loadCurrentEventGoingPlayers();
+    });
+  });
+  els.eventsList.querySelectorAll("[data-event-cancel]").forEach((button) => {
+    button.addEventListener("click", () => updateEventStatus(button.dataset.eventCancel, "cancelled"));
+  });
+}
+
+function renderEventCard(eventData) {
+  const linkedPlayer = getLinkedPlayer();
+  const myResponse = linkedPlayer ? getResponseForPlayer(eventData.id, linkedPlayer.id) : null;
+  const going = getEventPlayers(eventData.id, "going");
+  const maybe = getEventPlayers(eventData.id, "maybe");
+  const notGoing = getEventPlayers(eventData.id, "not_going");
+  const missing = Math.max(0, eventData.minPlayers - going.length);
+  const isSelected = eventData.id === currentEventId;
+  return `
+    <article class="event-card ${isSelected ? "selected" : ""}">
+      <div class="event-top">
+        <div>
+          <p class="eyebrow">${escapeHtml(eventData.status)}</p>
+          <h3>${escapeHtml(eventData.title)}</h3>
+          <p>${formatDate(eventData.startsAt)}${eventData.location ? ` - ${escapeHtml(eventData.location)}` : ""}</p>
+        </div>
+        <strong class="counter">${going.length}/${eventData.maxPlayers}</strong>
+      </div>
+      <div class="event-counts">
+        <span class="metric good-pill">Vou ${going.length}</span>
+        <span class="metric">Talvez ${maybe.length}</span>
+        <span class="metric">Nao vou ${notGoing.length}</span>
+        <span class="metric ${missing ? "warn-pill" : "good-pill"}">${missing ? `Faltam ${missing}` : "Pronto"}</span>
+      </div>
+      ${renderResponseActions(eventData, myResponse)}
+      <div class="event-roster">
+        ${renderRosterMini("Vou", going)}
+        ${renderRosterMini("Talvez", maybe)}
+        ${renderRosterMini("Nao vou", notGoing)}
+      </div>
+      <div class="actions admin-actions">
+        <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
+        <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderResponseActions(eventData, myResponse) {
+  const linkedPlayer = getLinkedPlayer();
+  if (!currentSession) {
+    return `<div class="hint">Entra para responder a esta convocatoria.</div>`;
+  }
+  if (!linkedPlayer && !isAdmin) {
+    return `<div class="hint warn">Associa primeiro a tua conta a um perfil de jogador.</div>`;
+  }
+  if (isAdmin && !linkedPlayer) {
+    return `<div class="hint">Admin sem perfil associado. Podes acompanhar e gerar equipas.</div>`;
+  }
+  const status = myResponse?.status || "";
+  return `
+    <div class="response-row">
+      <button class="ghost-btn ${status === "going" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="going">Vou</button>
+      <button class="ghost-btn ${status === "maybe" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="maybe">Talvez</button>
+      <button class="ghost-btn ${status === "not_going" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="not_going">Nao vou</button>
+    </div>
+  `;
+}
+
+function renderRosterMini(label, players) {
+  const names = players.length ? players.map((p) => p.name).join(", ") : "-";
+  return `<div><strong>${label}</strong><span>${escapeHtml(names)}</span></div>`;
+}
+
+async function saveEventFromForm(event) {
+  event.preventDefault();
+  if (!requireAdmin()) return;
+  const title = els.eventTitle.value.trim();
+  const startsAt = fromDateTimeLocalInput(els.eventDate.value);
+  const location = els.eventLocation.value.trim();
+  const maxPlayers = Number(els.eventMaxPlayers.value || 13);
+  if (!title || !startsAt) return;
+
+  const eventData = normalizeEventRecord({
+    id: `e-${Date.now()}-${slug(title)}`,
+    title,
+    sport: "futsal",
+    startsAt,
+    location,
+    minPlayers: 10,
+    maxPlayers,
+    status: "open",
+    createdBy: currentSession?.user?.id || null,
+  });
+
+  state.events = [eventData, ...(state.events || [])];
+  currentEventId = eventData.id;
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("events").upsert(eventToRow(eventData));
+    if (error) {
+      alert(`Nao consegui lancar evento: ${error.message}`);
+      return;
+    }
+  }
+  saveState();
+  els.eventForm.reset();
+  els.eventDate.value = toDateTimeLocalInput(defaultEventDate());
+  render();
+}
+
+async function saveEventResponse(eventId, status) {
+  if (!currentSession?.user) {
+    alert("Entra primeiro para responder.");
+    return;
+  }
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) {
+    alert("Associa primeiro a tua conta a um perfil.");
+    showView("account");
+    return;
+  }
+
+  const existing = getResponseForPlayer(eventId, linkedPlayer.id);
+  const row = {
+    event_id: eventId,
+    player_id: linkedPlayer.id,
+    user_id: currentSession.user.id,
+    status,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient
+      .from("event_responses")
+      .upsert(row, { onConflict: "event_id,player_id" });
+    if (error) {
+      alert(`Nao consegui guardar resposta: ${error.message}`);
+      return;
+    }
+    await loadRemoteState();
+  } else if (existing) {
+    existing.status = status;
+    existing.updatedAt = row.updated_at;
+  } else {
+    eventResponses.unshift(responseFromRow({ ...row, id: `r-${Date.now()}` }));
+  }
+  currentEventId = eventId;
+  render();
+}
+
+async function updateEventStatus(eventId, status) {
+  if (!requireAdmin()) return;
+  const eventData = state.events.find((item) => item.id === eventId);
+  if (!eventData) return;
+  eventData.status = status;
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("events").upsert(eventToRow(eventData));
+    if (error) {
+      alert(`Nao consegui atualizar evento: ${error.message}`);
+      return;
+    }
+  }
+  saveState();
+  render();
+}
+
+function loadCurrentEventGoingPlayers() {
+  const eventData = getCurrentEvent();
+  if (!eventData) {
+    setHint("Ainda nao ha convocatoria para carregar.", "warn");
+    showView("today");
+    return;
+  }
+  const goingPlayers = getEventPlayers(eventData.id, "going");
+  selectedIds = new Set(goingPlayers.map((p) => p.id));
+  currentEventId = eventData.id;
+  showView("today");
+  render();
+  setHint(`${goingPlayers.length} confirmados carregados da convocatoria "${eventData.title}".`, goingPlayers.length >= 10 && goingPlayers.length <= 13 ? "good" : "warn");
 }
 
 async function requestPlayerClaim(playerId) {
@@ -1899,6 +2216,25 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function defaultEventDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + ((2 + 7 - date.getDay()) % 7 || 7));
+  date.setHours(21, 0, 0, 0);
+  return date;
+}
+
+function toDateTimeLocalInput(value) {
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromDateTimeLocalInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
 function formatDateForFile(value) {

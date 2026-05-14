@@ -139,6 +139,13 @@ h3 {
   align-items: start;
 }
 
+.events-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(520px, 1.3fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid rgba(215, 223, 220, 0.9);
@@ -180,6 +187,10 @@ h3 {
   align-items: center;
 }
 
+.event-import {
+  padding: 12px 18px 0;
+}
+
 .toolbar,
 .guest-row {
   padding: 12px 18px 0;
@@ -189,6 +200,7 @@ h3 {
 .guest-row input,
 .score-row input,
 .player-form input,
+.event-form input,
 .add-to-game select {
   min-height: 40px;
   width: 100%;
@@ -230,6 +242,12 @@ h3 {
   color: var(--ink);
   background: var(--surface-2);
   border-color: var(--line);
+}
+
+.ghost-btn.selected {
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
 }
 
 .danger-btn {
@@ -329,6 +347,74 @@ h3 {
   display: grid;
   gap: 12px;
   padding: 18px;
+}
+
+.event-form,
+.events-list {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.event-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.event-card.selected {
+  border-color: rgba(31, 122, 77, 0.5);
+  background: linear-gradient(0deg, rgba(31, 122, 77, 0.06), rgba(31, 122, 77, 0.06)), var(--surface);
+}
+
+.event-top,
+.event-counts,
+.response-row,
+.event-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.event-top {
+  justify-content: space-between;
+}
+
+.event-top p {
+  color: var(--muted);
+}
+
+.event-roster {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.event-roster div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-2);
+}
+
+.event-roster span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.good-pill {
+  color: var(--green);
+  background: var(--green-2);
+}
+
+.warn-pill {
+  color: #8c5d00;
+  background: #fff3d6;
 }
 
 .suggestion-card {
@@ -461,6 +547,8 @@ h3 {
 .visitor-mode #confirm-game,
 .visitor-mode #save-score,
 .visitor-mode #reset-data,
+.visitor-mode #event-form,
+.visitor-mode .admin-actions,
 .visitor-mode .file-btn,
 .visitor-mode .admin-only,
 .visitor-mode #players-table th:last-child,
@@ -875,7 +963,8 @@ th:last-child {
 }
 
 @media (max-width: 1180px) {
-  .layout-grid {
+  .layout-grid,
+  .events-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -908,6 +997,8 @@ th:last-child {
   }
 
   .layout-grid,
+  .events-grid,
+  .event-roster,
   .roster-editor,
   .player-form {
     grid-template-columns: 1fr;

@@ -39,11 +39,6 @@ create unique index if not exists player_claims_one_pending_per_user
 on public.player_claims (user_id)
 where status = 'pending';
 
-grant select on public.players to anon, authenticated;
-grant select on public.games to anon, authenticated;
-grant select, insert, update on public.profiles to authenticated;
-grant select, insert, update on public.player_claims to authenticated;
-
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -80,10 +75,47 @@ create table if not exists public.games (
   updated_at timestamptz default now()
 );
 
+create table if not exists public.events (
+  id text primary key,
+  title text not null,
+  sport text not null default 'futsal',
+  starts_at timestamptz not null,
+  location text default '',
+  min_players integer not null default 10,
+  max_players integer not null default 13,
+  status text not null default 'open' check (status in ('draft', 'open', 'locked', 'completed', 'cancelled')),
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.event_responses (
+  id uuid primary key default gen_random_uuid(),
+  event_id text not null references public.events(id) on delete cascade,
+  player_id text not null references public.players(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  status text not null check (status in ('going', 'maybe', 'not_going')),
+  updated_at timestamptz default now()
+);
+
+create unique index if not exists event_responses_one_per_player
+on public.event_responses (event_id, player_id);
+
+grant select on public.players to anon, authenticated;
+grant select on public.games to anon, authenticated;
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update on public.player_claims to authenticated;
+grant select on public.events to anon, authenticated;
+grant select on public.event_responses to anon, authenticated;
+grant insert, update, delete on public.events to authenticated;
+grant insert, update on public.event_responses to authenticated;
+
 alter table public.players enable row level security;
 alter table public.profiles enable row level security;
 alter table public.player_claims enable row level security;
 alter table public.games enable row level security;
+alter table public.events enable row level security;
+alter table public.event_responses enable row level security;
 
 drop policy if exists "profiles read authenticated" on public.profiles;
 create policy "profiles read authenticated"
@@ -132,6 +164,48 @@ drop policy if exists "public games read" on public.games;
 create policy "public games read"
 on public.games for select
 using (true);
+
+drop policy if exists "public events read" on public.events;
+create policy "public events read"
+on public.events for select
+using (true);
+
+drop policy if exists "public event responses read" on public.event_responses;
+create policy "public event responses read"
+on public.event_responses for select
+using (true);
+
+drop policy if exists "admin events insert" on public.events;
+create policy "admin events insert"
+on public.events for insert
+to authenticated
+with check (public.is_admin());
+
+drop policy if exists "admin events update" on public.events;
+create policy "admin events update"
+on public.events for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin events delete" on public.events;
+create policy "admin events delete"
+on public.events for delete
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "players respond to events" on public.event_responses;
+create policy "players respond to events"
+on public.event_responses for insert
+to authenticated
+with check (true);
+
+drop policy if exists "players update event responses" on public.event_responses;
+create policy "players update event responses"
+on public.event_responses for update
+to authenticated
+using (true)
+with check (true);
 
 drop policy if exists "admin players insert" on public.players;
 create policy "admin players insert"

@@ -28,6 +28,9 @@ window.FIVE5_CONFIG = {
 - Visitantes podem ver a app e criar conta.
 - Jogadores criam conta por email/password e depois reclamam o perfil de jogador que ja existe.
 - Admin aprova pedidos de associacao entre conta e perfil.
+- Admin lanca convocatorias com data, hora, local e limite de jogadores.
+- Jogadores com perfil associado respondem `Vou`, `Talvez` ou `Nao vou`.
+- Admin pode carregar os confirmados da convocatoria para o gerador de equipas.
 - Admin pode editar jogadores/fotos, confirmar jogos, editar resultados e historico.
 - O primeiro utilizador autenticado criado depois de aplicar o schema fica como admin inicial.
 - O botao `Entrar` faz login com email/password do Supabase.

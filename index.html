@@ -14,7 +14,8 @@
           <h1>Equilibrador 5v5</h1>
         </div>
         <nav class="tabs" aria-label="Seccoes">
-          <button class="tab active" data-view="today">Hoje</button>
+          <button class="tab active" data-view="events">Convocatoria</button>
+          <button class="tab" data-view="today">Gerar</button>
           <button class="tab" data-view="account">Conta</button>
           <button class="tab" data-view="players">Jogadores</button>
           <button class="tab admin-only" data-view="claims">Pedidos</button>
@@ -29,7 +30,37 @@
       </header>
 
       <main>
-        <section class="view active" id="view-today">
+        <section class="view active" id="view-events">
+          <div class="events-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Admin</p>
+                  <h2>Lancar jogo</h2>
+                </div>
+              </div>
+              <form id="event-form" class="event-form">
+                <input id="event-title" required placeholder="Nome do jogo">
+                <input id="event-date" type="datetime-local" required>
+                <input id="event-location" placeholder="Local">
+                <input id="event-max-players" type="number" min="10" max="18" value="13" placeholder="Max. jogadores">
+                <button class="primary-btn" type="submit">Lancar evento</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Semana do jogo</p>
+                  <h2>Convocatorias</h2>
+                </div>
+              </div>
+              <div id="events-list" class="events-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-today">
           <div class="layout-grid">
             <section class="panel selection-panel">
               <div class="panel-head">
@@ -38,6 +69,10 @@
                   <h2>Quem vem hoje?</h2>
                 </div>
                 <strong class="counter" id="selected-count">0/13</strong>
+              </div>
+
+              <div class="event-import">
+                <button id="load-event-going" class="ghost-btn">Usar confirmados da convocatoria</button>
               </div>
 
               <div class="toolbar">
