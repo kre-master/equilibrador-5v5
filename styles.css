@@ -1399,20 +1399,29 @@ th:last-child {
 
 .payments-table .payment-game-col,
 .payments-table .payment-small-col {
-  width: 54px;
+  width: 30px;
 }
 
 .payments-table .payment-money-col {
-  width: 72px;
+  width: 42px;
 }
 
 .payments-table .payment-balance-col {
-  width: 86px;
+  width: 48px;
 }
 
 .payments-table th,
 .payments-table td {
+  padding: 7px 3px;
+  font-size: 13px;
+  line-height: 1.15;
   text-align: center;
+}
+
+.payments-table th {
+  font-size: 9px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .payments-table th:first-child,
@@ -1424,8 +1433,8 @@ th:last-child {
   width: 15ch;
   min-width: 15ch;
   max-width: 15ch;
-  padding-left: 6px;
-  padding-right: 6px;
+  padding-left: 5px;
+  padding-right: 5px;
   text-align: left;
   background: rgba(255,255,255,.94);
   overflow: hidden;
