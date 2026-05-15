@@ -1267,8 +1267,29 @@ th:last-child {
   background: rgba(255,255,255,.62);
 }
 
-.payments-form select {
+.primary-payment-form {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255,255,255,.9), rgba(227,244,236,.68));
+}
+
+.payments-form-title {
+  display: grid;
+  gap: 2px;
   min-width: 220px;
+  margin-right: auto;
+}
+
+.payments-form-title strong {
+  font-size: 18px;
+}
+
+.payments-form-title span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.payments-form select {
+  min-width: 280px;
 }
 
 .payments-form input[data-payment-note] {
@@ -1279,6 +1300,10 @@ th:last-child {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
+}
+
+.payments-cashbar {
+  justify-content: flex-end;
 }
 
 .finance-settings {
@@ -1319,6 +1344,43 @@ th:last-child {
   padding: 0 10px;
   color: var(--ink);
   background: var(--surface-strong);
+}
+
+.finance-games-section {
+  background: rgba(255,255,255,.55);
+}
+
+.finance-games {
+  display: grid;
+  gap: 8px;
+}
+
+.finance-game-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(190, 205, 198, 0.62);
+  border-radius: 18px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.7);
+}
+
+.finance-game-row strong,
+.finance-game-row span {
+  display: block;
+}
+
+.finance-game-row span {
+  color: var(--muted);
+}
+
+.finance-game-row label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 900;
+  color: var(--ink);
 }
 
 .payments-table-wrap {
@@ -1429,6 +1491,7 @@ th:last-child {
   .layout-grid,
   .events-grid,
   .event-roster,
+  .finance-game-row,
   .profile-grid,
   .summary-grid,
   .finance-summary,

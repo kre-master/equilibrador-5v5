@@ -166,6 +166,18 @@ create table if not exists public.finance_settings (
   updated_at timestamptz default now()
 );
 
+create table if not exists public.game_finance_overrides (
+  id text primary key,
+  game_id text not null references public.games(id) on delete cascade,
+  field_paid boolean not null default true,
+  charge_players boolean not null default true,
+  updated_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz default now()
+);
+
+create unique index if not exists game_finance_overrides_one_per_game
+on public.game_finance_overrides (game_id);
+
 grant select on public.players to anon, authenticated;
 grant select on public.games to anon, authenticated;
 grant select, insert, update on public.profiles to authenticated;
@@ -181,6 +193,8 @@ grant select on public.attendance_overrides to authenticated;
 grant insert, update, delete on public.attendance_overrides to authenticated;
 grant select on public.finance_settings to authenticated;
 grant insert, update on public.finance_settings to authenticated;
+grant select on public.game_finance_overrides to authenticated;
+grant insert, update, delete on public.game_finance_overrides to authenticated;
 
 alter table public.players enable row level security;
 alter table public.profiles enable row level security;
@@ -191,6 +205,7 @@ alter table public.event_responses enable row level security;
 alter table public.payments enable row level security;
 alter table public.attendance_overrides enable row level security;
 alter table public.finance_settings enable row level security;
+alter table public.game_finance_overrides enable row level security;
 
 drop policy if exists "profiles read authenticated" on public.profiles;
 create policy "profiles read authenticated"
@@ -388,3 +403,28 @@ on public.finance_settings for update
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "admin game finance overrides read" on public.game_finance_overrides;
+create policy "admin game finance overrides read"
+on public.game_finance_overrides for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin game finance overrides insert" on public.game_finance_overrides;
+create policy "admin game finance overrides insert"
+on public.game_finance_overrides for insert
+to authenticated
+with check (public.is_admin());
+
+drop policy if exists "admin game finance overrides update" on public.game_finance_overrides;
+create policy "admin game finance overrides update"
+on public.game_finance_overrides for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin game finance overrides delete" on public.game_finance_overrides;
+create policy "admin game finance overrides delete"
+on public.game_finance_overrides for delete
+to authenticated
+using (public.is_admin());

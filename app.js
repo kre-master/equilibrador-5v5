@@ -58,6 +58,7 @@ let playerClaims = [];
 let eventResponses = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
+let gameFinanceOverrides = state.gameFinanceOverrides || [];
 let financeSettings = state.financeSettings || { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } };
 let currentEventId = null;
 let currentPaymentsMonth = monthKey(new Date());
@@ -179,6 +180,7 @@ function loadState() {
     events: [],
     payments: [],
     attendanceOverrides: [],
+    gameFinanceOverrides: [],
     financeSettings: { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } },
   });
 }
@@ -194,6 +196,7 @@ function migrateState(saved) {
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
+  saved.gameFinanceOverrides = Array.isArray(saved.gameFinanceOverrides) ? saved.gameFinanceOverrides.map(normalizeGameFinanceOverrideRecord).filter(Boolean) : [];
   saved.financeSettings = normalizeFinanceSettings(saved.financeSettings);
   return saved;
 }
@@ -424,6 +427,43 @@ function attendanceOverrideToRow(override) {
   };
 }
 
+function normalizeGameFinanceOverrideRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const gameId = record.gameId || record.game_id;
+  if (!gameId) return null;
+  return {
+    id: String(record.id || gameFinanceOverrideId(gameId)),
+    gameId: String(gameId),
+    fieldPaid: record.fieldPaid ?? record.field_paid ?? true,
+    chargePlayers: record.chargePlayers ?? record.charge_players ?? true,
+    updatedBy: record.updatedBy || record.updated_by || null,
+    updatedAt: record.updatedAt || record.updated_at || new Date().toISOString(),
+  };
+}
+
+function gameFinanceOverrideFromRow(row) {
+  return normalizeGameFinanceOverrideRecord({
+    id: row.id,
+    gameId: row.game_id,
+    fieldPaid: row.field_paid,
+    chargePlayers: row.charge_players,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  });
+}
+
+function gameFinanceOverrideToRow(override) {
+  const clean = normalizeGameFinanceOverrideRecord(override);
+  return {
+    id: clean.id,
+    game_id: clean.gameId,
+    field_paid: clean.fieldPaid,
+    charge_players: clean.chargePlayers,
+    updated_by: currentSession?.user?.id || clean.updatedBy || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 function normalizeFinanceSettings(record) {
   const base = {
     ...defaultFinanceSettings,
@@ -466,6 +506,7 @@ function financeSettingsToRow(settings) {
 function saveState() {
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
+  state.gameFinanceOverrides = gameFinanceOverrides;
   state.financeSettings = financeSettings;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -485,6 +526,7 @@ async function saveRemoteState() {
   const events = (state.events || []).map(eventToRow);
   const paymentRows = payments.map(paymentToRow);
   const attendanceOverrideRows = attendanceOverrides.map(attendanceOverrideToRow);
+  const gameFinanceOverrideRows = gameFinanceOverrides.map(gameFinanceOverrideToRow);
   const financeSettingsRow = financeSettingsToRow(financeSettings);
 
   if (players.length) {
@@ -509,6 +551,11 @@ async function saveRemoteState() {
 
   if (attendanceOverrideRows.length) {
     const { error } = await supabaseClient.from("attendance_overrides").upsert(attendanceOverrideRows);
+    if (error) throw error;
+  }
+
+  if (gameFinanceOverrideRows.length) {
+    const { error } = await supabaseClient.from("game_finance_overrides").upsert(gameFinanceOverrideRows);
     if (error) throw error;
   }
 
@@ -668,14 +715,17 @@ async function loadRemoteState() {
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
+  let remoteGameFinanceOverrides = [];
   if (isAdmin) {
     const [
       { data: paymentRows, error: paymentError },
       { data: attendanceRows, error: attendanceError },
+      { data: gameFinanceRows, error: gameFinanceError },
       { data: financeRows, error: financeError },
     ] = await Promise.all([
       supabaseClient.from("payments").select("*").order("paid_at", { ascending: false }),
       supabaseClient.from("attendance_overrides").select("*").order("updated_at", { ascending: false }),
+      supabaseClient.from("game_finance_overrides").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("finance_settings").select("*").eq("id", "main"),
     ]);
     if (paymentError || attendanceError || financeError) {
@@ -684,6 +734,11 @@ async function loadRemoteState() {
       remotePayments = paymentRows || [];
       remoteAttendanceOverrides = attendanceRows || [];
       if (financeRows?.[0]) financeSettings = financeSettingsFromRow(financeRows[0]);
+    }
+    if (gameFinanceError) {
+      console.warn("Game finance rules load failed. Run supabase/schema.sql again.", gameFinanceError);
+    } else {
+      remoteGameFinanceOverrides = gameFinanceRows || [];
     }
   }
 
@@ -704,12 +759,14 @@ async function loadRemoteState() {
     events: (events || []).map(eventFromRow),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
+    gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
     financeSettings,
   });
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
+  gameFinanceOverrides = state.gameFinanceOverrides || [];
   financeSettings = state.financeSettings || financeSettings;
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = state.games[0]?.id || null;
@@ -1374,6 +1431,11 @@ function renderPaymentsPanel() {
   }
 
   const report = buildMonthlyPaymentReport(currentPaymentsMonth);
+  const paymentOptions = report.rows
+    .slice()
+    .sort((a, b) => a.player.name.localeCompare(b.player.name))
+    .map((row) => `<option value="${row.player.id}">${escapeHtml(row.player.name)} - saldo ${euro(row.currentBalance)}</option>`)
+    .join("");
   els.paymentsPanel.innerHTML = `
     <div class="payments-toolbar">
       <label>
@@ -1383,57 +1445,39 @@ function renderPaymentsPanel() {
       <button class="ghost-btn" data-payments-whatsapp>WhatsApp</button>
     </div>
 
-    <section class="profile-section finance-settings">
-      <div class="finance-settings-head">
-        <div>
-          <h3>Ponto de arranque</h3>
-          <p>Importado do ficheiro do tesoureiro. A app calcula movimentos novos a partir daqui.</p>
-        </div>
-        <button class="primary-btn" data-save-finance-settings>Guardar saldos</button>
+    <section class="payments-form primary-payment-form">
+      <div class="payments-form-title">
+        <strong>Registar pagamento</strong>
+        <span>O saldo atual aparece no dropdown para escolheres mais rapido.</span>
       </div>
-      <div class="payments-form">
-        <label>
-          Mes inicial
-          <input data-finance-start-month type="month" value="${escapeHtml(financeSettings.startMonth)}">
-        </label>
-        <label>
-          Caixa atual
-          <input data-finance-cash type="number" step="0.5" value="${financeSettings.cashBalance}">
-        </label>
-      </div>
-      <div class="finance-balance-grid">
-        ${state.players.filter((p) => !p.isGuest).sort((a, b) => a.name.localeCompare(b.name)).map((p) => `
-          <label>
-            <span>${escapeHtml(p.name)}</span>
-            <input data-finance-player-balance="${p.id}" type="number" step="0.5" value="${financeSettings.playerBalances[p.id] ?? 0}">
-          </label>
-        `).join("")}
-      </div>
-    </section>
-
-    <div class="finance-summary">
-      ${renderSummaryCard("Jogos", report.games.length)}
-      ${renderSummaryCard("Campo", euro(report.fieldCost))}
-      ${renderSummaryCard("A cobrar", euro(report.totalDue))}
-      ${renderSummaryCard("Pago", euro(report.totalPaidMonth))}
-      ${renderSummaryCard("Saldo atual", euro(report.totalCurrentBalance))}
-      ${renderSummaryCard("Caixa", euro(financeSettings.cashBalance))}
-    </div>
-
-    <div class="payments-form">
       <select data-payment-player>
         <option value="">Jogador</option>
-        ${state.players
-          .filter((p) => !p.isGuest || report.rows.some((row) => row.player.id === p.id))
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
-          .join("")}
+        ${paymentOptions}
       </select>
       <input data-payment-amount type="number" min="0" step="0.5" placeholder="Valor pago">
       <input data-payment-date type="date" value="${escapeHtml(todayInputDate())}">
       <input data-payment-note placeholder="Nota">
-      <button class="primary-btn" data-add-payment>Registar pagamento</button>
+      <button class="primary-btn" data-add-payment>Registar</button>
+    </section>
+
+    <section class="payments-toolbar payments-cashbar">
+        <label>
+          Caixa registada
+          <input data-finance-cash type="number" step="0.5" value="${financeSettings.cashBalance}">
+        </label>
+        <button class="ghost-btn" data-save-finance-settings>Guardar caixa</button>
+    </section>
+
+    <div class="finance-summary">
+      ${renderSummaryCard("Jogos", report.games.length)}
+      ${renderSummaryCard("Campo pago", euro(report.fieldCost))}
+      ${renderSummaryCard("A cobrar", euro(report.totalDue))}
+      ${renderSummaryCard("Pago", euro(report.totalPaidMonth))}
+      ${renderSummaryCard("Dif. caixa mes", euro(report.cashMonthDelta))}
+      ${renderSummaryCard("Caixa", euro(financeSettings.cashBalance))}
     </div>
+
+    ${renderGameFinanceControls(report)}
 
     <div class="table-wrap payments-table-wrap">
       <table class="payments-table">
@@ -1473,6 +1517,9 @@ function renderPaymentsPanel() {
   els.paymentsPanel.querySelectorAll("[data-attendance-game]").forEach((input) => {
     input.addEventListener("change", () => updateAttendanceOverride(input.dataset.attendanceGame, input.dataset.attendancePlayer, input.checked));
   });
+  els.paymentsPanel.querySelectorAll("[data-game-finance-toggle]").forEach((input) => {
+    input.addEventListener("change", () => updateGameFinanceOverride(input.dataset.gameFinanceToggle, input.dataset.gameFinanceField, input.checked));
+  });
 }
 
 function renderPaymentRow(row, games) {
@@ -1485,7 +1532,8 @@ function renderPaymentRow(row, games) {
           <input type="checkbox"
             data-attendance-game="${game.id}"
             data-attendance-player="${row.player.id}"
-            ${row.attendanceByGame.get(game.id) ? "checked" : ""}>
+            ${row.attendanceByGame.get(game.id) ? "checked" : ""}
+            ${getGameFinanceSettings(game).chargePlayers ? "" : "disabled"}>
         </td>
       `).join("")}
       <td>${row.attendanceCount}</td>
@@ -1494,6 +1542,43 @@ function renderPaymentRow(row, games) {
       <td>${euro(row.previousBalance)}</td>
       <td class="${balanceClass}"><strong>${euro(row.currentBalance)}</strong></td>
     </tr>
+  `;
+}
+
+function renderGameFinanceControls(report) {
+  if (!report.games.length) {
+    return `<section class="profile-section"><div class="empty-state">Ainda nao ha jogos neste mes.</div></section>`;
+  }
+  return `
+    <section class="profile-section finance-games-section">
+      <div class="finance-settings-head">
+        <div>
+          <h3>Regras dos jogos</h3>
+          <p>Se o jogo nao se realizou mas o campo foi pago, deixa Campo pago ligado e desliga Cobrar jogadores.</p>
+        </div>
+      </div>
+      <div class="finance-games">
+        ${report.games.map((game) => {
+          const settings = getGameFinanceSettings(game);
+          return `
+            <article class="finance-game-row">
+              <div>
+                <strong>${formatDate(game.date)}</strong>
+                <span>${escapeHtml(game.title || "Jogo")}</span>
+              </div>
+              <label>
+                <input type="checkbox" data-game-finance-toggle="${game.id}" data-game-finance-field="fieldPaid" ${settings.fieldPaid ? "checked" : ""}>
+                Campo pago
+              </label>
+              <label>
+                <input type="checkbox" data-game-finance-toggle="${game.id}" data-game-finance-field="chargePlayers" ${settings.chargePlayers ? "checked" : ""}>
+                Cobrar jogadores
+              </label>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -1550,26 +1635,18 @@ async function addManualPayment() {
 
 async function saveFinanceSettingsFromPanel() {
   if (!requireAdmin()) return;
-  const startMonth = els.paymentsPanel.querySelector("[data-finance-start-month]")?.value || monthKey(new Date());
   const cashBalance = Number(els.paymentsPanel.querySelector("[data-finance-cash]")?.value || 0);
-  const playerBalances = {};
-  els.paymentsPanel.querySelectorAll("[data-finance-player-balance]").forEach((input) => {
-    const amount = Number(input.value || 0);
-    playerBalances[input.dataset.financePlayerBalance] = Number.isNaN(amount) ? 0 : amount;
-  });
   const previous = financeSettings;
   financeSettings = {
-    startMonth,
+    ...financeSettings,
     cashBalance: Number.isNaN(cashBalance) ? 0 : cashBalance,
-    playerBalances,
   };
-  currentPaymentsMonth = startMonth;
   try {
     await persistState();
   } catch (error) {
     financeSettings = previous;
     saveState();
-    alert(`Nao consegui guardar saldos iniciais. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+    alert(`Nao consegui guardar caixa. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
   }
   renderPaymentsPanel();
 }
@@ -1595,6 +1672,32 @@ async function updateAttendanceOverride(gameId, playerId, attended) {
     attendanceOverrides = previousOverrides;
     saveState();
     alert(`Nao consegui guardar ajuste de presenca. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+  }
+  renderPaymentsPanel();
+}
+
+async function updateGameFinanceOverride(gameId, field, value) {
+  if (!requireAdmin()) return;
+  if (!["fieldPaid", "chargePlayers"].includes(field)) return;
+  const existing = gameFinanceOverrides.find((item) => item.gameId === gameId) || getGameFinanceSettings({ id: gameId });
+  const next = {
+    ...existing,
+    id: gameFinanceOverrideId(gameId),
+    gameId,
+    [field]: value,
+    updatedBy: currentSession?.user?.id || null,
+    updatedAt: new Date().toISOString(),
+  };
+  const index = gameFinanceOverrides.findIndex((item) => item.gameId === gameId);
+  const previousOverrides = [...gameFinanceOverrides];
+  if (index >= 0) gameFinanceOverrides[index] = next;
+  else gameFinanceOverrides.push(next);
+  try {
+    await persistState();
+  } catch (error) {
+    gameFinanceOverrides = previousOverrides;
+    saveState();
+    alert(`Nao consegui guardar regra do jogo. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
   }
   renderPaymentsPanel();
 }
@@ -1629,7 +1732,7 @@ function buildMonthlyPaymentReport(month) {
   const rows = getFinancePlayers(games, month).map((playerData) => {
     const attendanceByGame = new Map();
     games.forEach((game) => {
-      attendanceByGame.set(game.id, didPlayerAttendGame(game, playerData.id));
+      attendanceByGame.set(game.id, shouldChargePlayerForGame(game, playerData.id));
     });
     const attendanceCount = [...attendanceByGame.values()].filter(Boolean).length;
     const due = Math.min(attendanceCount * PAYMENT_RULES.playerFeePerGame, PAYMENT_RULES.monthlyCap);
@@ -1649,15 +1752,20 @@ function buildMonthlyPaymentReport(month) {
   const monthPayments = payments
     .filter((payment) => monthKey(payment.paidAt) === month)
     .sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
+  const fieldPaidGames = games.filter((game) => getGameFinanceSettings(game).fieldPaid);
+  const fieldCost = fieldPaidGames.length * PAYMENT_RULES.fieldCostPerGame;
+  const totalPaidMonth = rows.reduce((sum, row) => sum + row.paidMonth, 0);
   return {
     month,
     games,
+    fieldPaidGames,
     rows,
     monthPayments,
-    fieldCost: games.length * PAYMENT_RULES.fieldCostPerGame,
+    fieldCost,
     totalDue: rows.reduce((sum, row) => sum + row.due, 0),
-    totalPaidMonth: rows.reduce((sum, row) => sum + row.paidMonth, 0),
+    totalPaidMonth,
     totalCurrentBalance: rows.reduce((sum, row) => sum + row.currentBalance, 0),
+    cashMonthDelta: totalPaidMonth - fieldCost,
   };
 }
 
@@ -1702,17 +1810,35 @@ function getPlayerBalanceBeforeMonth(playerId, month) {
   });
   return [...months].sort().reduce((balance, key) => {
     const games = getGamesInMonth(key);
-    const attendanceCount = games.filter((game) => didPlayerAttendGame(game, playerId)).length;
+    const attendanceCount = games.filter((game) => shouldChargePlayerForGame(game, playerId)).length;
     const due = Math.min(attendanceCount * PAYMENT_RULES.playerFeePerGame, PAYMENT_RULES.monthlyCap);
     const paid = getPlayerPaymentsInMonth(playerId, key).reduce((sum, payment) => sum + payment.amount, 0);
     return balance + due - paid;
   }, initial);
 }
 
+function shouldChargePlayerForGame(game, playerId) {
+  if (!getGameFinanceSettings(game).chargePlayers) return false;
+  return didPlayerAttendGame(game, playerId);
+}
+
 function didPlayerAttendGame(game, playerId) {
   const override = attendanceOverrides.find((item) => item.gameId === game.id && item.playerId === playerId);
   if (override) return override.attended;
   return getGamePlayerIds(game).includes(playerId);
+}
+
+function getGameFinanceSettings(game) {
+  const gameId = typeof game === "string" ? game : game?.id;
+  const override = gameFinanceOverrides.find((item) => item.gameId === gameId);
+  return {
+    id: gameFinanceOverrideId(gameId),
+    gameId,
+    fieldPaid: override?.fieldPaid ?? true,
+    chargePlayers: override?.chargePlayers ?? true,
+    updatedBy: override?.updatedBy || null,
+    updatedAt: override?.updatedAt || new Date().toISOString(),
+  };
 }
 
 function getGamePlayerIds(game) {
@@ -1723,6 +1849,10 @@ function attendanceOverrideId(gameId, playerId) {
   return `att-${gameId}-${playerId}`;
 }
 
+function gameFinanceOverrideId(gameId) {
+  return `gfin-${gameId}`;
+}
+
 function sharePaymentsOnWhatsApp() {
   const report = buildMonthlyPaymentReport(currentPaymentsMonth);
   const debtors = report.rows.filter((row) => row.currentBalance > 0.009);
@@ -1731,8 +1861,12 @@ function sharePaymentsOnWhatsApp() {
   const lines = [
     `Pagamentos ${formatMonthLabel(report.month)}`,
     "",
-    `Campo: ${report.games.length} jogos x ${euro(PAYMENT_RULES.fieldCostPerGame)} = ${euro(report.fieldCost)}`,
+    `Campo pago: ${report.fieldPaidGames.length} jogos x ${euro(PAYMENT_RULES.fieldCostPerGame)} = ${euro(report.fieldCost)}`,
+    `Diferenca da caixa no mes: ${euro(report.cashMonthDelta)}`,
     `Regra: ${euro(PAYMENT_RULES.playerFeePerGame)}/jogo, max. ${euro(PAYMENT_RULES.monthlyCap)}/mes`,
+    ...report.games.some((game) => !getGameFinanceSettings(game).chargePlayers)
+      ? ["", `Sem cobranca aos jogadores: ${report.games.filter((game) => !getGameFinanceSettings(game).chargePlayers).map((game) => formatDate(game.date)).join(", ")}`]
+      : [],
     "",
     "A pagar:",
     ...(debtors.length ? debtors.map((row) => `${row.player.name}: ${euro(row.currentBalance)}`) : ["-"]),
@@ -3313,6 +3447,7 @@ function importData(event) {
       state.events = migrated.events;
       payments = migrated.payments;
       attendanceOverrides = migrated.attendanceOverrides;
+      gameFinanceOverrides = migrated.gameFinanceOverrides;
       financeSettings = migrated.financeSettings;
       selectedIds.clear();
       currentGameId = state.games[0]?.id || null;
@@ -3333,6 +3468,7 @@ async function resetData() {
   state.events = [];
   payments = [];
   attendanceOverrides = [];
+  gameFinanceOverrides = [];
   financeSettings = { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } };
   selectedIds.clear();
   currentSuggestions = [];
