@@ -1226,6 +1226,97 @@ th:last-child {
   display: block;
 }
 
+.payments-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.payments-toolbar,
+.payments-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.payments-toolbar label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.payments-toolbar input,
+.payments-form input,
+.payments-form select {
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  padding: 0 11px;
+  color: var(--ink);
+  background: var(--surface-strong);
+  box-shadow: inset 0 1px rgba(255,255,255,.86), 0 8px 18px rgba(26,44,39,.05);
+}
+
+.payments-form {
+  border: 1px solid rgba(190, 205, 198, 0.62);
+  border-radius: 20px;
+  padding: 12px;
+  background: rgba(255,255,255,.62);
+}
+
+.payments-form select {
+  min-width: 220px;
+}
+
+.payments-form input[data-payment-note] {
+  flex: 1 1 220px;
+}
+
+.finance-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.payments-table-wrap {
+  max-height: 620px;
+}
+
+.payments-table {
+  min-width: 980px;
+}
+
+.payments-table th,
+.payments-table td {
+  text-align: center;
+}
+
+.payments-table th:first-child,
+.payments-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 180px;
+  text-align: left;
+  background: rgba(255,255,255,.94);
+}
+
+.payments-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.debt-cell {
+  background: rgba(255, 214, 218, .72);
+}
+
+.credit-cell {
+  background: rgba(219, 241, 227, .86);
+}
+
 .game-card {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1300,6 +1391,7 @@ th:last-child {
   .event-roster,
   .profile-grid,
   .summary-grid,
+  .finance-summary,
   .add-existing-row,
   .add-guest-row,
   .roster-editor,
@@ -1353,5 +1445,19 @@ th:last-child {
 
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .payments-toolbar,
+  .payments-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payments-form select,
+  .payments-form input,
+  .payments-form button,
+  .payments-toolbar input,
+  .payments-toolbar button {
+    width: 100%;
   }
 }

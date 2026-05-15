@@ -56,8 +56,13 @@ Enquanto a app ainda esta em testes, tambem podes desligar temporariamente a con
 - Jogadores com perfil associado respondem `Vou`, `Talvez` ou `Nao vou`.
 - Admin pode carregar os confirmados da convocatoria para o gerador de equipas.
 - Admin pode editar jogadores/fotos, confirmar jogos, editar resultados e historico.
+- Admin pode gerir pagamentos mensais no separador `Pagamentos`: idas ajustaveis, pagamentos manuais e export WhatsApp.
 - O primeiro utilizador autenticado criado depois de aplicar o schema fica como admin inicial.
 - O botao `Entrar` faz login com email/password do Supabase.
+
+## Atualizar schema depois de novas funcionalidades
+
+Quando a app ganha novas tabelas, volta a executar o ficheiro completo `supabase/schema.sql` no `SQL Editor` do Supabase. O separador `Pagamentos` precisa das tabelas `payments` e `attendance_overrides`.
 
 ## Publicar com GitHub Pages
 

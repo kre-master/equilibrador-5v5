@@ -134,6 +134,29 @@ create table if not exists public.event_responses (
 create unique index if not exists event_responses_one_per_player
 on public.event_responses (event_id, player_id);
 
+create table if not exists public.payments (
+  id text primary key,
+  player_id text not null references public.players(id) on delete cascade,
+  amount numeric not null check (amount >= 0),
+  paid_at timestamptz not null default now(),
+  note text default '',
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.attendance_overrides (
+  id text primary key,
+  game_id text not null references public.games(id) on delete cascade,
+  player_id text not null references public.players(id) on delete cascade,
+  attended boolean not null,
+  updated_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz default now()
+);
+
+create unique index if not exists attendance_overrides_one_per_player_game
+on public.attendance_overrides (game_id, player_id);
+
 grant select on public.players to anon, authenticated;
 grant select on public.games to anon, authenticated;
 grant select, insert, update on public.profiles to authenticated;
@@ -143,6 +166,10 @@ grant select on public.events to anon, authenticated;
 grant select on public.event_responses to anon, authenticated;
 grant insert, update, delete on public.events to authenticated;
 grant insert, update on public.event_responses to authenticated;
+grant select on public.payments to authenticated;
+grant insert, update, delete on public.payments to authenticated;
+grant select on public.attendance_overrides to authenticated;
+grant insert, update, delete on public.attendance_overrides to authenticated;
 
 alter table public.players enable row level security;
 alter table public.profiles enable row level security;
@@ -150,6 +177,8 @@ alter table public.player_claims enable row level security;
 alter table public.games enable row level security;
 alter table public.events enable row level security;
 alter table public.event_responses enable row level security;
+alter table public.payments enable row level security;
+alter table public.attendance_overrides enable row level security;
 
 drop policy if exists "profiles read authenticated" on public.profiles;
 create policy "profiles read authenticated"
@@ -276,5 +305,55 @@ with check (public.is_admin());
 drop policy if exists "admin games delete" on public.games;
 create policy "admin games delete"
 on public.games for delete
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin payments read" on public.payments;
+create policy "admin payments read"
+on public.payments for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin payments insert" on public.payments;
+create policy "admin payments insert"
+on public.payments for insert
+to authenticated
+with check (public.is_admin());
+
+drop policy if exists "admin payments update" on public.payments;
+create policy "admin payments update"
+on public.payments for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin payments delete" on public.payments;
+create policy "admin payments delete"
+on public.payments for delete
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin attendance overrides read" on public.attendance_overrides;
+create policy "admin attendance overrides read"
+on public.attendance_overrides for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin attendance overrides insert" on public.attendance_overrides;
+create policy "admin attendance overrides insert"
+on public.attendance_overrides for insert
+to authenticated
+with check (public.is_admin());
+
+drop policy if exists "admin attendance overrides update" on public.attendance_overrides;
+create policy "admin attendance overrides update"
+on public.attendance_overrides for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin attendance overrides delete" on public.attendance_overrides;
+create policy "admin attendance overrides delete"
+on public.attendance_overrides for delete
 to authenticated
 using (public.is_admin());
