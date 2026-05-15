@@ -1401,9 +1401,12 @@ th:last-child {
   position: sticky;
   left: 0;
   z-index: 1;
+  box-sizing: border-box;
   width: 15ch;
   min-width: 15ch;
   max-width: 15ch;
+  padding-left: 6px;
+  padding-right: 6px;
   text-align: left;
   background: rgba(255,255,255,.94);
   overflow: hidden;
@@ -1413,7 +1416,7 @@ th:last-child {
 
 .payments-table td:first-child .player-name-link {
   display: block;
-  width: 15ch;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1576,5 +1579,12 @@ th:last-child {
   .payments-toolbar input,
   .payments-toolbar button {
     width: 100%;
+  }
+
+  .payments-table th:first-child,
+  .payments-table td:first-child {
+    width: 15ch;
+    min-width: 15ch;
+    max-width: 15ch;
   }
 }
