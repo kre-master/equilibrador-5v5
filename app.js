@@ -1856,26 +1856,9 @@ function gameFinanceOverrideId(gameId) {
 function sharePaymentsOnWhatsApp() {
   const report = buildMonthlyPaymentReport(currentPaymentsMonth);
   const debtors = report.rows.filter((row) => row.currentBalance > 0.009);
-  const credits = report.rows.filter((row) => row.currentBalance < -0.009);
-  const settled = report.rows.filter((row) => Math.abs(row.currentBalance) <= 0.009 && row.attendanceCount > 0);
   const lines = [
-    `Pagamentos ${formatMonthLabel(report.month)}`,
-    "",
-    `Campo pago: ${report.fieldPaidGames.length} jogos x ${euro(PAYMENT_RULES.fieldCostPerGame)} = ${euro(report.fieldCost)}`,
-    `Diferenca da caixa no mes: ${euro(report.cashMonthDelta)}`,
-    `Regra: ${euro(PAYMENT_RULES.playerFeePerGame)}/jogo, max. ${euro(PAYMENT_RULES.monthlyCap)}/mes`,
-    ...report.games.some((game) => !getGameFinanceSettings(game).chargePlayers)
-      ? ["", `Sem cobranca aos jogadores: ${report.games.filter((game) => !getGameFinanceSettings(game).chargePlayers).map((game) => formatDate(game.date)).join(", ")}`]
-      : [],
-    "",
-    "A pagar:",
-    ...(debtors.length ? debtors.map((row) => `${row.player.name}: ${euro(row.currentBalance)}`) : ["-"]),
-    "",
-    "Com credito:",
-    ...(credits.length ? credits.map((row) => `${row.player.name}: ${euro(row.currentBalance)}`) : ["-"]),
-    "",
-    "Em dia:",
-    ...(settled.length ? settled.map((row) => row.player.name) : ["-"]),
+    debtors.length ? "Jogadores em divida:" : "Nao ha jogadores em divida.",
+    ...debtors.map((row) => `${row.player.name}: ${euro(row.currentBalance)}`),
   ];
   window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank", "noopener");
 }
