@@ -34,6 +34,7 @@ let currentSuggestions = [];
 let currentGameId = state.games[0]?.id || null;
 let previewGame = null;
 let authActionBusy = false;
+let currentPlayerProfileId = null;
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
@@ -77,6 +78,7 @@ const els = {
   importData: document.querySelector("#import-data"),
   resetData: document.querySelector("#reset-data"),
   gamesList: document.querySelector("#games-list"),
+  playerProfile: document.querySelector("#player-profile"),
   exportCanvas: document.querySelector("#export-canvas"),
   dataStatus: document.querySelector("#data-status"),
   adminLogin: document.querySelector("#admin-login"),
@@ -786,6 +788,7 @@ function render() {
   renderClaimsList();
   renderAccountsList();
   renderEventsList();
+  renderPlayerProfile();
 }
 
 function getLinkedPlayer() {
@@ -896,6 +899,167 @@ function renderSecurityActions() {
       <button class="danger-btn" data-unlink-own-player>Desassociar perfil</button>
     </div>
   `;
+}
+
+function openPlayerProfile(playerId) {
+  const playerData = findPlayer(playerId);
+  if (!playerData) return;
+  currentPlayerProfileId = playerId;
+  showView("player-profile");
+  renderPlayerProfile();
+}
+
+function renderPlayerProfile() {
+  if (!els.playerProfile) return;
+  const playerData = currentPlayerProfileId ? findPlayer(currentPlayerProfileId) : null;
+  if (!playerData) {
+    els.playerProfile.innerHTML = `
+      <div class="empty-state">Escolhe um jogador na convocatoria, no gerador ou na lista de jogadores.</div>
+    `;
+    return;
+  }
+  const summary = getPlayerMatchSummary(playerData.id);
+  const finishedGames = summary.games.filter((item) => item.outcome !== "open").length;
+  const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
+  const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
+
+  els.playerProfile.innerHTML = `
+    <div class="player-profile-head">
+      <button class="ghost-btn" data-player-profile-back>Voltar</button>
+      <div class="player-hero">
+        ${renderAvatar(playerData)}
+        <div>
+          <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
+          <h2>${escapeHtml(playerData.name)}</h2>
+          ${account ? `<p>${escapeHtml(account.email || account.username || "")}</p>` : ""}
+        </div>
+        <strong class="player-ovr">${playerData.overall}</strong>
+      </div>
+    </div>
+
+    <div class="profile-grid">
+      <section class="profile-section">
+        <h3>Stats</h3>
+        <div class="stats-grid">
+          ${renderProfileStat("PAC", playerData.pace)}
+          ${renderProfileStat("SHO", playerData.shooting)}
+          ${renderProfileStat("PAS", playerData.passing)}
+          ${renderProfileStat("DRI", playerData.dribbling)}
+          ${renderProfileStat("DEF", playerData.defending)}
+          ${renderProfileStat("PHY", playerData.physical)}
+        </div>
+      </section>
+
+      <section class="profile-section">
+        <h3>Historico</h3>
+        <div class="summary-grid">
+          ${renderSummaryCard("Jogos", summary.appearances)}
+          ${renderSummaryCard("Vitorias", summary.wins)}
+          ${renderSummaryCard("Empates", summary.draws)}
+          ${renderSummaryCard("Derrotas", summary.losses)}
+          ${renderSummaryCard("Win rate", `${winRate}%`)}
+        </div>
+      </section>
+    </div>
+
+    <section class="profile-section">
+      <h3>Ultimos jogos</h3>
+      ${summary.games.length ? `
+        <div class="profile-games">
+          ${summary.games.map((item) => renderPlayerGameRow(item)).join("")}
+        </div>
+      ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
+    </section>
+  `;
+
+  els.playerProfile.querySelector("[data-player-profile-back]")?.addEventListener("click", () => {
+    showView("players");
+  });
+  els.playerProfile.querySelectorAll("[data-profile-open-game]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentGameId = button.dataset.profileOpenGame;
+      showView("today");
+      renderCurrentGame();
+    });
+  });
+}
+
+function renderProfileStat(label, value) {
+  return `
+    <div class="profile-stat">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function renderSummaryCard(label, value) {
+  return `
+    <div class="summary-card">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function renderPlayerGameRow(item) {
+  const resultText = item.game.scoreA == null || item.game.scoreB == null ? "Resultado em aberto" : `${item.game.scoreA} - ${item.game.scoreB}`;
+  const outcomeLabel = {
+    win: "Vitoria",
+    draw: "Empate",
+    loss: "Derrota",
+    open: "Em aberto",
+  }[item.outcome] || "Em aberto";
+  return `
+    <article class="profile-game-row">
+      <div>
+        <strong>${formatDate(item.game.date)} - ${resultText}</strong>
+        <span>${item.teamLabel}${item.wasBench ? " suplente" : ""}</span>
+      </div>
+      <span class="metric ${item.outcome === "win" ? "good-pill" : item.outcome === "loss" ? "warn-pill" : ""}">${outcomeLabel}</span>
+      <button class="ghost-btn" data-profile-open-game="${item.game.id}">Abrir</button>
+    </article>
+  `;
+}
+
+function getPlayerMatchSummary(playerId) {
+  const summary = {
+    appearances: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    games: [],
+  };
+
+  [...state.games]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return;
+      summary.appearances += 1;
+      const outcome = getPlayerOutcome(game, participation.side);
+      if (outcome === "win") summary.wins += 1;
+      if (outcome === "draw") summary.draws += 1;
+      if (outcome === "loss") summary.losses += 1;
+      summary.games.push({ game, ...participation, outcome });
+    });
+
+  return summary;
+}
+
+function getPlayerParticipation(game, playerId) {
+  if ((game.teamA || []).includes(playerId)) return { side: "A", teamLabel: "Equipa A", wasBench: false };
+  if ((game.teamB || []).includes(playerId)) return { side: "B", teamLabel: "Equipa B", wasBench: false };
+  if ((game.benchA || []).includes(playerId)) return { side: "A", teamLabel: "Equipa A", wasBench: true };
+  if ((game.benchB || []).includes(playerId)) return { side: "B", teamLabel: "Equipa B", wasBench: true };
+  return null;
+}
+
+function getPlayerOutcome(game, side) {
+  if (game.scoreA == null || game.scoreB == null) return "open";
+  if (Number(game.scoreA) === Number(game.scoreB)) return "draw";
+  const teamAWon = Number(game.scoreA) > Number(game.scoreB);
+  return (side === "A" && teamAWon) || (side === "B" && !teamAWon) ? "win" : "loss";
 }
 
 function bindAccountPanelActions() {
@@ -1057,6 +1221,9 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-add-guest-btn]").forEach((button) => {
     button.addEventListener("click", () => addGuestToEvent(button.dataset.eventAddGuestBtn));
   });
+  els.eventsList.querySelectorAll("[data-open-player]").forEach((button) => {
+    button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
+  });
 }
 
 function renderEventCard(eventData) {
@@ -1128,8 +1295,15 @@ function renderResponseActions(eventData, myResponse) {
 }
 
 function renderRosterMini(label, players) {
-  const names = players.length ? players.map((p) => p.name).join(", ") : "-";
-  return `<div><strong>${label}</strong><span>${escapeHtml(names)}</span></div>`;
+  const roster = players.length
+    ? players.map((p) => `
+      <button class="roster-player-chip" data-open-player="${p.id}" type="button">
+        ${renderAvatar(p)}
+        <span>${escapeHtml(p.name)}</span>
+      </button>
+    `).join("")
+    : `<span>-</span>`;
+  return `<div><strong>${label}</strong><span class="roster-player-list">${roster}</span></div>`;
 }
 
 function renderEventAdminAdds(eventData) {
@@ -1486,11 +1660,11 @@ function renderPlayerList() {
     return `
       <label class="player-chip ${selected ? "selected" : ""}">
         <input type="checkbox" data-select-player="${p.id}" ${selected ? "checked" : ""}>
-        ${renderAvatar(p)}
-        <span class="player-meta">
+        <button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button>
+        <button class="player-meta player-open-link" data-open-player="${p.id}" type="button">
           <strong>${escapeHtml(p.name)}</strong>
           <span>${p.isGuest ? "Convidado" : "Fixo"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
-        </span>
+        </button>
         <span class="rating-badge">${p.overall}</span>
       </label>
     `;
@@ -1504,6 +1678,13 @@ function renderPlayerList() {
         selectedIds.delete(event.target.dataset.selectPlayer);
       }
       renderPlayerList();
+    });
+  });
+  els.playerList.querySelectorAll("[data-open-player]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPlayerProfile(button.dataset.openPlayer);
     });
   });
 
@@ -2015,8 +2196,8 @@ function renderPlayersTable() {
   const players = [...state.players].sort((a, b) => a.name.localeCompare(b.name));
   els.playersTable.innerHTML = players.map((p) => `
     <tr>
-      <td>${renderAvatar(p)}</td>
-      <td><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</td>
+      <td><button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
+      <td><button class="player-name-link" data-open-player="${p.id}" type="button"><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</button></td>
       <td>${p.pace}</td>
       <td>${p.shooting}</td>
       <td>${p.passing}</td>
@@ -2041,6 +2222,9 @@ function renderPlayersTable() {
   });
   els.playersTable.querySelectorAll("[data-unlink-player]").forEach((button) => {
     button.addEventListener("click", () => unlinkPlayerAsAdmin(button.dataset.unlinkPlayer));
+  });
+  els.playersTable.querySelectorAll("[data-open-player]").forEach((button) => {
+    button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
   });
 }
 
