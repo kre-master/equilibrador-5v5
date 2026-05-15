@@ -1401,9 +1401,22 @@ th:last-child {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 180px;
+  width: 15ch;
+  min-width: 15ch;
+  max-width: 15ch;
   text-align: left;
   background: rgba(255,255,255,.94);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payments-table td:first-child .player-name-link {
+  display: block;
+  width: 15ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .payments-table input[type="checkbox"] {
