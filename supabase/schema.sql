@@ -157,6 +157,15 @@ create table if not exists public.attendance_overrides (
 create unique index if not exists attendance_overrides_one_per_player_game
 on public.attendance_overrides (game_id, player_id);
 
+create table if not exists public.finance_settings (
+  id text primary key default 'main',
+  start_month text not null default to_char(now(), 'YYYY-MM'),
+  cash_balance numeric not null default 0,
+  player_balances jsonb not null default '{}'::jsonb,
+  updated_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz default now()
+);
+
 grant select on public.players to anon, authenticated;
 grant select on public.games to anon, authenticated;
 grant select, insert, update on public.profiles to authenticated;
@@ -170,6 +179,8 @@ grant select on public.payments to authenticated;
 grant insert, update, delete on public.payments to authenticated;
 grant select on public.attendance_overrides to authenticated;
 grant insert, update, delete on public.attendance_overrides to authenticated;
+grant select on public.finance_settings to authenticated;
+grant insert, update on public.finance_settings to authenticated;
 
 alter table public.players enable row level security;
 alter table public.profiles enable row level security;
@@ -179,6 +190,7 @@ alter table public.events enable row level security;
 alter table public.event_responses enable row level security;
 alter table public.payments enable row level security;
 alter table public.attendance_overrides enable row level security;
+alter table public.finance_settings enable row level security;
 
 drop policy if exists "profiles read authenticated" on public.profiles;
 create policy "profiles read authenticated"
@@ -357,3 +369,22 @@ create policy "admin attendance overrides delete"
 on public.attendance_overrides for delete
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "admin finance settings read" on public.finance_settings;
+create policy "admin finance settings read"
+on public.finance_settings for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin finance settings insert" on public.finance_settings;
+create policy "admin finance settings insert"
+on public.finance_settings for insert
+to authenticated
+with check (public.is_admin());
+
+drop policy if exists "admin finance settings update" on public.finance_settings;
+create policy "admin finance settings update"
+on public.finance_settings for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());

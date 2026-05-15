@@ -62,7 +62,7 @@ Enquanto a app ainda esta em testes, tambem podes desligar temporariamente a con
 
 ## Atualizar schema depois de novas funcionalidades
 
-Quando a app ganha novas tabelas, volta a executar o ficheiro completo `supabase/schema.sql` no `SQL Editor` do Supabase. O separador `Pagamentos` precisa das tabelas `payments` e `attendance_overrides`.
+Quando a app ganha novas tabelas, volta a executar o ficheiro completo `supabase/schema.sql` no `SQL Editor` do Supabase. O separador `Pagamentos` precisa das tabelas `payments`, `attendance_overrides` e `finance_settings`.
 
 ## Publicar com GitHub Pages
 

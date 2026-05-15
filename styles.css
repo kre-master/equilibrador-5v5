@@ -1277,8 +1277,48 @@ th:last-child {
 
 .finance-summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
+}
+
+.finance-settings {
+  background: linear-gradient(135deg, rgba(255,255,255,.86), rgba(228,244,234,.58));
+}
+
+.finance-settings-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.finance-settings-head p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.payments-form label,
+.finance-balance-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.finance-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.finance-balance-grid input {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--surface-strong);
 }
 
 .payments-table-wrap {
@@ -1448,7 +1488,8 @@ th:last-child {
   }
 
   .payments-toolbar,
-  .payments-form {
+  .payments-form,
+  .finance-settings-head {
     align-items: stretch;
     flex-direction: column;
   }

@@ -5,6 +5,29 @@ const PAYMENT_RULES = {
   fieldCostPerGame: 38,
 };
 
+const INITIAL_FINANCE_BALANCES = {
+  "p-amandio": -12,
+  "p-bilo": 0,
+  "p-marques": 23,
+  "p-messi": 7,
+  "p-cunha": 8,
+  "p-filipe-m": -2,
+  "p-xt": 20,
+  "p-joao-mai": 8,
+  "p-lipao": 7,
+  "p-migo": -17,
+  "p-ramos": -7,
+  "p-tiago-f": -2,
+  "p-tiaguito": -4,
+  "p-ze": 18,
+};
+
+const defaultFinanceSettings = {
+  startMonth: "2026-05",
+  cashBalance: 0,
+  playerBalances: { ...INITIAL_FINANCE_BALANCES },
+};
+
 const samplePlayers = [
   player("p-amandio", "Amandio", 49, 46, 47, 39, 52, 45, 46),
   player("p-bilo", "Bilo", 76, 81, 78, 83, 77, 78, 79),
@@ -35,6 +58,7 @@ let playerClaims = [];
 let eventResponses = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
+let financeSettings = state.financeSettings || { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } };
 let currentEventId = null;
 let currentPaymentsMonth = monthKey(new Date());
 let selectedIds = new Set();
@@ -155,6 +179,7 @@ function loadState() {
     events: [],
     payments: [],
     attendanceOverrides: [],
+    financeSettings: { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } },
   });
 }
 
@@ -169,6 +194,7 @@ function migrateState(saved) {
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
+  saved.financeSettings = normalizeFinanceSettings(saved.financeSettings);
   return saved;
 }
 
@@ -398,9 +424,49 @@ function attendanceOverrideToRow(override) {
   };
 }
 
+function normalizeFinanceSettings(record) {
+  const base = {
+    ...defaultFinanceSettings,
+    playerBalances: { ...defaultFinanceSettings.playerBalances },
+  };
+  if (!record || typeof record !== "object") return base;
+  const rawBalances = record.playerBalances || record.player_balances || {};
+  const playerBalances = { ...base.playerBalances };
+  Object.entries(rawBalances).forEach(([playerId, value]) => {
+    const amount = Number(value);
+    if (!Number.isNaN(amount)) playerBalances[playerId] = amount;
+  });
+  return {
+    startMonth: String(record.startMonth || record.start_month || base.startMonth),
+    cashBalance: Number(record.cashBalance ?? record.cash_balance ?? base.cashBalance) || 0,
+    playerBalances,
+  };
+}
+
+function financeSettingsFromRow(row) {
+  return normalizeFinanceSettings({
+    startMonth: row.start_month,
+    cashBalance: row.cash_balance,
+    playerBalances: row.player_balances,
+  });
+}
+
+function financeSettingsToRow(settings) {
+  const clean = normalizeFinanceSettings(settings);
+  return {
+    id: "main",
+    start_month: clean.startMonth,
+    cash_balance: clean.cashBalance,
+    player_balances: clean.playerBalances,
+    updated_by: currentSession?.user?.id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 function saveState() {
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
+  state.financeSettings = financeSettings;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -419,6 +485,7 @@ async function saveRemoteState() {
   const events = (state.events || []).map(eventToRow);
   const paymentRows = payments.map(paymentToRow);
   const attendanceOverrideRows = attendanceOverrides.map(attendanceOverrideToRow);
+  const financeSettingsRow = financeSettingsToRow(financeSettings);
 
   if (players.length) {
     const { error } = await supabaseClient.from("players").upsert(players);
@@ -444,6 +511,9 @@ async function saveRemoteState() {
     const { error } = await supabaseClient.from("attendance_overrides").upsert(attendanceOverrideRows);
     if (error) throw error;
   }
+
+  const { error: financeError } = await supabaseClient.from("finance_settings").upsert(financeSettingsRow);
+  if (financeError) throw financeError;
 }
 
 function canWriteOfficialData() {
@@ -602,15 +672,18 @@ async function loadRemoteState() {
     const [
       { data: paymentRows, error: paymentError },
       { data: attendanceRows, error: attendanceError },
+      { data: financeRows, error: financeError },
     ] = await Promise.all([
       supabaseClient.from("payments").select("*").order("paid_at", { ascending: false }),
       supabaseClient.from("attendance_overrides").select("*").order("updated_at", { ascending: false }),
+      supabaseClient.from("finance_settings").select("*").eq("id", "main"),
     ]);
-    if (paymentError || attendanceError) {
-      console.warn("Finance load failed. Run supabase/schema.sql again.", paymentError || attendanceError);
+    if (paymentError || attendanceError || financeError) {
+      console.warn("Finance load failed. Run supabase/schema.sql again.", paymentError || attendanceError || financeError);
     } else {
       remotePayments = paymentRows || [];
       remoteAttendanceOverrides = attendanceRows || [];
+      if (financeRows?.[0]) financeSettings = financeSettingsFromRow(financeRows[0]);
     }
   }
 
@@ -631,11 +704,13 @@ async function loadRemoteState() {
     events: (events || []).map(eventFromRow),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
+    financeSettings,
   });
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
+  financeSettings = state.financeSettings || financeSettings;
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = state.games[0]?.id || null;
   saveState();
@@ -1308,12 +1383,41 @@ function renderPaymentsPanel() {
       <button class="ghost-btn" data-payments-whatsapp>WhatsApp</button>
     </div>
 
+    <section class="profile-section finance-settings">
+      <div class="finance-settings-head">
+        <div>
+          <h3>Ponto de arranque</h3>
+          <p>Importado do ficheiro do tesoureiro. A app calcula movimentos novos a partir daqui.</p>
+        </div>
+        <button class="primary-btn" data-save-finance-settings>Guardar saldos</button>
+      </div>
+      <div class="payments-form">
+        <label>
+          Mes inicial
+          <input data-finance-start-month type="month" value="${escapeHtml(financeSettings.startMonth)}">
+        </label>
+        <label>
+          Caixa atual
+          <input data-finance-cash type="number" step="0.5" value="${financeSettings.cashBalance}">
+        </label>
+      </div>
+      <div class="finance-balance-grid">
+        ${state.players.filter((p) => !p.isGuest).sort((a, b) => a.name.localeCompare(b.name)).map((p) => `
+          <label>
+            <span>${escapeHtml(p.name)}</span>
+            <input data-finance-player-balance="${p.id}" type="number" step="0.5" value="${financeSettings.playerBalances[p.id] ?? 0}">
+          </label>
+        `).join("")}
+      </div>
+    </section>
+
     <div class="finance-summary">
       ${renderSummaryCard("Jogos", report.games.length)}
       ${renderSummaryCard("Campo", euro(report.fieldCost))}
       ${renderSummaryCard("A cobrar", euro(report.totalDue))}
       ${renderSummaryCard("Pago", euro(report.totalPaidMonth))}
       ${renderSummaryCard("Saldo atual", euro(report.totalCurrentBalance))}
+      ${renderSummaryCard("Caixa", euro(financeSettings.cashBalance))}
     </div>
 
     <div class="payments-form">
@@ -1360,6 +1464,7 @@ function renderPaymentsPanel() {
     currentPaymentsMonth = event.target.value || monthKey(new Date());
     renderPaymentsPanel();
   });
+  els.paymentsPanel.querySelector("[data-save-finance-settings]")?.addEventListener("click", saveFinanceSettingsFromPanel);
   els.paymentsPanel.querySelector("[data-payments-whatsapp]")?.addEventListener("click", sharePaymentsOnWhatsApp);
   els.paymentsPanel.querySelector("[data-add-payment]")?.addEventListener("click", addManualPayment);
   els.paymentsPanel.querySelectorAll("[data-open-payment-player]").forEach((button) => {
@@ -1439,6 +1544,32 @@ async function addManualPayment() {
     payments = previousPayments;
     saveState();
     alert(`Nao consegui guardar pagamento. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+  }
+  renderPaymentsPanel();
+}
+
+async function saveFinanceSettingsFromPanel() {
+  if (!requireAdmin()) return;
+  const startMonth = els.paymentsPanel.querySelector("[data-finance-start-month]")?.value || monthKey(new Date());
+  const cashBalance = Number(els.paymentsPanel.querySelector("[data-finance-cash]")?.value || 0);
+  const playerBalances = {};
+  els.paymentsPanel.querySelectorAll("[data-finance-player-balance]").forEach((input) => {
+    const amount = Number(input.value || 0);
+    playerBalances[input.dataset.financePlayerBalance] = Number.isNaN(amount) ? 0 : amount;
+  });
+  const previous = financeSettings;
+  financeSettings = {
+    startMonth,
+    cashBalance: Number.isNaN(cashBalance) ? 0 : cashBalance,
+    playerBalances,
+  };
+  currentPaymentsMonth = startMonth;
+  try {
+    await persistState();
+  } catch (error) {
+    financeSettings = previous;
+    saveState();
+    alert(`Nao consegui guardar saldos iniciais. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
   }
   renderPaymentsPanel();
 }
@@ -1558,14 +1689,16 @@ function getPlayerPaymentsInMonth(playerId, month) {
 }
 
 function getPlayerBalanceBeforeMonth(playerId, month) {
+  const initial = Number(financeSettings.playerBalances?.[playerId] || 0);
+  if (month <= financeSettings.startMonth) return initial;
   const months = new Set();
   state.games.forEach((game) => {
     const key = monthKey(game.date);
-    if (key < month) months.add(key);
+    if (key > financeSettings.startMonth && key < month) months.add(key);
   });
   payments.forEach((payment) => {
     const key = monthKey(payment.paidAt);
-    if (key < month) months.add(key);
+    if (key > financeSettings.startMonth && key < month) months.add(key);
   });
   return [...months].sort().reduce((balance, key) => {
     const games = getGamesInMonth(key);
@@ -1573,7 +1706,7 @@ function getPlayerBalanceBeforeMonth(playerId, month) {
     const due = Math.min(attendanceCount * PAYMENT_RULES.playerFeePerGame, PAYMENT_RULES.monthlyCap);
     const paid = getPlayerPaymentsInMonth(playerId, key).reduce((sum, payment) => sum + payment.amount, 0);
     return balance + due - paid;
-  }, 0);
+  }, initial);
 }
 
 function didPlayerAttendGame(game, playerId) {
@@ -3180,6 +3313,7 @@ function importData(event) {
       state.events = migrated.events;
       payments = migrated.payments;
       attendanceOverrides = migrated.attendanceOverrides;
+      financeSettings = migrated.financeSettings;
       selectedIds.clear();
       currentGameId = state.games[0]?.id || null;
       persistState();
@@ -3199,6 +3333,7 @@ async function resetData() {
   state.events = [];
   payments = [];
   attendanceOverrides = [];
+  financeSettings = { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } };
   selectedIds.clear();
   currentSuggestions = [];
   currentGameId = null;
