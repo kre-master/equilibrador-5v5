@@ -1388,7 +1388,26 @@ th:last-child {
 }
 
 .payments-table {
-  min-width: 980px;
+  width: max-content;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.payments-table .payment-name-col {
+  width: 15ch;
+}
+
+.payments-table .payment-game-col,
+.payments-table .payment-small-col {
+  width: 54px;
+}
+
+.payments-table .payment-money-col {
+  width: 72px;
+}
+
+.payments-table .payment-balance-col {
+  width: 86px;
 }
 
 .payments-table th,

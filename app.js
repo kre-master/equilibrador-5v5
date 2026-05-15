@@ -1481,6 +1481,15 @@ function renderPaymentsPanel() {
 
     <div class="table-wrap payments-table-wrap">
       <table class="payments-table">
+        <colgroup>
+          <col class="payment-name-col">
+          ${report.games.map(() => `<col class="payment-game-col">`).join("")}
+          <col class="payment-small-col">
+          <col class="payment-money-col">
+          <col class="payment-money-col">
+          <col class="payment-balance-col">
+          <col class="payment-balance-col">
+        </colgroup>
         <thead>
           <tr>
             <th>Nome</th>
