@@ -1,0 +1,8 @@
+{
+  "appId": "com.kremaster.equilibrador5v5",
+  "appName": "Equilibrador 5v5",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

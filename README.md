@@ -78,6 +78,30 @@ Quando a app ganha novas tabelas, volta a executar o ficheiro completo `supabase
 3. Publish directory: `/`.
 4. Faz deploy.
 
+## App mobile teste
+
+A app mobile deve ser desenvolvida na branch `codex-mobile-test`, mantendo `main` estavel para o site atual.
+
+Primeira abordagem:
+
+1. Instalar Node.js com `npm` no Windows, se ainda nao estiver instalado.
+2. Na branch `codex-mobile-test`, correr:
+
+```bash
+npm install
+npm run build:web
+npx cap add android
+npm run cap:sync
+```
+
+3. Abrir Android Studio:
+
+```bash
+npm run cap:open:android
+```
+
+O bundle web usado pela app Android fica em `www/`. Por agora, a app mobile reaproveita o mesmo `app-config.js` e pode apontar para o mesmo Supabase quando estiver pronta para teste real.
+
 ## Nota sobre fotos
 
 As fotos ficam guardadas como base64 na tabela `players.photo_data_url`. Para este grupo e poucas fotos, isto chega no plano gratuito. Mais tarde pode ser migrado para Supabase Storage se quiseres ficheiros separados.
