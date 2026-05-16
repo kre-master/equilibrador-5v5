@@ -5,6 +5,17 @@ const PAYMENT_RULES = {
   fieldCostPerGame: 38,
 };
 
+const FORM_LEVELS = {
+  hot: { label: "Em grande forma", className: "form-hot" },
+  good: { label: "Boa forma", className: "form-good" },
+  normal: { label: "Normal", className: "form-normal" },
+  bad: { label: "Ma fase", className: "form-bad" },
+  recovery: { label: "A recuperar", className: "form-recovery" },
+};
+
+const FORM_LOOKBACK_GAMES = 5;
+const FORM_RATING_CAP = 7;
+
 const INITIAL_FINANCE_BALANCES = {
   "p-amandio": -12,
   "p-bilo": 0,
@@ -3477,6 +3488,91 @@ function getCurrentGame() {
   if (previewGame) return ensureGameShape(previewGame);
   const game = state.games.find((item) => item.id === currentGameId) || null;
   return game ? ensureGameShape(game) : null;
+}
+
+function getPlayerForm(playerData, games = state.games) {
+  const baseOverall = clampRating(playerData?.overall ?? 0);
+  const finishedAppearances = [...games]
+    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerData.id);
+      if (!participation) return null;
+      return { game, outcome: getPlayerOutcome(game, participation.side) };
+    })
+    .filter(Boolean);
+
+  const recent = finishedAppearances.slice(0, FORM_LOOKBACK_GAMES);
+  const wins = recent.filter((item) => item.outcome === "win").length;
+  const losses = recent.filter((item) => item.outcome === "loss").length;
+  const draws = recent.filter((item) => item.outcome === "draw").length;
+  const winStreak = countCurrentStreak(finishedAppearances, "win");
+  const lossStreak = countCurrentStreak(finishedAppearances, "loss");
+  const absenceCount = countRecentAbsences(playerData.id, games);
+
+  let adjustment = 0;
+  adjustment += wins - losses;
+  adjustment += Math.min(2, winStreak);
+  adjustment -= Math.min(3, lossStreak);
+  if (draws >= 2) adjustment += 1;
+  if (absenceCount >= 3) adjustment -= 1;
+  adjustment = clampNumber(adjustment, -FORM_RATING_CAP, FORM_RATING_CAP);
+
+  const currentRating = clampRating(baseOverall + adjustment);
+  const levelKey = formLevelForAdjustment(adjustment);
+
+  return {
+    baseOverall,
+    currentRating,
+    adjustment,
+    levelKey,
+    level: FORM_LEVELS[levelKey].label,
+    className: FORM_LEVELS[levelKey].className,
+    recentGamesCount: recent.length,
+    wins,
+    draws,
+    losses,
+    winStreak,
+    lossStreak,
+    absenceCount,
+    recentRecord: recent.map((item) => item.outcome),
+  };
+}
+
+function countCurrentStreak(items, outcome) {
+  let streak = 0;
+  for (const item of items) {
+    if (item.outcome !== outcome) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function countRecentAbsences(playerId, games) {
+  return [...games]
+    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, FORM_LOOKBACK_GAMES)
+    .filter((game) => !getPlayerParticipation(game, playerId))
+    .length;
+}
+
+function formLevelForAdjustment(adjustment) {
+  if (adjustment >= 5) return "hot";
+  if (adjustment >= 2) return "good";
+  if (adjustment <= -5) return "recovery";
+  if (adjustment <= -2) return "bad";
+  return "normal";
+}
+
+function getPlayerRatingForBalance(playerData) {
+  return getPlayerForm(playerData).currentRating;
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return min;
+  return Math.min(max, Math.max(min, number));
 }
 
 function findPlayer(id) {
