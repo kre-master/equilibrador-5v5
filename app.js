@@ -67,6 +67,7 @@ let currentProfile = null;
 let knownProfiles = [];
 let playerClaims = [];
 let eventResponses = [];
+let gameMvpVotes = state.gameMvpVotes || [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
 let gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -189,6 +190,7 @@ function loadState() {
     players: samplePlayers,
     games: [],
     events: [],
+    gameMvpVotes: [],
     payments: [],
     attendanceOverrides: [],
     gameFinanceOverrides: [],
@@ -205,6 +207,7 @@ function migrateState(saved) {
   }
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
+  saved.gameMvpVotes = Array.isArray(saved.gameMvpVotes) ? saved.gameMvpVotes.map(normalizeMvpVoteRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
   saved.gameFinanceOverrides = Array.isArray(saved.gameFinanceOverrides) ? saved.gameFinanceOverrides.map(normalizeGameFinanceOverrideRecord).filter(Boolean) : [];
@@ -356,6 +359,47 @@ function responseFromRow(row) {
     userId: row.user_id,
     status: row.status,
     updatedAt: row.updated_at,
+  };
+}
+
+function normalizeMvpVoteRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const gameId = record.gameId || record.game_id;
+  const voterPlayerId = record.voterPlayerId || record.voter_player_id;
+  const candidatePlayerId = record.candidatePlayerId || record.candidate_player_id;
+  if (!gameId || !voterPlayerId || !candidatePlayerId || voterPlayerId === candidatePlayerId) return null;
+  return {
+    id: String(record.id || createUuid()),
+    gameId: String(gameId),
+    voterPlayerId: String(voterPlayerId),
+    candidatePlayerId: String(candidatePlayerId),
+    userId: record.userId || record.user_id || null,
+    createdAt: record.createdAt || record.created_at || new Date().toISOString(),
+    updatedAt: record.updatedAt || record.updated_at || new Date().toISOString(),
+  };
+}
+
+function mvpVoteFromRow(row) {
+  return normalizeMvpVoteRecord({
+    id: row.id,
+    gameId: row.game_id,
+    voterPlayerId: row.voter_player_id,
+    candidatePlayerId: row.candidate_player_id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mvpVoteToRow(vote) {
+  const clean = normalizeMvpVoteRecord(vote);
+  return {
+    id: clean.id,
+    game_id: clean.gameId,
+    voter_player_id: clean.voterPlayerId,
+    candidate_player_id: clean.candidatePlayerId,
+    user_id: clean.userId || currentSession?.user?.id || null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -515,6 +559,7 @@ function financeSettingsToRow(settings) {
 }
 
 function saveState() {
+  state.gameMvpVotes = gameMvpVotes;
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
   state.gameFinanceOverrides = gameFinanceOverrides;
@@ -530,11 +575,21 @@ async function persistState() {
   updateAccessUi();
 }
 
+async function persistMvpVote(vote) {
+  saveState();
+  if (remoteEnabled && supabaseClient && currentSession?.user) {
+    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteToRow(vote));
+    if (error) throw error;
+  }
+  updateAccessUi();
+}
+
 async function saveRemoteState() {
   if (!supabaseClient) return;
   const players = state.players.map(playerToRow);
   const games = state.games.map(gameToRow);
   const events = (state.events || []).map(eventToRow);
+  const mvpVoteRows = gameMvpVotes.map(mvpVoteToRow);
   const paymentRows = payments.map(paymentToRow);
   const attendanceOverrideRows = attendanceOverrides.map(attendanceOverrideToRow);
   const gameFinanceOverrideRows = gameFinanceOverrides.map(gameFinanceOverrideToRow);
@@ -552,6 +607,11 @@ async function saveRemoteState() {
 
   if (events.length) {
     const { error } = await supabaseClient.from("events").upsert(events);
+    if (error) throw error;
+  }
+
+  if (mvpVoteRows.length) {
+    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteRows);
     if (error) throw error;
   }
 
@@ -710,11 +770,13 @@ async function loadRemoteState() {
     { data: games, error: gameError },
     { data: events, error: eventError },
     { data: responses, error: responseError },
+    { data: mvpRows, error: mvpError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
     supabaseClient.from("events").select("*").order("starts_at", { ascending: true }),
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
+    supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -723,6 +785,7 @@ async function loadRemoteState() {
     updateAccessUi("Supabase indisponivel, modo local");
     return;
   }
+  if (mvpError) console.warn("MVP vote load failed. Run supabase/schema.sql again.", mvpError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -768,6 +831,7 @@ async function loadRemoteState() {
     players: players.map(playerFromRow),
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
+    gameMvpVotes: (mvpRows || []).map(mvpVoteFromRow).filter(Boolean),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
     gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
@@ -775,6 +839,7 @@ async function loadRemoteState() {
   });
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
+  gameMvpVotes = state.gameMvpVotes || [];
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
   gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -2711,8 +2776,84 @@ function renderCurrentGame() {
   els.scoreA.value = game.scoreA ?? "";
   els.scoreB.value = game.scoreB ?? "";
   els.fieldCard.innerHTML = renderField(game);
+  bindMvpPanelActions(game);
   renderRosterEditor(game);
   renderAddPlayerSelect(game);
+}
+
+function renderMvpPanel(game) {
+  if (game.scoreA == null || game.scoreB == null) return "";
+  const participants = hydrate(getGamePlayerIds(game));
+  const linkedPlayer = getLinkedPlayer();
+  const canVote = linkedPlayer && participants.some((p) => p.id === linkedPlayer.id);
+  const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
+  const counts = countMvpVotes(votes);
+  const winners = getOfficialMvpWinners(counts);
+  const myVote = linkedPlayer ? votes.find((vote) => vote.voterPlayerId === linkedPlayer.id) : null;
+  return `
+    <section class="mvp-panel">
+      <div>
+        <p class="eyebrow">MVP interno</p>
+        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length}/5 votos`}</strong>
+      </div>
+      ${canVote ? `
+        <select data-mvp-candidate="${game.id}">
+          <option value="">Escolher MVP</option>
+          ${participants.filter((p) => p.id !== linkedPlayer.id).map((p) => `<option value="${p.id}" ${myVote?.candidatePlayerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+        </select>
+        <button class="ghost-btn" data-save-mvp-vote="${game.id}">Votar</button>
+      ` : `<span class="metric">So participantes votam</span>`}
+    </section>
+  `;
+}
+
+function countMvpVotes(votes) {
+  const counts = new Map();
+  votes.forEach((vote) => counts.set(vote.candidatePlayerId, (counts.get(vote.candidatePlayerId) || 0) + 1));
+  return counts;
+}
+
+function getOfficialMvpWinners(counts) {
+  const entries = [...counts.entries()];
+  const totalVotes = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (totalVotes < 5) return [];
+  const max = Math.max(...entries.map(([, count]) => count));
+  return entries.filter(([, count]) => count === max).map(([id]) => findPlayer(id)).filter(Boolean);
+}
+
+function bindMvpPanelActions(game) {
+  els.fieldCard.querySelector("[data-save-mvp-vote]")?.addEventListener("click", async () => {
+    const linkedPlayer = getLinkedPlayer();
+    const participants = new Set(getGamePlayerIds(game));
+    const select = els.fieldCard.querySelector(`[data-mvp-candidate="${game.id}"]`);
+    const candidateId = select?.value;
+    if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId) return;
+    if (!participants.has(linkedPlayer.id) || !participants.has(candidateId)) return;
+    let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
+    if (vote) {
+      vote.candidatePlayerId = candidateId;
+      vote.userId = currentSession?.user?.id || vote.userId || null;
+      vote.updatedAt = new Date().toISOString();
+    } else {
+      vote = {
+        id: createUuid(),
+        gameId: game.id,
+        voterPlayerId: linkedPlayer.id,
+        candidatePlayerId: candidateId,
+        userId: currentSession?.user?.id || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      gameMvpVotes.push(vote);
+    }
+    try {
+      await persistMvpVote(vote);
+    } catch (error) {
+      alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+      return;
+    }
+    renderCurrentGame();
+  });
 }
 
 function renderField(game) {
@@ -2748,6 +2889,7 @@ function renderField(game) {
       <div class="bench-side bench-left">${renderBenchCards("Supl. A", benchA, "team-a")}</div>
       <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b")}</div>
     </div>
+    ${renderMvpPanel(game)}
   `;
 }
 
@@ -3779,6 +3921,13 @@ function normalize(value) {
 
 function slug(value) {
   return normalize(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "jogador";
+}
+
+function createUuid() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (Number(char) ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(char) / 4).toString(16)
+  );
 }
 
 function normalizeUsername(value) {
