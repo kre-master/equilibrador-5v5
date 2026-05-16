@@ -488,6 +488,12 @@ h3 {
 .record-dot.loss { color: #c86422; }
 .record-empty { color: var(--muted); }
 
+.fut-head small {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--muted);
+}
+
 .suggestions {
   display: grid;
   gap: 12px;

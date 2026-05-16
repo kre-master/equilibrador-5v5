@@ -2514,8 +2514,8 @@ function renderSuggestions() {
   els.suggestions.innerHTML = currentSuggestions.map((suggestion, index) => {
     const teamA = suggestion.teamA.map((p) => p.name).join(", ");
     const teamB = suggestion.teamB.map((p) => p.name).join(", ");
-    const benchA = suggestion.benchA.length ? suggestion.benchA.map((p) => `${p.name} ${p.overall}`).join(", ") : "Sem suplente A";
-    const benchB = suggestion.benchB.length ? suggestion.benchB.map((p) => `${p.name} ${p.overall}`).join(", ") : "Sem suplente B";
+    const benchA = suggestion.benchA.length ? suggestion.benchA.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente A";
+    const benchB = suggestion.benchB.length ? suggestion.benchB.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente B";
     return `
       <article class="suggestion-card">
         <div class="suggestion-top">
@@ -2534,6 +2534,7 @@ function renderSuggestions() {
           <span class="metric">Media A ${suggestion.teamAStats.average}</span>
           <span class="metric">Media B ${suggestion.teamBStats.average}</span>
           <span class="metric">Repeticao ${suggestion.historyPenalty}</span>
+          <span class="metric">Forma ${suggestion.formPenalty}</span>
         </div>
       </article>
     `;
@@ -2542,6 +2543,24 @@ function renderSuggestions() {
   els.suggestions.querySelectorAll("[data-preview-suggestion]").forEach((button) => {
     button.addEventListener("click", () => previewSuggestion(Number(button.dataset.previewSuggestion)));
   });
+}
+
+function getTeamFormStats(players) {
+  return players.reduce((stats, playerData) => {
+    const form = getPlayerForm(playerData);
+    stats.totalAdjustment += form.adjustment;
+    stats[form.levelKey] = (stats[form.levelKey] || 0) + 1;
+    return stats;
+  }, { totalAdjustment: 0, hot: 0, good: 0, normal: 0, bad: 0, recovery: 0 });
+}
+
+function getFormBalancePenalty(teamA, teamB) {
+  const a = getTeamFormStats(teamA);
+  const b = getTeamFormStats(teamB);
+  const strongDiff = Math.abs((a.hot + a.good) - (b.hot + b.good));
+  const weakDiff = Math.abs((a.bad + a.recovery) - (b.bad + b.recovery));
+  const adjustmentDiff = Math.abs(a.totalAdjustment - b.totalAdjustment);
+  return strongDiff * 5 + weakDiff * 7 + adjustmentDiff * 1.5;
 }
 
 function generateSuggestions(players, games) {
@@ -2573,10 +2592,11 @@ function generateSuggestions(players, games) {
         if (seen.has(divisionKey)) continue;
         seen.add(divisionKey);
 
-        const teamAStats = getTeamStats(teamA);
-        const teamBStats = getTeamStats(teamB);
-        const squadAStats = getTeamStats([...teamA, ...split.benchA]);
-        const squadBStats = getTeamStats([...teamB, ...split.benchB]);
+        const ratingOptions = { ratingFor: getPlayerRatingForBalance };
+        const teamAStats = getTeamStats(teamA, ratingOptions);
+        const teamBStats = getTeamStats(teamB, ratingOptions);
+        const squadAStats = getTeamStats([...teamA, ...split.benchA], ratingOptions);
+        const squadBStats = getTeamStats([...teamB, ...split.benchB], ratingOptions);
         const diffTotal = Math.abs(teamAStats.total - teamBStats.total);
         const squadDiff = Math.abs(squadAStats.average - squadBStats.average);
         const attrDiff =
@@ -2589,7 +2609,8 @@ function generateSuggestions(players, games) {
         const benchPenalty = bench.reduce((total, p) => total + (benchHistory.get(p.id) || 0) * 4 + p.overall / 60, 0);
         const unevenBenchPenalty = Math.abs(split.benchA.length - split.benchB.length) * 2;
         const historyPenalty = Math.round(pairPenalty + exactPenalty + benchPenalty + unevenBenchPenalty);
-        const score = diffTotal * 4 + squadDiff * 1.25 + attrDiff * 0.45 + historyPenalty;
+        const formPenalty = getFormBalancePenalty([...teamA, ...split.benchA], [...teamB, ...split.benchB]);
+        const score = diffTotal * 4 + squadDiff * 1.25 + attrDiff * 0.45 + historyPenalty + formPenalty;
 
         suggestions.push({
           teamA,
@@ -2603,6 +2624,7 @@ function generateSuggestions(players, games) {
           diffTotal,
           squadDiff,
           historyPenalty,
+          formPenalty: Number(formPenalty.toFixed(2)),
           score: Number(score.toFixed(2)),
         });
       }
@@ -2730,10 +2752,12 @@ function renderField(game) {
 }
 
 function renderDot(playerData, teamClass, pos) {
+  const form = getPlayerForm(playerData);
   return `
     <div class="player-dot fut-card ${teamClass} ${playerData.photoDataUrl ? "has-photo" : ""}" style="left:${pos.x}%;top:${pos.y}%">
       <div class="fut-head">
-        <strong>${playerData.overall}</strong>
+        <strong>${form.currentRating}</strong>
+        <small>${formatSigned(form.adjustment)}</small>
       </div>
       <div class="fut-photo">
         ${playerData.photoDataUrl ? `<img src="${escapeHtml(playerData.photoDataUrl)}" alt="">` : renderAvatar(playerData)}
@@ -3635,9 +3659,10 @@ function getGamePlayerIds(game) {
   return [...game.teamA, ...game.teamB, ...game.benchA, ...game.benchB];
 }
 
-function getTeamStats(players) {
+function getTeamStats(players, options = {}) {
   const count = Math.max(players.length, 1);
-  const total = players.reduce((sum, p) => sum + p.overall, 0);
+  const ratingFor = options.ratingFor || ((p) => p.overall);
+  const total = players.reduce((sum, p) => sum + ratingFor(p), 0);
   const average = Math.round(total / count);
   return {
     total,
