@@ -2794,7 +2794,7 @@ function renderMvpPanel(game) {
     <section class="mvp-panel">
       <div>
         <p class="eyebrow">MVP interno</p>
-        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length}/5 votos`}</strong>
+        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length} votos (min. 5)`}</strong>
       </div>
       ${canVote ? `
         <select data-mvp-candidate="${game.id}">
