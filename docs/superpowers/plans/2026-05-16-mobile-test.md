@@ -23,7 +23,7 @@
 
 ## Task 1: Prepare Static App For Mobile Packaging
 
-- [ ] **Step 1: Add a minimal `package.json`**
+- [x] **Step 1: Add a minimal `package.json`**
 
 Create `package.json` with scripts that preserve the static app:
 
@@ -47,7 +47,7 @@ Create `package.json` with scripts that preserve the static app:
 }
 ```
 
-- [ ] **Step 2: Create `scripts/build-web.mjs`**
+- [x] **Step 2: Create `scripts/build-web.mjs`**
 
 The build script should copy the static files into `www/`:
 
@@ -72,7 +72,7 @@ for (const file of files) {
 await cp("assets", "www/assets", { recursive: true, force: true }).catch(() => {});
 ```
 
-- [ ] **Step 3: Add `manifest.webmanifest`**
+- [x] **Step 3: Add `manifest.webmanifest`**
 
 Use a neutral app identity for the test:
 
@@ -88,7 +88,7 @@ Use a neutral app identity for the test:
 }
 ```
 
-- [ ] **Step 4: Link the manifest in `index.html`**
+- [x] **Step 4: Link the manifest in `index.html`**
 
 Add inside `<head>`:
 
@@ -99,7 +99,7 @@ Add inside `<head>`:
 <meta name="apple-mobile-web-app-title" content="Equilibrador 5v5">
 ```
 
-- [ ] **Step 5: Verify the web app still parses**
+- [x] **Step 5: Verify the web app still parses**
 
 Run:
 
@@ -111,7 +111,7 @@ Expected: no syntax errors.
 
 ## Task 2: Add Capacitor Android Shell
 
-- [ ] **Step 1: Install dependencies**
+- [x] **Step 1: Install dependencies**
 
 Run:
 
@@ -121,7 +121,7 @@ npm install
 
 Expected: `node_modules/` and `package-lock.json` are created.
 
-- [ ] **Step 2: Add Capacitor config**
+- [x] **Step 2: Add Capacitor config**
 
 Create `capacitor.config.json`:
 
@@ -136,7 +136,7 @@ Create `capacitor.config.json`:
 }
 ```
 
-- [ ] **Step 3: Build web bundle**
+- [x] **Step 3: Build web bundle**
 
 Run:
 
@@ -146,7 +146,7 @@ npm run build:web
 
 Expected: `www/index.html`, `www/app.js`, `www/styles.css`, and `www/app-config.js` exist.
 
-- [ ] **Step 4: Add Android project**
+- [x] **Step 4: Add Android project**
 
 Run:
 
@@ -156,7 +156,7 @@ npx cap add android
 
 Expected: `android/` directory is created.
 
-- [ ] **Step 5: Sync web app into Android**
+- [x] **Step 5: Sync web app into Android**
 
 Run:
 
@@ -178,7 +178,7 @@ npm run cap:open:android
 
 Expected: Android Studio opens the generated project.
 
-- [ ] **Step 2: Build debug APK**
+- [x] **Step 2: Build debug APK**
 
 From Android Studio or terminal, build debug.
 
@@ -199,7 +199,7 @@ Expected: all flows work the same as the web app.
 
 ## Task 4: Keep Production Safe
 
-- [ ] **Step 1: Confirm branch isolation**
+- [x] **Step 1: Confirm branch isolation**
 
 Run:
 
@@ -227,4 +227,3 @@ git push origin codex-mobile-test
 ```
 
 Expected: GitHub has a separate branch. `main` remains unchanged.
-

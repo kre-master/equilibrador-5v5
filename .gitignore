@@ -1,5 +1,9 @@
 .tmp-edge-profile/
+.tmp.driveupload/
 preview.png
 server.out.log
 server.err.log
 .superpowers/
+node_modules/
+android/.gradle/
+android/app/build/
