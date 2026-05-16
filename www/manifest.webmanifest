@@ -1,0 +1,9 @@
+{
+  "name": "Equilibrador 5v5",
+  "short_name": "5v5",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#eef5f1",
+  "theme_color": "#1f7a4d",
+  "icons": []
+}

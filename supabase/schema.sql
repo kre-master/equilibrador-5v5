@@ -178,13 +178,51 @@ create table if not exists public.game_finance_overrides (
 create unique index if not exists game_finance_overrides_one_per_game
 on public.game_finance_overrides (game_id);
 
-grant select on public.players to anon, authenticated;
-grant select on public.games to anon, authenticated;
+create table if not exists public.game_mvp_votes (
+  id uuid primary key default gen_random_uuid(),
+  game_id text not null references public.games(id) on delete cascade,
+  voter_player_id text not null references public.players(id) on delete cascade,
+  candidate_player_id text not null references public.players(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  check (voter_player_id <> candidate_player_id)
+);
+
+create unique index if not exists game_mvp_votes_one_per_voter
+on public.game_mvp_votes (game_id, voter_player_id);
+
+create table if not exists public.player_form_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  player_id text not null references public.players(id) on delete cascade,
+  game_id text references public.games(id) on delete cascade,
+  base_overall integer not null check (base_overall between 0 and 100),
+  current_rating integer not null check (current_rating between 0 and 100),
+  form_adjustment integer not null check (form_adjustment between -7 and 7),
+  form_level text not null check (form_level in ('Em grande forma', 'Boa forma', 'Normal', 'Ma fase', 'A recuperar')),
+  win_streak integer not null default 0,
+  loss_streak integer not null default 0,
+  recent_games_count integer not null default 0,
+  recent_absences integer not null default 0,
+  mvp_boost integer not null default 0,
+  calculated_at timestamptz default now()
+);
+
+create index if not exists player_form_snapshots_player_calculated
+on public.player_form_snapshots (player_id, calculated_at desc);
+
+revoke select on public.players from anon;
+revoke select on public.games from anon;
+revoke select on public.events from anon;
+revoke select on public.event_responses from anon;
+
+grant select on public.players to authenticated;
+grant select on public.games to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.player_claims to authenticated;
 grant execute on function public.email_for_login(text) to anon, authenticated;
-grant select on public.events to anon, authenticated;
-grant select on public.event_responses to anon, authenticated;
+grant select on public.events to authenticated;
+grant select on public.event_responses to authenticated;
 grant insert, update, delete on public.events to authenticated;
 grant insert, update on public.event_responses to authenticated;
 grant select on public.payments to authenticated;
@@ -195,6 +233,11 @@ grant select on public.finance_settings to authenticated;
 grant insert, update on public.finance_settings to authenticated;
 grant select on public.game_finance_overrides to authenticated;
 grant insert, update, delete on public.game_finance_overrides to authenticated;
+grant select on public.game_mvp_votes to authenticated;
+grant insert, update on public.game_mvp_votes to authenticated;
+grant delete on public.game_mvp_votes to authenticated;
+grant select on public.player_form_snapshots to authenticated;
+grant insert, update, delete on public.player_form_snapshots to authenticated;
 
 alter table public.players enable row level security;
 alter table public.profiles enable row level security;
@@ -206,12 +249,15 @@ alter table public.payments enable row level security;
 alter table public.attendance_overrides enable row level security;
 alter table public.finance_settings enable row level security;
 alter table public.game_finance_overrides enable row level security;
+alter table public.game_mvp_votes enable row level security;
+alter table public.player_form_snapshots enable row level security;
 
 drop policy if exists "profiles read authenticated" on public.profiles;
-create policy "profiles read authenticated"
+drop policy if exists "profiles read own or admin" on public.profiles;
+create policy "profiles read own or admin"
 on public.profiles for select
 to authenticated
-using (true);
+using (id = auth.uid() or public.is_admin());
 
 drop policy if exists "profiles insert self" on public.profiles;
 create policy "profiles insert self"
@@ -236,7 +282,7 @@ drop policy if exists "claims insert own" on public.player_claims;
 create policy "claims insert own"
 on public.player_claims for insert
 to authenticated
-with check (true);
+with check (user_id = auth.uid());
 
 drop policy if exists "claims update admin" on public.player_claims;
 create policy "claims update admin"
@@ -246,23 +292,31 @@ using (public.is_admin())
 with check (public.is_admin());
 
 drop policy if exists "public players read" on public.players;
-create policy "public players read"
+drop policy if exists "authenticated players read" on public.players;
+create policy "authenticated players read"
 on public.players for select
+to authenticated
 using (true);
 
 drop policy if exists "public games read" on public.games;
-create policy "public games read"
+drop policy if exists "authenticated games read" on public.games;
+create policy "authenticated games read"
 on public.games for select
+to authenticated
 using (true);
 
 drop policy if exists "public events read" on public.events;
-create policy "public events read"
+drop policy if exists "authenticated events read" on public.events;
+create policy "authenticated events read"
 on public.events for select
+to authenticated
 using (true);
 
 drop policy if exists "public event responses read" on public.event_responses;
-create policy "public event responses read"
+drop policy if exists "authenticated event responses read" on public.event_responses;
+create policy "authenticated event responses read"
 on public.event_responses for select
+to authenticated
 using (true);
 
 drop policy if exists "admin events insert" on public.events;
@@ -288,14 +342,35 @@ drop policy if exists "players respond to events" on public.event_responses;
 create policy "players respond to events"
 on public.event_responses for insert
 to authenticated
-with check (true);
+with check (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
 
 drop policy if exists "players update event responses" on public.event_responses;
 create policy "players update event responses"
 on public.event_responses for update
 to authenticated
-using (true)
-with check (true);
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = player_id
+    and players.linked_user_id = auth.uid()
+  )
+)
+with check (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
 
 drop policy if exists "admin players insert" on public.players;
 create policy "admin players insert"
@@ -334,6 +409,72 @@ create policy "admin games delete"
 on public.games for delete
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "mvp votes read authenticated" on public.game_mvp_votes;
+create policy "mvp votes read authenticated"
+on public.game_mvp_votes for select
+to authenticated
+using (true);
+
+drop policy if exists "mvp votes insert linked player" on public.game_mvp_votes;
+create policy "mvp votes insert linked player"
+on public.game_mvp_votes for insert
+to authenticated
+with check (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = voter_player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "mvp votes update linked player" on public.game_mvp_votes;
+create policy "mvp votes update linked player"
+on public.game_mvp_votes for update
+to authenticated
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = voter_player_id
+    and players.linked_user_id = auth.uid()
+  )
+)
+with check (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = voter_player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "mvp votes delete admin" on public.game_mvp_votes;
+create policy "mvp votes delete admin"
+on public.game_mvp_votes for delete
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "form snapshots read own or admin" on public.player_form_snapshots;
+create policy "form snapshots read own or admin"
+on public.player_form_snapshots for select
+to authenticated
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.players
+    where players.id = player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "form snapshots write admin" on public.player_form_snapshots;
+create policy "form snapshots write admin"
+on public.player_form_snapshots for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "admin payments read" on public.payments;
 create policy "admin payments read"

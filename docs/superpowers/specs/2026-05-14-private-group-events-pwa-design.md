@@ -13,7 +13,7 @@ O ciclo principal passa a ser: criar evento, recolher presencas durante a semana
 - Cada jogador tera uma conta propria, mas as contas ficam separadas dos perfis de jogador.
 - Os perfis de jogador existentes continuam a guardar nome, foto, ratings e historico.
 - Um jogador pode existir sem conta, criado por admin, para jogadores ocasionais ou antigos.
-- Quando alguem cria conta, pode reclamar um perfil existente, por exemplo "Sou o Ramos".
+- Quando alguem cria conta, pode reclamar um perfil existente.
 - O admin aprova ou rejeita pedidos de associacao entre conta e perfil.
 - Eventos pertencem a um grupo privado.
 - O admin lanca eventos com data, hora, local e configuracao de jogadores.
