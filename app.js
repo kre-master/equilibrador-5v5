@@ -1106,6 +1106,7 @@ function renderAccountPanel() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (linkedPlayer) {
+    const form = getPlayerForm(linkedPlayer);
     els.accountPanel.innerHTML = `
       <div class="account-card good-card">
         <div>
@@ -1116,7 +1117,8 @@ function renderAccountPanel() {
         </div>
         <div class="profile-summary">
           ${renderAvatar(linkedPlayer)}
-          <strong>${linkedPlayer.overall}</strong>
+          <strong>${form.currentRating}</strong>
+          <span>${renderFormChip(form)}</span>
         </div>
         ${renderSecurityActions()}
       </div>
@@ -1194,6 +1196,8 @@ function renderPlayerProfile() {
   const finishedGames = summary.games.filter((item) => item.outcome !== "open").length;
   const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
   const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
+  const form = getPlayerForm(playerData);
+  const canSeePrivateForm = isAdmin || getLinkedPlayer()?.id === playerData.id;
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
@@ -1205,7 +1209,10 @@ function renderPlayerProfile() {
           <h2>${escapeHtml(playerData.name)}</h2>
           ${account ? `<p>${escapeHtml(account.email || account.username || "")}</p>` : ""}
         </div>
-        <strong class="player-ovr">${playerData.overall}</strong>
+        <div class="player-rating-stack">
+          <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
+          ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>`}
+        </div>
       </div>
     </div>
 
@@ -1230,6 +1237,8 @@ function renderPlayerProfile() {
           ${renderSummaryCard("Empates", summary.draws)}
           ${renderSummaryCard("Derrotas", summary.losses)}
           ${renderSummaryCard("Win rate", `${winRate}%`)}
+          ${canSeePrivateForm ? renderSummaryCard("Forma", form.level) : ""}
+          ${canSeePrivateForm ? renderSummaryCard("Ultimos 5", renderRecordDots(form.recentRecord)) : ""}
         </div>
       </section>
     </div>
@@ -1272,6 +1281,21 @@ function renderSummaryCard(label, value) {
       <strong>${value}</strong>
     </div>
   `;
+}
+
+function renderFormChip(form) {
+  return `<span class="form-chip ${form.className}">${form.level} ${formatSigned(form.adjustment)}</span>`;
+}
+
+function formatSigned(value) {
+  const number = Number(value) || 0;
+  return number > 0 ? `+${number}` : String(number);
+}
+
+function renderRecordDots(record) {
+  if (!record.length) return `<span class="record-empty">Sem jogos</span>`;
+  const labels = { win: "V", draw: "E", loss: "D" };
+  return record.map((outcome) => `<span class="record-dot ${outcome}">${labels[outcome] || "-"}</span>`).join("");
 }
 
 function renderPlayerGameRow(item) {
