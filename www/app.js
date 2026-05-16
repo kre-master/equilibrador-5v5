@@ -5,6 +5,17 @@ const PAYMENT_RULES = {
   fieldCostPerGame: 38,
 };
 
+const FORM_LEVELS = {
+  hot: { label: "Em grande forma", className: "form-hot" },
+  good: { label: "Boa forma", className: "form-good" },
+  normal: { label: "Normal", className: "form-normal" },
+  bad: { label: "Ma fase", className: "form-bad" },
+  recovery: { label: "A recuperar", className: "form-recovery" },
+};
+
+const FORM_LOOKBACK_GAMES = 5;
+const FORM_RATING_CAP = 7;
+
 const INITIAL_FINANCE_BALANCES = {
   "p-amandio": -12,
   "p-bilo": 0,
@@ -56,6 +67,7 @@ let currentProfile = null;
 let knownProfiles = [];
 let playerClaims = [];
 let eventResponses = [];
+let gameMvpVotes = state.gameMvpVotes || [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
 let gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -178,6 +190,7 @@ function loadState() {
     players: samplePlayers,
     games: [],
     events: [],
+    gameMvpVotes: [],
     payments: [],
     attendanceOverrides: [],
     gameFinanceOverrides: [],
@@ -194,6 +207,7 @@ function migrateState(saved) {
   }
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
+  saved.gameMvpVotes = Array.isArray(saved.gameMvpVotes) ? saved.gameMvpVotes.map(normalizeMvpVoteRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
   saved.gameFinanceOverrides = Array.isArray(saved.gameFinanceOverrides) ? saved.gameFinanceOverrides.map(normalizeGameFinanceOverrideRecord).filter(Boolean) : [];
@@ -345,6 +359,47 @@ function responseFromRow(row) {
     userId: row.user_id,
     status: row.status,
     updatedAt: row.updated_at,
+  };
+}
+
+function normalizeMvpVoteRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const gameId = record.gameId || record.game_id;
+  const voterPlayerId = record.voterPlayerId || record.voter_player_id;
+  const candidatePlayerId = record.candidatePlayerId || record.candidate_player_id;
+  if (!gameId || !voterPlayerId || !candidatePlayerId || voterPlayerId === candidatePlayerId) return null;
+  return {
+    id: String(record.id || createUuid()),
+    gameId: String(gameId),
+    voterPlayerId: String(voterPlayerId),
+    candidatePlayerId: String(candidatePlayerId),
+    userId: record.userId || record.user_id || null,
+    createdAt: record.createdAt || record.created_at || new Date().toISOString(),
+    updatedAt: record.updatedAt || record.updated_at || new Date().toISOString(),
+  };
+}
+
+function mvpVoteFromRow(row) {
+  return normalizeMvpVoteRecord({
+    id: row.id,
+    gameId: row.game_id,
+    voterPlayerId: row.voter_player_id,
+    candidatePlayerId: row.candidate_player_id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mvpVoteToRow(vote) {
+  const clean = normalizeMvpVoteRecord(vote);
+  return {
+    id: clean.id,
+    game_id: clean.gameId,
+    voter_player_id: clean.voterPlayerId,
+    candidate_player_id: clean.candidatePlayerId,
+    user_id: clean.userId || currentSession?.user?.id || null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -504,6 +559,7 @@ function financeSettingsToRow(settings) {
 }
 
 function saveState() {
+  state.gameMvpVotes = gameMvpVotes;
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
   state.gameFinanceOverrides = gameFinanceOverrides;
@@ -519,11 +575,21 @@ async function persistState() {
   updateAccessUi();
 }
 
+async function persistMvpVote(vote) {
+  saveState();
+  if (remoteEnabled && supabaseClient && currentSession?.user) {
+    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteToRow(vote));
+    if (error) throw error;
+  }
+  updateAccessUi();
+}
+
 async function saveRemoteState() {
   if (!supabaseClient) return;
   const players = state.players.map(playerToRow);
   const games = state.games.map(gameToRow);
   const events = (state.events || []).map(eventToRow);
+  const mvpVoteRows = gameMvpVotes.map(mvpVoteToRow);
   const paymentRows = payments.map(paymentToRow);
   const attendanceOverrideRows = attendanceOverrides.map(attendanceOverrideToRow);
   const gameFinanceOverrideRows = gameFinanceOverrides.map(gameFinanceOverrideToRow);
@@ -541,6 +607,11 @@ async function saveRemoteState() {
 
   if (events.length) {
     const { error } = await supabaseClient.from("events").upsert(events);
+    if (error) throw error;
+  }
+
+  if (mvpVoteRows.length) {
+    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteRows);
     if (error) throw error;
   }
 
@@ -699,11 +770,13 @@ async function loadRemoteState() {
     { data: games, error: gameError },
     { data: events, error: eventError },
     { data: responses, error: responseError },
+    { data: mvpRows, error: mvpError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
     supabaseClient.from("events").select("*").order("starts_at", { ascending: true }),
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
+    supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -712,6 +785,7 @@ async function loadRemoteState() {
     updateAccessUi("Supabase indisponivel, modo local");
     return;
   }
+  if (mvpError) console.warn("MVP vote load failed. Run supabase/schema.sql again.", mvpError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -757,6 +831,7 @@ async function loadRemoteState() {
     players: players.map(playerFromRow),
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
+    gameMvpVotes: (mvpRows || []).map(mvpVoteFromRow).filter(Boolean),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
     gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
@@ -764,6 +839,7 @@ async function loadRemoteState() {
   });
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
+  gameMvpVotes = state.gameMvpVotes || [];
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
   gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -1095,6 +1171,7 @@ function renderAccountPanel() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (linkedPlayer) {
+    const form = getPlayerForm(linkedPlayer);
     els.accountPanel.innerHTML = `
       <div class="account-card good-card">
         <div>
@@ -1105,7 +1182,8 @@ function renderAccountPanel() {
         </div>
         <div class="profile-summary">
           ${renderAvatar(linkedPlayer)}
-          <strong>${linkedPlayer.overall}</strong>
+          <strong>${form.currentRating}</strong>
+          <span>${renderFormChip(form)}</span>
         </div>
         ${renderSecurityActions()}
       </div>
@@ -1183,6 +1261,8 @@ function renderPlayerProfile() {
   const finishedGames = summary.games.filter((item) => item.outcome !== "open").length;
   const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
   const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
+  const form = getPlayerForm(playerData);
+  const canSeePrivateForm = isAdmin || getLinkedPlayer()?.id === playerData.id;
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
@@ -1194,7 +1274,10 @@ function renderPlayerProfile() {
           <h2>${escapeHtml(playerData.name)}</h2>
           ${account ? `<p>${escapeHtml(account.email || account.username || "")}</p>` : ""}
         </div>
-        <strong class="player-ovr">${playerData.overall}</strong>
+        <div class="player-rating-stack">
+          <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
+          ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>`}
+        </div>
       </div>
     </div>
 
@@ -1219,6 +1302,8 @@ function renderPlayerProfile() {
           ${renderSummaryCard("Empates", summary.draws)}
           ${renderSummaryCard("Derrotas", summary.losses)}
           ${renderSummaryCard("Win rate", `${winRate}%`)}
+          ${canSeePrivateForm ? renderSummaryCard("Forma", form.level) : ""}
+          ${canSeePrivateForm ? renderSummaryCard("Ultimos 5", renderRecordDots(form.recentRecord)) : ""}
         </div>
       </section>
     </div>
@@ -1261,6 +1346,21 @@ function renderSummaryCard(label, value) {
       <strong>${value}</strong>
     </div>
   `;
+}
+
+function renderFormChip(form) {
+  return `<span class="form-chip ${form.className}">${form.level} ${formatSigned(form.adjustment)}</span>`;
+}
+
+function formatSigned(value) {
+  const number = Number(value) || 0;
+  return number > 0 ? `+${number}` : String(number);
+}
+
+function renderRecordDots(record) {
+  if (!record.length) return `<span class="record-empty">Sem jogos</span>`;
+  const labels = { win: "V", draw: "E", loss: "D" };
+  return record.map((outcome) => `<span class="record-dot ${outcome}">${labels[outcome] || "-"}</span>`).join("");
 }
 
 function renderPlayerGameRow(item) {
@@ -2479,8 +2579,8 @@ function renderSuggestions() {
   els.suggestions.innerHTML = currentSuggestions.map((suggestion, index) => {
     const teamA = suggestion.teamA.map((p) => p.name).join(", ");
     const teamB = suggestion.teamB.map((p) => p.name).join(", ");
-    const benchA = suggestion.benchA.length ? suggestion.benchA.map((p) => `${p.name} ${p.overall}`).join(", ") : "Sem suplente A";
-    const benchB = suggestion.benchB.length ? suggestion.benchB.map((p) => `${p.name} ${p.overall}`).join(", ") : "Sem suplente B";
+    const benchA = suggestion.benchA.length ? suggestion.benchA.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente A";
+    const benchB = suggestion.benchB.length ? suggestion.benchB.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente B";
     return `
       <article class="suggestion-card">
         <div class="suggestion-top">
@@ -2499,6 +2599,7 @@ function renderSuggestions() {
           <span class="metric">Media A ${suggestion.teamAStats.average}</span>
           <span class="metric">Media B ${suggestion.teamBStats.average}</span>
           <span class="metric">Repeticao ${suggestion.historyPenalty}</span>
+          <span class="metric">Forma ${suggestion.formPenalty}</span>
         </div>
       </article>
     `;
@@ -2507,6 +2608,24 @@ function renderSuggestions() {
   els.suggestions.querySelectorAll("[data-preview-suggestion]").forEach((button) => {
     button.addEventListener("click", () => previewSuggestion(Number(button.dataset.previewSuggestion)));
   });
+}
+
+function getTeamFormStats(players) {
+  return players.reduce((stats, playerData) => {
+    const form = getPlayerForm(playerData);
+    stats.totalAdjustment += form.adjustment;
+    stats[form.levelKey] = (stats[form.levelKey] || 0) + 1;
+    return stats;
+  }, { totalAdjustment: 0, hot: 0, good: 0, normal: 0, bad: 0, recovery: 0 });
+}
+
+function getFormBalancePenalty(teamA, teamB) {
+  const a = getTeamFormStats(teamA);
+  const b = getTeamFormStats(teamB);
+  const strongDiff = Math.abs((a.hot + a.good) - (b.hot + b.good));
+  const weakDiff = Math.abs((a.bad + a.recovery) - (b.bad + b.recovery));
+  const adjustmentDiff = Math.abs(a.totalAdjustment - b.totalAdjustment);
+  return strongDiff * 5 + weakDiff * 7 + adjustmentDiff * 1.5;
 }
 
 function generateSuggestions(players, games) {
@@ -2538,10 +2657,11 @@ function generateSuggestions(players, games) {
         if (seen.has(divisionKey)) continue;
         seen.add(divisionKey);
 
-        const teamAStats = getTeamStats(teamA);
-        const teamBStats = getTeamStats(teamB);
-        const squadAStats = getTeamStats([...teamA, ...split.benchA]);
-        const squadBStats = getTeamStats([...teamB, ...split.benchB]);
+        const ratingOptions = { ratingFor: getPlayerRatingForBalance };
+        const teamAStats = getTeamStats(teamA, ratingOptions);
+        const teamBStats = getTeamStats(teamB, ratingOptions);
+        const squadAStats = getTeamStats([...teamA, ...split.benchA], ratingOptions);
+        const squadBStats = getTeamStats([...teamB, ...split.benchB], ratingOptions);
         const diffTotal = Math.abs(teamAStats.total - teamBStats.total);
         const squadDiff = Math.abs(squadAStats.average - squadBStats.average);
         const attrDiff =
@@ -2554,7 +2674,8 @@ function generateSuggestions(players, games) {
         const benchPenalty = bench.reduce((total, p) => total + (benchHistory.get(p.id) || 0) * 4 + p.overall / 60, 0);
         const unevenBenchPenalty = Math.abs(split.benchA.length - split.benchB.length) * 2;
         const historyPenalty = Math.round(pairPenalty + exactPenalty + benchPenalty + unevenBenchPenalty);
-        const score = diffTotal * 4 + squadDiff * 1.25 + attrDiff * 0.45 + historyPenalty;
+        const formPenalty = getFormBalancePenalty([...teamA, ...split.benchA], [...teamB, ...split.benchB]);
+        const score = diffTotal * 4 + squadDiff * 1.25 + attrDiff * 0.45 + historyPenalty + formPenalty;
 
         suggestions.push({
           teamA,
@@ -2568,6 +2689,7 @@ function generateSuggestions(players, games) {
           diffTotal,
           squadDiff,
           historyPenalty,
+          formPenalty: Number(formPenalty.toFixed(2)),
           score: Number(score.toFixed(2)),
         });
       }
@@ -2654,8 +2776,84 @@ function renderCurrentGame() {
   els.scoreA.value = game.scoreA ?? "";
   els.scoreB.value = game.scoreB ?? "";
   els.fieldCard.innerHTML = renderField(game);
+  bindMvpPanelActions(game);
   renderRosterEditor(game);
   renderAddPlayerSelect(game);
+}
+
+function renderMvpPanel(game) {
+  if (game.scoreA == null || game.scoreB == null) return "";
+  const participants = hydrate(getGamePlayerIds(game));
+  const linkedPlayer = getLinkedPlayer();
+  const canVote = linkedPlayer && participants.some((p) => p.id === linkedPlayer.id);
+  const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
+  const counts = countMvpVotes(votes);
+  const winners = getOfficialMvpWinners(counts);
+  const myVote = linkedPlayer ? votes.find((vote) => vote.voterPlayerId === linkedPlayer.id) : null;
+  return `
+    <section class="mvp-panel">
+      <div>
+        <p class="eyebrow">MVP interno</p>
+        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length}/5 votos`}</strong>
+      </div>
+      ${canVote ? `
+        <select data-mvp-candidate="${game.id}">
+          <option value="">Escolher MVP</option>
+          ${participants.filter((p) => p.id !== linkedPlayer.id).map((p) => `<option value="${p.id}" ${myVote?.candidatePlayerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+        </select>
+        <button class="ghost-btn" data-save-mvp-vote="${game.id}">Votar</button>
+      ` : `<span class="metric">So participantes votam</span>`}
+    </section>
+  `;
+}
+
+function countMvpVotes(votes) {
+  const counts = new Map();
+  votes.forEach((vote) => counts.set(vote.candidatePlayerId, (counts.get(vote.candidatePlayerId) || 0) + 1));
+  return counts;
+}
+
+function getOfficialMvpWinners(counts) {
+  const entries = [...counts.entries()];
+  const totalVotes = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (totalVotes < 5) return [];
+  const max = Math.max(...entries.map(([, count]) => count));
+  return entries.filter(([, count]) => count === max).map(([id]) => findPlayer(id)).filter(Boolean);
+}
+
+function bindMvpPanelActions(game) {
+  els.fieldCard.querySelector("[data-save-mvp-vote]")?.addEventListener("click", async () => {
+    const linkedPlayer = getLinkedPlayer();
+    const participants = new Set(getGamePlayerIds(game));
+    const select = els.fieldCard.querySelector(`[data-mvp-candidate="${game.id}"]`);
+    const candidateId = select?.value;
+    if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId) return;
+    if (!participants.has(linkedPlayer.id) || !participants.has(candidateId)) return;
+    let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
+    if (vote) {
+      vote.candidatePlayerId = candidateId;
+      vote.userId = currentSession?.user?.id || vote.userId || null;
+      vote.updatedAt = new Date().toISOString();
+    } else {
+      vote = {
+        id: createUuid(),
+        gameId: game.id,
+        voterPlayerId: linkedPlayer.id,
+        candidatePlayerId: candidateId,
+        userId: currentSession?.user?.id || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      gameMvpVotes.push(vote);
+    }
+    try {
+      await persistMvpVote(vote);
+    } catch (error) {
+      alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+      return;
+    }
+    renderCurrentGame();
+  });
 }
 
 function renderField(game) {
@@ -2691,14 +2889,17 @@ function renderField(game) {
       <div class="bench-side bench-left">${renderBenchCards("Supl. A", benchA, "team-a")}</div>
       <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b")}</div>
     </div>
+    ${renderMvpPanel(game)}
   `;
 }
 
 function renderDot(playerData, teamClass, pos) {
+  const form = getPlayerForm(playerData);
   return `
     <div class="player-dot fut-card ${teamClass} ${playerData.photoDataUrl ? "has-photo" : ""}" style="left:${pos.x}%;top:${pos.y}%">
       <div class="fut-head">
-        <strong>${playerData.overall}</strong>
+        <strong>${form.currentRating}</strong>
+        <small>${formatSigned(form.adjustment)}</small>
       </div>
       <div class="fut-photo">
         ${playerData.photoDataUrl ? `<img src="${escapeHtml(playerData.photoDataUrl)}" alt="">` : renderAvatar(playerData)}
@@ -3479,6 +3680,91 @@ function getCurrentGame() {
   return game ? ensureGameShape(game) : null;
 }
 
+function getPlayerForm(playerData, games = state.games) {
+  const baseOverall = clampRating(playerData?.overall ?? 0);
+  const finishedAppearances = [...games]
+    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerData.id);
+      if (!participation) return null;
+      return { game, outcome: getPlayerOutcome(game, participation.side) };
+    })
+    .filter(Boolean);
+
+  const recent = finishedAppearances.slice(0, FORM_LOOKBACK_GAMES);
+  const wins = recent.filter((item) => item.outcome === "win").length;
+  const losses = recent.filter((item) => item.outcome === "loss").length;
+  const draws = recent.filter((item) => item.outcome === "draw").length;
+  const winStreak = countCurrentStreak(finishedAppearances, "win");
+  const lossStreak = countCurrentStreak(finishedAppearances, "loss");
+  const absenceCount = countRecentAbsences(playerData.id, games);
+
+  let adjustment = 0;
+  adjustment += wins - losses;
+  adjustment += Math.min(2, winStreak);
+  adjustment -= Math.min(3, lossStreak);
+  if (draws >= 2) adjustment += 1;
+  if (absenceCount >= 3) adjustment -= 1;
+  adjustment = clampNumber(adjustment, -FORM_RATING_CAP, FORM_RATING_CAP);
+
+  const currentRating = clampRating(baseOverall + adjustment);
+  const levelKey = formLevelForAdjustment(adjustment);
+
+  return {
+    baseOverall,
+    currentRating,
+    adjustment,
+    levelKey,
+    level: FORM_LEVELS[levelKey].label,
+    className: FORM_LEVELS[levelKey].className,
+    recentGamesCount: recent.length,
+    wins,
+    draws,
+    losses,
+    winStreak,
+    lossStreak,
+    absenceCount,
+    recentRecord: recent.map((item) => item.outcome),
+  };
+}
+
+function countCurrentStreak(items, outcome) {
+  let streak = 0;
+  for (const item of items) {
+    if (item.outcome !== outcome) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function countRecentAbsences(playerId, games) {
+  return [...games]
+    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, FORM_LOOKBACK_GAMES)
+    .filter((game) => !getPlayerParticipation(game, playerId))
+    .length;
+}
+
+function formLevelForAdjustment(adjustment) {
+  if (adjustment >= 5) return "hot";
+  if (adjustment >= 2) return "good";
+  if (adjustment <= -5) return "recovery";
+  if (adjustment <= -2) return "bad";
+  return "normal";
+}
+
+function getPlayerRatingForBalance(playerData) {
+  return getPlayerForm(playerData).currentRating;
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return min;
+  return Math.min(max, Math.max(min, number));
+}
+
 function findPlayer(id) {
   return state.players.find((p) => p.id === id);
 }
@@ -3515,9 +3801,10 @@ function getGamePlayerIds(game) {
   return [...game.teamA, ...game.teamB, ...game.benchA, ...game.benchB];
 }
 
-function getTeamStats(players) {
+function getTeamStats(players, options = {}) {
   const count = Math.max(players.length, 1);
-  const total = players.reduce((sum, p) => sum + p.overall, 0);
+  const ratingFor = options.ratingFor || ((p) => p.overall);
+  const total = players.reduce((sum, p) => sum + ratingFor(p), 0);
   const average = Math.round(total / count);
   return {
     total,
@@ -3634,6 +3921,13 @@ function normalize(value) {
 
 function slug(value) {
   return normalize(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "jogador";
+}
+
+function createUuid() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (Number(char) ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(char) / 4).toString(16)
+  );
 }
 
 function normalizeUsername(value) {

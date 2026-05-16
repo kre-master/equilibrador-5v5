@@ -433,6 +433,88 @@ h3 {
   font-weight: 900;
 }
 
+.form-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(190, 205, 198, 0.75);
+  font-size: 12px;
+  font-weight: 850;
+  color: var(--ink);
+  background: rgba(255,255,255,.72);
+}
+
+.form-hot,
+.form-good {
+  border-color: rgba(31, 122, 77, 0.35);
+  background: rgba(228,244,234,.88);
+}
+
+.form-bad,
+.form-recovery {
+  border-color: rgba(200, 100, 34, 0.36);
+  background: rgba(255, 239, 224, .9);
+}
+
+.player-rating-stack {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.player-rating-stack span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.record-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 900;
+  background: rgba(255,255,255,.74);
+}
+
+.record-dot.win { color: #1f7a4d; }
+.record-dot.draw { color: #66736d; }
+.record-dot.loss { color: #c86422; }
+.record-empty { color: var(--muted); }
+
+.fut-head small {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--muted);
+}
+
+.mvp-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(190, 205, 198, 0.62);
+  border-radius: 18px;
+  background: rgba(255,255,255,.68);
+}
+
+.mvp-panel select {
+  min-height: 40px;
+  border: 1px solid rgba(190, 205, 198, 0.78);
+  border-radius: 12px;
+  padding: 0 10px;
+  background: rgba(255,255,255,.9);
+}
+
 .suggestions {
   display: grid;
   gap: 12px;
