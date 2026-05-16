@@ -2469,6 +2469,7 @@ function renderPlayerList() {
 
   els.playerList.innerHTML = players.map((p) => {
     const selected = selectedIds.has(p.id);
+    const form = getPlayerForm(p);
     return `
       <label class="player-chip ${selected ? "selected" : ""}">
         <input type="checkbox" data-select-player="${p.id}" ${selected ? "checked" : ""}>
@@ -2477,7 +2478,7 @@ function renderPlayerList() {
           <strong>${escapeHtml(p.name)}</strong>
           <span>${p.isGuest ? "Convidado" : "Fixo"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
         </button>
-        <span class="rating-badge">${p.overall}</span>
+        <span class="rating-badge">${p.overall}→${form.currentRating}</span>
       </label>
     `;
   }).join("");
@@ -3107,25 +3108,29 @@ function resizePhoto(file) {
 function renderPlayersTable() {
   if (!els.playersTable) return;
   const players = [...state.players].sort((a, b) => a.name.localeCompare(b.name));
-  els.playersTable.innerHTML = players.map((p) => `
-    <tr>
-      <td><button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
-      <td><button class="player-name-link" data-open-player="${p.id}" type="button"><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</button></td>
-      <td>${p.pace}</td>
-      <td>${p.shooting}</td>
-      <td>${p.passing}</td>
-      <td>${p.dribbling}</td>
-      <td>${p.defending}</td>
-      <td>${p.physical}</td>
-      <td><strong>${p.overall}</strong></td>
-      <td>${renderLinkedAccountCell(p)}</td>
-      <td>
-        <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
-        ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
-        <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
-      </td>
-    </tr>
-  `).join("");
+  els.playersTable.innerHTML = players.map((p) => {
+    const form = getPlayerForm(p);
+    return `
+      <tr>
+        <td><button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
+        <td><button class="player-name-link" data-open-player="${p.id}" type="button"><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</button></td>
+        <td>${p.pace}</td>
+        <td>${p.shooting}</td>
+        <td>${p.passing}</td>
+        <td>${p.dribbling}</td>
+        <td>${p.defending}</td>
+        <td>${p.physical}</td>
+        <td><strong>${p.overall}</strong></td>
+        <td><strong>${form.currentRating}</strong> <span class="metric">${formatSigned(form.adjustment)}</span></td>
+        <td>${renderLinkedAccountCell(p)}</td>
+        <td>
+          <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
+          ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
+          <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
 
   els.playersTable.querySelectorAll("[data-edit-player]").forEach((button) => {
     button.addEventListener("click", () => editPlayer(button.dataset.editPlayer));
