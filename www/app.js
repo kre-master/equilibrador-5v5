@@ -16,22 +16,7 @@ const FORM_LEVELS = {
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
 
-const INITIAL_FINANCE_BALANCES = {
-  "p-amandio": -12,
-  "p-bilo": 0,
-  "p-marques": 23,
-  "p-messi": 7,
-  "p-cunha": 8,
-  "p-filipe-m": -2,
-  "p-xt": 20,
-  "p-joao-mai": 8,
-  "p-lipao": 7,
-  "p-migo": -17,
-  "p-ramos": -7,
-  "p-tiago-f": -2,
-  "p-tiaguito": -4,
-  "p-ze": 18,
-};
+const INITIAL_FINANCE_BALANCES = {};
 
 const defaultFinanceSettings = {
   startMonth: "2026-05",
@@ -40,21 +25,21 @@ const defaultFinanceSettings = {
 };
 
 const samplePlayers = [
-  player("p-amandio", "Amandio", 49, 46, 47, 39, 52, 45, 46),
-  player("p-bilo", "Bilo", 76, 81, 78, 83, 77, 78, 79),
-  player("p-marques", "Marques", 74, 81, 73, 78, 74, 80, 77),
-  player("p-messi", "Messi", 60, 69, 67, 71, 52, 56, 62),
-  player("p-cunha", "Cunha", 58, 58, 62, 53, 67, 61, 60),
-  player("p-filipe-m", "Filipe M", 63, 59, 60, 57, 65, 66, 62),
-  player("p-filipe-or", "Filipe Or", 66, 71, 73, 72, 75, 74, 72),
-  player("p-xt", "XT", 59, 58, 60, 51, 63, 46, 56),
-  player("p-joao-mai", "Joao Mai", 58, 58, 58, 51, 64, 64, 59),
-  player("p-lipao", "Lipao", 50, 73, 69, 75, 52, 56, 62),
-  player("p-migo", "Migo", 48, 52, 53, 46, 52, 43, 49),
-  player("p-ramos", "Ramos", 74, 62, 60, 63, 70, 79, 68),
-  player("p-tiago-f", "Tiago F", 72, 88, 83, 82, 70, 70, 77),
-  player("p-tiaguito", "Tiaguito", 85, 78, 73, 70, 78, 70, 76),
-  player("p-ze", "Ze", 68, 82, 83, 91, 70, 68, 77),
+  player("p-demo-01", "Jogador 1", 49, 46, 47, 39, 52, 45, 46),
+  player("p-demo-02", "Jogador 2", 76, 81, 78, 83, 77, 78, 79),
+  player("p-demo-03", "Jogador 3", 74, 81, 73, 78, 74, 80, 77),
+  player("p-demo-04", "Jogador 4", 60, 69, 67, 71, 52, 56, 62),
+  player("p-demo-05", "Jogador 5", 58, 58, 62, 53, 67, 61, 60),
+  player("p-demo-06", "Jogador 6", 63, 59, 60, 57, 65, 66, 62),
+  player("p-demo-07", "Jogador 7", 66, 71, 73, 72, 75, 74, 72),
+  player("p-demo-08", "Jogador 8", 59, 58, 60, 51, 63, 46, 56),
+  player("p-demo-09", "Jogador 9", 58, 58, 58, 51, 64, 64, 59),
+  player("p-demo-10", "Jogador 10", 50, 73, 69, 75, 52, 56, 62),
+  player("p-demo-11", "Jogador 11", 48, 52, 53, 46, 52, 43, 49),
+  player("p-demo-12", "Jogador 12", 74, 62, 60, 63, 70, 79, 68),
+  player("p-demo-13", "Jogador 13", 72, 88, 83, 82, 70, 70, 77),
+  player("p-demo-14", "Jogador 14", 85, 78, 73, 70, 78, 70, 76),
+  player("p-demo-15", "Jogador 15", 68, 82, 83, 91, 70, 68, 77),
 ];
 
 const config = window.FIVE5_CONFIG || {};
@@ -765,6 +750,13 @@ async function loadPlayerClaims() {
 
 async function loadRemoteState() {
   if (!remoteEnabled) return;
+  if (!currentSession?.user) {
+    eventResponses = [];
+    gameMvpVotes = [];
+    updateAccessUi();
+    return;
+  }
+
   const [
     { data: players, error: playerError },
     { data: games, error: gameError },
