@@ -218,10 +218,32 @@ h3 {
 .guest-row,
 .score-row,
 .add-to-game,
-.actions {
+.actions,
+.generate-controls {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.generate-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.game-date-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.game-date-control span {
+  white-space: nowrap;
+}
+
+.game-date-control input {
+  width: 190px;
 }
 
 .event-import {
@@ -1594,6 +1616,8 @@ th:last-child {
   .panel-head,
   .toolbar,
   .guest-row,
+  .generate-controls,
+  .game-date-control,
   .actions,
   .account-bar {
     align-items: stretch;
@@ -1657,6 +1681,10 @@ th:last-child {
   .guest-row,
   .event-import {
     padding-inline: 14px;
+  }
+
+  .game-date-control input {
+    width: 100%;
   }
 
   .player-list {

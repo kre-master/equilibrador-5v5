@@ -77,6 +77,7 @@ const els = {
   guestName: document.querySelector("#guest-name"),
   guestScore: document.querySelector("#guest-score"),
   addGuest: document.querySelector("#add-guest"),
+  gameDate: document.querySelector("#game-date"),
   generateTeams: document.querySelector("#generate-teams"),
   suggestions: document.querySelector("#suggestions"),
   currentGameEmpty: document.querySelector("#current-game-empty"),
@@ -638,6 +639,7 @@ function bindEvents() {
     renderPlayerList();
   });
   on(els.addGuest, "click", addGuest);
+  on(els.gameDate, "change", updatePreviewGameDate);
   on(els.generateTeams, "click", generateAndRenderSuggestions);
   on(els.confirmGame, "click", confirmPreviewGame);
   on(els.exportImage, "click", exportCurrentGameImage);
@@ -1108,6 +1110,7 @@ function showView(viewName) {
 }
 
 function render() {
+  ensureGameDateInput();
   renderPlayerList();
   renderPlayersTable();
   renderCurrentGame();
@@ -2401,6 +2404,7 @@ function loadCurrentEventGoingPlayers(options = {}) {
   currentGameId = null;
   previewGame = null;
   currentSuggestions = [];
+  setGameDateInput(eventData.startsAt);
   showView("today");
   render();
   setHint(`${goingPlayers.length} confirmados carregados da convocatoria "${eventData.title}".`, goingPlayers.length >= 10 && goingPlayers.length <= 13 ? "good" : "warn");
@@ -2589,6 +2593,7 @@ function setHint(message, level) {
 }
 
 function generateAndRenderSuggestions(options = {}) {
+  ensureGameDateInput();
   previewGame = null;
   currentGameId = null;
   renderCurrentGame();
@@ -2759,7 +2764,7 @@ function getThirdWorstPlayer(players) {
 function createGameFromSuggestion(suggestion, options = {}) {
   return {
     id: options.id || `preview-${Date.now()}`,
-    date: options.date || new Date().toISOString(),
+    date: options.date || getGenerationDateIso(),
     status: options.status || "preview",
     teamA: suggestion.teamA.map((p) => p.id),
     teamB: suggestion.teamB.map((p) => p.id),
@@ -2775,10 +2780,31 @@ function previewSuggestion(index) {
   const suggestion = currentSuggestions[index];
   if (!suggestion) return;
 
-  previewGame = createGameFromSuggestion(suggestion);
+  previewGame = createGameFromSuggestion(suggestion, { date: getGenerationDateIso() });
   currentGameId = null;
   renderCurrentGame();
   setHint("Sugestao no campo. Confirma so quando estiver certo.", "good");
+}
+
+function ensureGameDateInput() {
+  if (!els.gameDate || els.gameDate.value) return;
+  setGameDateInput(new Date().toISOString());
+}
+
+function setGameDateInput(value) {
+  if (!els.gameDate || !value) return;
+  els.gameDate.value = toDateTimeLocalInput(value);
+}
+
+function getGenerationDateIso() {
+  ensureGameDateInput();
+  return fromDateTimeLocalInput(els.gameDate?.value) || new Date().toISOString();
+}
+
+function updatePreviewGameDate() {
+  if (!previewGame) return;
+  previewGame.date = getGenerationDateIso();
+  renderCurrentGame();
 }
 
 async function confirmPreviewGame() {
