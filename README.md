@@ -1,4 +1,4 @@
-# Equilibrador 5v5
+# Footer
 
 App estatica para gerar equipas equilibradas de futebol 5v5, guardar historico e exportar PNG.
 
@@ -36,7 +36,7 @@ Opcao simples para comecar:
 5. Ativa `Enable Custom SMTP`.
 6. Preenche:
    - `Sender email`: email remetente validado no provider.
-   - `Sender name`: `Equilibrador 5v5`.
+   - `Sender name`: `Footer`.
    - `Host`: host SMTP do provider.
    - `Port`: normalmente `587`.
    - `Username`: utilizador SMTP/API key indicado pelo provider.
@@ -78,29 +78,41 @@ Quando a app ganha novas tabelas, volta a executar o ficheiro completo `supabase
 3. Publish directory: `/`.
 4. Faz deploy.
 
-## App mobile teste
+## Apps mobile
 
-A app mobile deve ser desenvolvida na branch `codex-mobile-test`, mantendo `main` estavel para o site atual.
+A app mobile usa Capacitor e reaproveita o bundle web gerado em `www/`.
 
-Primeira abordagem:
+### Atualizar Android
 
-1. Instalar Node.js com `npm` no Windows, se ainda nao estiver instalado.
-2. Na branch `codex-mobile-test`, correr:
+Sempre que a versao web mudar:
 
 ```bash
-npm install
-npm run build:web
-npx cap add android
-npm run cap:sync
+npm run cap:sync:android
+cd android
+.\gradlew.bat assembleDebug
 ```
 
-3. Abrir Android Studio:
+O APK debug fica em `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Para abrir no Android Studio:
 
 ```bash
 npm run cap:open:android
 ```
 
-O bundle web usado pela app Android fica em `www/`. Por agora, a app mobile reaproveita o mesmo `app-config.js` e pode apontar para o mesmo Supabase quando estiver pronta para teste real.
+### Preparar iPhone
+
+O projeto iOS esta em `ios/`, mas build/teste iPhone precisa de macOS com Xcode e CocoaPods.
+
+No Mac:
+
+```bash
+npm install
+npm run cap:sync:ios
+npm run cap:open:ios
+```
+
+Depois configura signing, bundle id e App Store Connect no Xcode.
 
 ## Nota sobre fotos
 

@@ -7,11 +7,15 @@
     "check": "node --check app.js",
     "build:web": "node scripts/build-web.mjs",
     "cap:sync": "npm run build:web && npx cap sync",
-    "cap:open:android": "npx cap open android"
+    "cap:sync:android": "npm run build:web && npx cap sync android",
+    "cap:sync:ios": "npm run build:web && npx cap sync ios",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/cli": "^7.0.0",
-    "@capacitor/core": "^7.0.0"
+    "@capacitor/android": "^7.6.5",
+    "@capacitor/cli": "^7.6.5",
+    "@capacitor/core": "^7.6.5",
+    "@capacitor/ios": "^7.6.5"
   }
 }
