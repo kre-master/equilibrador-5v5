@@ -5,17 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#1f7a4d">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Equilibrador 5v5">
-    <title>Equilibrador 5v5</title>
+    <meta name="apple-mobile-web-app-title" content="Footer">
+    <title>Footer</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Futebol com amigos</p>
-          <h1>Equilibrador 5v5</h1>
+        <div class="topbar-main">
+          <div class="brand">
+            <img class="brand-logo" src="assets/footer-logo.png" alt="">
+            <h1>Footer</h1>
+          </div>
+          <div class="account-bar">
+            <span id="data-status">Modo local</span>
+            <button id="admin-login" class="ghost-btn">Entrar</button>
+            <button id="account-signup" class="ghost-btn">Criar conta</button>
+            <button id="admin-logout" class="ghost-btn hidden">Sair</button>
+          </div>
         </div>
         <nav class="tabs" aria-label="Seccoes">
           <button class="tab active" data-view="events">Convocatoria</button>
@@ -26,17 +34,21 @@
           <button class="tab admin-only" data-view="claims">Pedidos</button>
           <button class="tab" data-view="games">Historico</button>
         </nav>
-        <div class="account-bar">
-          <span id="data-status">Modo local</span>
-          <button id="admin-login" class="ghost-btn">Entrar</button>
-          <button id="account-signup" class="ghost-btn">Criar conta</button>
-          <button id="admin-logout" class="ghost-btn hidden">Sair</button>
-        </div>
       </header>
 
       <main>
         <section class="view active" id="view-events">
           <div class="events-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Semana do jogo</p>
+                  <h2>Convocatorias</h2>
+                </div>
+              </div>
+              <div id="events-list" class="events-list"></div>
+            </section>
+
             <section class="panel">
               <div class="panel-head">
                 <div>
@@ -51,16 +63,6 @@
                 <input id="event-max-players" type="number" min="10" max="13" value="12" placeholder="Max. jogadores">
                 <button class="primary-btn" type="submit">Lancar evento</button>
               </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Semana do jogo</p>
-                  <h2>Convocatorias</h2>
-                </div>
-              </div>
-              <div id="events-list" class="events-list"></div>
             </section>
           </div>
         </section>

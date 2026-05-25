@@ -1,6 +1,6 @@
 {
-  "name": "Equilibrador 5v5",
-  "short_name": "5v5",
+  "name": "Footer",
+  "short_name": "Footer",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#eef5f1",
