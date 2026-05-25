@@ -477,6 +477,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   min-width: 42px;
   height: 34px;
   padding: 0 9px;
@@ -485,6 +486,14 @@ h3 {
   color: var(--ink);
   background: linear-gradient(135deg, #f8fbfa, #e8efec);
   font-weight: 900;
+}
+
+.rating-badge.public-rating strong {
+  font-size: 15px;
+}
+
+.rating-badge.admin-rating {
+  min-width: 64px;
 }
 
 .form-chip {
@@ -511,6 +520,32 @@ h3 {
 .form-recovery {
   border-color: rgba(200, 100, 34, 0.36);
   background: rgba(255, 239, 224, .9);
+}
+
+.form-sign {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.form-sign.positive {
+  color: #14623d;
+  background: rgba(228,244,234,.95);
+}
+
+.form-sign.negative {
+  color: #a22f2f;
+  background: rgba(255,232,232,.96);
+}
+
+.form-sign.neutral {
+  color: #8a6714;
+  background: rgba(255,245,206,.96);
 }
 
 .player-rating-stack {
@@ -831,7 +866,17 @@ h3 {
   font-size: 12px;
 }
 
+.non-admin-only {
+  display: none;
+}
+
+.non-admin-mode .non-admin-only {
+  display: block;
+}
+
 .visitor-mode #player-form,
+.non-admin-mode .admin-only,
+.admin-mode .non-admin-only,
 .visitor-mode .edit-tools,
 .visitor-mode #confirm-game,
 .visitor-mode #save-score,
@@ -839,9 +884,7 @@ h3 {
 .visitor-mode #event-form,
 .visitor-mode .admin-actions,
 .visitor-mode .file-btn,
-.visitor-mode .admin-only,
-.visitor-mode #players-table th:last-child,
-.visitor-mode #players-table td:last-child {
+.visitor-mode .admin-only {
   display: none !important;
 }
 
@@ -1216,7 +1259,7 @@ table {
 th,
 td {
   border-bottom: 1px solid rgba(190, 205, 198, 0.48);
-  padding: 10px;
+  padding: 9px;
   text-align: left;
 }
 
@@ -1229,6 +1272,28 @@ th {
 td:last-child,
 th:last-child {
   text-align: right;
+}
+
+.stat-col {
+  width: 44px;
+  max-width: 44px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ovr-col {
+  width: 76px;
+  white-space: nowrap;
+}
+
+.form-col {
+  width: 118px;
+  white-space: nowrap;
+}
+
+td.stat-col,
+th.stat-col {
+  padding-inline: 5px;
 }
 
 .games-list {
@@ -1346,6 +1411,36 @@ th:last-child {
   gap: 10px;
 }
 
+.synergy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.synergy-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(247,250,249,.72);
+}
+
+.synergy-card .avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.synergy-card span,
+.synergy-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .profile-game-row {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -1360,6 +1455,12 @@ th:last-child {
 .profile-game-row strong,
 .profile-game-row span {
   display: block;
+}
+
+.empty-state.compact {
+  min-height: auto;
+  margin: 0;
+  padding: 18px;
 }
 
 .payments-panel {
@@ -1758,8 +1859,23 @@ th:last-child {
     padding-inline: 14px;
   }
 
+  th,
+  td {
+    padding: 8px 6px;
+  }
+
+  .stat-col {
+    width: 38px;
+    max-width: 38px;
+  }
+
+  .ovr-col {
+    width: 68px;
+  }
+
   .player-hero,
-  .profile-game-row {
+  .profile-game-row,
+  .synergy-grid {
     grid-template-columns: 1fr;
   }
 

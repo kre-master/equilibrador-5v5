@@ -66,6 +66,8 @@ let currentGenerationDateIso = new Date().toISOString();
 let previewGame = null;
 let authActionBusy = false;
 let currentPlayerProfileId = null;
+let currentViewName = "events";
+let navigationHistoryReady = false;
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
@@ -648,6 +650,8 @@ function bindEvents() {
   on(els.saveScore, "click", saveCurrentScore);
   on(els.addPlayerGameBtn, "click", addSelectedPlayerToGame);
   on(els.playerForm, "submit", savePlayerFromForm);
+  [els.formPace, els.formShooting, els.formPassing, els.formDribbling, els.formDefending, els.formPhysical]
+    .forEach((input) => on(input, "input", updateOverallFromPartialRatings));
   on(els.formPhoto, "change", handlePhotoSelection);
   on(els.clearPlayerPhoto, "click", clearPendingPhoto);
   on(els.cancelPlayerEdit, "click", clearPlayerForm);
@@ -664,6 +668,7 @@ function bindEvents() {
 async function initApp() {
   await initRemote();
   render();
+  setupNavigationHistory();
 }
 
 async function initRemote() {
@@ -886,6 +891,8 @@ function updateAccessUi(message) {
   const mode = message || defaultMode;
   if (els.dataStatus) els.dataStatus.textContent = mode;
   document.body.classList.toggle("visitor-mode", remoteEnabled && !isAdmin);
+  document.body.classList.toggle("admin-mode", canWriteOfficialData());
+  document.body.classList.toggle("non-admin-mode", !canWriteOfficialData());
   if (els.adminLogin) els.adminLogin.classList.toggle("hidden", Boolean(currentSession));
   if (els.accountSignup) els.accountSignup.classList.toggle("hidden", Boolean(currentSession) || !remoteEnabled);
   if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !currentSession);
@@ -1103,12 +1110,60 @@ function on(element, eventName, handler) {
   if (element) element.addEventListener(eventName, handler);
 }
 
-function showView(viewName) {
+function showView(viewName, options = {}) {
   if (viewName !== "today") {
     previewGame = null;
   }
+  currentViewName = viewName;
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
   els.views.forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
+  if (navigationHistoryReady && options.push !== false) {
+    pushNavigationState();
+  }
+}
+
+function setupNavigationHistory() {
+  if (navigationHistoryReady || !window.history?.pushState) return;
+  navigationHistoryReady = true;
+  history.replaceState({ footerExitGuard: true }, "", location.href);
+  history.pushState(captureNavigationState(), "", location.href);
+  window.addEventListener("popstate", handleNavigationPopState);
+}
+
+function captureNavigationState() {
+  return {
+    footerApp: true,
+    viewName: currentViewName,
+    currentPlayerProfileId,
+    currentGameId,
+  };
+}
+
+function pushNavigationState() {
+  history.pushState(captureNavigationState(), "", location.href);
+}
+
+function handleNavigationPopState(event) {
+  if (event.state?.footerExitGuard) {
+    if (confirm("Queres sair do Footer?")) {
+      history.back();
+    } else {
+      history.pushState(captureNavigationState(), "", location.href);
+    }
+    return;
+  }
+
+  if (!event.state?.footerApp) {
+    if (!confirm("Queres sair do Footer?")) {
+      history.pushState(captureNavigationState(), "", location.href);
+    }
+    return;
+  }
+
+  currentPlayerProfileId = event.state.currentPlayerProfileId || currentPlayerProfileId;
+  currentGameId = event.state.currentGameId || null;
+  showView(event.state.viewName || "events", { push: false });
+  render();
 }
 
 function render() {
@@ -1179,8 +1234,8 @@ function renderAccountPanel() {
         </div>
         <div class="profile-summary">
           ${renderAvatar(linkedPlayer)}
-          <strong>${form.currentRating}</strong>
-          <span>${renderFormChip(form)}</span>
+          <strong>${canSeeCurrentRatings() ? form.currentRating : linkedPlayer.overall}</strong>
+          <span>${canSeeCurrentRatings() ? renderFormChip(form) : renderFormSign(form)}</span>
         </div>
         ${renderSecurityActions()}
       </div>
@@ -1259,7 +1314,8 @@ function renderPlayerProfile() {
   const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
   const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
   const form = getPlayerForm(playerData);
-  const canSeePrivateForm = isAdmin || getLinkedPlayer()?.id === playerData.id;
+  const canSeePrivateForm = canSeeCurrentRatings();
+  const synergies = getPlayerSynergies(playerData.id);
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
@@ -1273,7 +1329,7 @@ function renderPlayerProfile() {
         </div>
         <div class="player-rating-stack">
           <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
-          ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>`}
+          ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>${renderFormSign(form)}`}
         </div>
       </div>
     </div>
@@ -1306,6 +1362,15 @@ function renderPlayerProfile() {
     </div>
 
     <section class="profile-section">
+      <h3>Melhores sinergias</h3>
+      ${synergies.length ? `
+        <div class="synergy-grid">
+          ${synergies.map((item) => renderSynergyCard(item)).join("")}
+        </div>
+      ` : `<div class="empty-state compact">Ainda nao ha jogos suficientes para medir sinergias.</div>`}
+    </section>
+
+    <section class="profile-section">
       <h3>Ultimos jogos</h3>
       ${summary.games.length ? `
         <div class="profile-games">
@@ -1317,6 +1382,9 @@ function renderPlayerProfile() {
 
   els.playerProfile.querySelector("[data-player-profile-back]")?.addEventListener("click", () => {
     showView("players");
+  });
+  els.playerProfile.querySelectorAll("[data-open-player]").forEach((button) => {
+    button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
   });
   els.playerProfile.querySelectorAll("[data-profile-open-game]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1347,6 +1415,23 @@ function renderSummaryCard(label, value) {
 
 function renderFormChip(form) {
   return `<span class="form-chip ${form.className}">${form.level} ${formatSigned(form.adjustment)}</span>`;
+}
+
+function renderFormSign(form, options = {}) {
+  const className = form.adjustment > 0 ? "positive" : form.adjustment < 0 ? "negative" : "neutral";
+  const label = options.compact ? formatSigned(form.adjustment) : `${formatSigned(form.adjustment)} forma`;
+  return `<span class="form-sign ${className}">${label}</span>`;
+}
+
+function renderRatingBadge(playerData, form = getPlayerForm(playerData)) {
+  if (canSeeCurrentRatings()) {
+    return `<span class="rating-badge admin-rating">${playerData.overall}&rarr;${form.currentRating}</span>`;
+  }
+  return `<span class="rating-badge public-rating"><strong>${playerData.overall}</strong>${renderFormSign(form, { compact: true })}</span>`;
+}
+
+function canSeeCurrentRatings() {
+  return canWriteOfficialData();
 }
 
 function formatSigned(value) {
@@ -1380,6 +1465,22 @@ function renderPlayerGameRow(item) {
   `;
 }
 
+function renderSynergyCard(item) {
+  const playerData = findPlayer(item.playerId);
+  if (!playerData) return "";
+  return `
+    <article class="synergy-card">
+      <button class="player-open-link" data-open-player="${playerData.id}" type="button">${renderAvatar(playerData)}</button>
+      <div>
+        <strong>${escapeHtml(playerData.name)}</strong>
+        <span>${item.wins}V em ${item.gamesTogether} jogos juntos</span>
+        <small>${item.winMarginTotal > 0 ? `+${item.winMarginTotal}` : item.winMarginTotal} saldo da equipa nas vitorias</small>
+      </div>
+      <span class="metric good-pill">${item.winRate}%</span>
+    </article>
+  `;
+}
+
 function getPlayerMatchSummary(playerId) {
   const summary = {
     appearances: 0,
@@ -1403,6 +1504,66 @@ function getPlayerMatchSummary(playerId) {
     });
 
   return summary;
+}
+
+function getPlayerSynergies(playerId) {
+  const byPlayer = new Map();
+
+  state.games
+    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .forEach((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return;
+      const sameSideIds = getGameSidePlayerIds(game, participation.side).filter((id) => id !== playerId);
+      const outcome = getPlayerOutcome(game, participation.side);
+      const margin = outcome === "win" ? Math.max(0, getTeamGoalDiff(game, participation.side)) : 0;
+
+      sameSideIds.forEach((teammateId) => {
+        const stats = byPlayer.get(teammateId) || {
+          playerId: teammateId,
+          gamesTogether: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          winMarginTotal: 0,
+        };
+        stats.gamesTogether += 1;
+        if (outcome === "win") {
+          stats.wins += 1;
+          stats.winMarginTotal += margin;
+        }
+        if (outcome === "draw") stats.draws += 1;
+        if (outcome === "loss") stats.losses += 1;
+        byPlayer.set(teammateId, stats);
+      });
+    });
+
+  return [...byPlayer.values()]
+    .map((stats) => ({
+      ...stats,
+      winRate: stats.gamesTogether ? Math.round((stats.wins / stats.gamesTogether) * 100) : 0,
+      score: stats.wins * 12 + stats.winMarginTotal * 2 + stats.gamesTogether + (stats.gamesTogether ? stats.wins / stats.gamesTogether : 0),
+    }))
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.wins - a.wins ||
+      b.winMarginTotal - a.winMarginTotal ||
+      b.gamesTogether - a.gamesTogether ||
+      (findPlayer(a.playerId)?.name || "").localeCompare(findPlayer(b.playerId)?.name || "")
+    )
+    .slice(0, 4);
+}
+
+function getGameSidePlayerIds(game, side) {
+  return side === "A"
+    ? [...(game.teamA || []), ...(game.benchA || [])]
+    : [...(game.teamB || []), ...(game.benchB || [])];
+}
+
+function getTeamGoalDiff(game, side) {
+  if (game.scoreA == null || game.scoreB == null) return 0;
+  const diff = Number(game.scoreA) - Number(game.scoreB);
+  return side === "A" ? diff : -diff;
 }
 
 function getPlayerParticipation(game, playerId) {
@@ -2520,7 +2681,7 @@ function renderPlayerList() {
           <strong>${escapeHtml(p.name)}</strong>
           <span>${p.isGuest ? "Convidado" : "Fixo"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
         </button>
-        <span class="rating-badge">${p.overall}→${form.currentRating}</span>
+        ${renderRatingBadge(p, form)}
       </label>
     `;
   }).join("");
@@ -2980,7 +3141,7 @@ function renderDot(playerData, teamClass, pos) {
   return `
     <div class="player-dot fut-card ${teamClass} ${playerData.photoDataUrl ? "has-photo" : ""}" style="left:${pos.x}%;top:${pos.y}%">
       <div class="fut-head">
-        <strong>${form.currentRating}</strong>
+        <strong>${canSeeCurrentRatings() ? form.currentRating : playerData.overall}</strong>
         <small>${formatSigned(form.adjustment)}</small>
       </div>
       <div class="fut-photo">
@@ -3211,20 +3372,20 @@ function renderPlayersTable() {
       <tr>
         <td><button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
         <td><button class="player-name-link" data-open-player="${p.id}" type="button"><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</button></td>
-        <td>${p.pace}</td>
-        <td>${p.shooting}</td>
-        <td>${p.passing}</td>
-        <td>${p.dribbling}</td>
-        <td>${p.defending}</td>
-        <td>${p.physical}</td>
-        <td><strong>${p.overall}</strong></td>
-        <td><strong>${form.currentRating}</strong> <span class="metric">${formatSigned(form.adjustment)}</span></td>
-        <td>${renderLinkedAccountCell(p)}</td>
-        <td>
+        <td class="ovr-col">${renderRatingBadge(p, form)}</td>
+        <td class="stat-col">${p.pace}</td>
+        <td class="stat-col">${p.shooting}</td>
+        <td class="stat-col">${p.passing}</td>
+        <td class="stat-col">${p.dribbling}</td>
+        <td class="stat-col">${p.defending}</td>
+        <td class="stat-col">${p.physical}</td>
+        <td class="admin-only">${renderLinkedAccountCell(p)}</td>
+        <td class="admin-only">
           <button class="mini-btn" data-edit-player="${p.id}">Editar</button>
           ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
           <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
         </td>
+        <td class="form-col">${renderRecordDots(form.recentRecord)}</td>
       </tr>
     `;
   }).join("");
@@ -3255,9 +3416,22 @@ function renderLinkedAccountCell(playerData) {
   `;
 }
 
+function getPartialRatingInputs() {
+  return [els.formPace, els.formShooting, els.formPassing, els.formDribbling, els.formDefending, els.formPhysical].filter(Boolean);
+}
+
+function updateOverallFromPartialRatings() {
+  if (!els.formOverall) return;
+  const values = getPartialRatingInputs().map((input) => clampRating(input.value));
+  if (values.length !== 6) return;
+  const average = Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  els.formOverall.value = average;
+}
+
 async function savePlayerFromForm(event) {
   event.preventDefault();
   if (!requireAdmin()) return;
+  updateOverallFromPartialRatings();
   const values = {
     id: els.playerId.value || `p-${Date.now()}-${slug(els.formName.value)}`,
     name: els.formName.value.trim(),
@@ -3297,6 +3471,7 @@ function editPlayer(playerId) {
   els.formDefending.value = p.defending;
   els.formPhysical.value = p.physical;
   els.formOverall.value = p.overall;
+  updateOverallFromPartialRatings();
   pendingPhotoDataUrl = p.photoDataUrl || "";
   showView("players");
 }

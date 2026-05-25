@@ -7,15 +7,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Footer">
     <title>Footer</title>
-    <link rel="manifest" href="manifest.webmanifest?v=20260525-footer2">
-    <link rel="stylesheet" href="styles.css?v=20260525-footer2">
+    <link rel="manifest" href="manifest.webmanifest?v=20260525-players1">
+    <link rel="stylesheet" href="styles.css?v=20260525-players1">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="topbar-main">
           <div class="brand">
-            <img class="brand-logo" src="assets/footer-logo.png?v=20260525-footer2" width="48" height="48" alt="">
+            <img class="brand-logo" src="assets/footer-logo.png?v=20260525-players1" width="48" height="48" alt="">
             <h1>Footer</h1>
           </div>
           <div class="account-bar">
@@ -171,10 +171,11 @@
           <section class="panel wide-panel">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">Base editavel</p>
+                <p class="eyebrow admin-only">Base editavel</p>
+                <p class="eyebrow non-admin-only">Stats e comparacao</p>
                 <h2>Jogadores</h2>
               </div>
-              <div class="actions">
+              <div class="actions admin-only">
                 <button id="export-data" class="ghost-btn">Exportar JSON</button>
                 <label class="file-btn">
                   Importar
@@ -184,7 +185,7 @@
               </div>
             </div>
 
-            <form id="player-form" class="player-form">
+            <form id="player-form" class="player-form admin-only">
               <input id="player-id" type="hidden">
               <input id="form-name" required placeholder="Nome">
               <input id="form-pace" type="number" min="0" max="100" required placeholder="Ritmo">
@@ -193,7 +194,7 @@
               <input id="form-dribbling" type="number" min="0" max="100" required placeholder="Drible">
               <input id="form-defending" type="number" min="0" max="100" required placeholder="Defesa">
               <input id="form-physical" type="number" min="0" max="100" required placeholder="Fisico">
-              <input id="form-overall" type="number" min="0" max="100" required placeholder="Overall">
+              <input id="form-overall" type="number" min="0" max="100" required readonly placeholder="Overall">
               <label class="photo-upload">
                 Foto
                 <input id="form-photo" type="file" accept="image/*">
@@ -209,16 +210,16 @@
                   <tr>
                     <th>Foto</th>
                     <th>Nome</th>
-                    <th>PAC</th>
-                    <th>SHO</th>
-                    <th>PAS</th>
-                    <th>DRI</th>
-                    <th>DEF</th>
-                    <th>PHY</th>
-                    <th>OVR</th>
-                    <th>Atual</th>
-                    <th>Conta</th>
-                    <th></th>
+                    <th class="ovr-col">OVR</th>
+                    <th class="stat-col">PAC</th>
+                    <th class="stat-col">SHO</th>
+                    <th class="stat-col">PAS</th>
+                    <th class="stat-col">DRI</th>
+                    <th class="stat-col">DEF</th>
+                    <th class="stat-col">PHY</th>
+                    <th class="admin-only">Conta</th>
+                    <th class="admin-only"></th>
+                    <th class="form-col">Ult. 5</th>
                   </tr>
                 </thead>
                 <tbody id="players-table"></tbody>
@@ -281,8 +282,8 @@
     </div>
 
     <canvas id="export-canvas" width="1600" height="2200" hidden></canvas>
-    <script src="app-config.js?v=20260525-footer2"></script>
+    <script src="app-config.js?v=20260525-players1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260525-footer2"></script>
+    <script src="app.js?v=20260525-players1"></script>
   </body>
 </html>
