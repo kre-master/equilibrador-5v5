@@ -87,9 +87,16 @@ button {
   gap: 10px;
 }
 
+.brand h1 {
+  white-space: nowrap;
+}
+
 .brand-logo {
-  width: 56px;
-  height: 56px;
+  display: block;
+  width: 48px;
+  height: 48px;
+  max-width: 48px;
+  max-height: 48px;
   object-fit: contain;
   flex: 0 0 auto;
 }
@@ -1620,8 +1627,7 @@ th:last-child {
 }
 
 @media (max-width: 1180px) {
-  .layout-grid,
-  .events-grid {
+  .layout-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1649,21 +1655,40 @@ th:last-child {
 
   .topbar-main {
     align-items: center;
+    gap: 10px;
   }
 
   .brand-logo {
-    width: 48px;
-    height: 48px;
+    width: 42px;
+    height: 42px;
+    max-width: 42px;
+    max-height: 42px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand h1 {
+    font-size: 34px;
   }
 
   .account-bar {
     align-items: center;
     flex-direction: row;
     justify-content: flex-end;
+    gap: 6px;
   }
 
   .account-bar span {
     font-size: 11px;
+    padding: 8px 10px;
+  }
+
+  .topbar .ghost-btn {
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 0 12px;
   }
 
   .tabs {
