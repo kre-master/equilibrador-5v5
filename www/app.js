@@ -61,7 +61,7 @@ let currentEventId = null;
 let currentPaymentsMonth = monthKey(new Date());
 let selectedIds = new Set();
 let currentSuggestions = [];
-let currentGameId = state.games[0]?.id || null;
+let currentGameId = null;
 let previewGame = null;
 let authActionBusy = false;
 let currentPlayerProfileId = null;
@@ -837,7 +837,7 @@ async function loadRemoteState() {
   gameFinanceOverrides = state.gameFinanceOverrides || [];
   financeSettings = state.financeSettings || financeSettings;
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
-  currentGameId = state.games[0]?.id || null;
+  currentGameId = null;
   saveState();
 }
 
@@ -2027,7 +2027,7 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-generate]").forEach((button) => {
     button.addEventListener("click", () => {
       currentEventId = button.dataset.eventGenerate;
-      loadCurrentEventGoingPlayers();
+      loadCurrentEventGoingPlayers({ autoGenerate: true });
     });
   });
   els.eventsList.querySelectorAll("[data-event-cancel]").forEach((button) => {
@@ -2388,7 +2388,7 @@ async function deleteEvent(eventId) {
   render();
 }
 
-function loadCurrentEventGoingPlayers() {
+function loadCurrentEventGoingPlayers(options = {}) {
   const eventData = getCurrentEvent();
   if (!eventData) {
     setHint("Ainda nao ha convocatoria para carregar.", "warn");
@@ -2398,9 +2398,15 @@ function loadCurrentEventGoingPlayers() {
   const goingPlayers = getEventPlayers(eventData.id, "going");
   selectedIds = new Set(goingPlayers.map((p) => p.id));
   currentEventId = eventData.id;
+  currentGameId = null;
+  previewGame = null;
+  currentSuggestions = [];
   showView("today");
   render();
   setHint(`${goingPlayers.length} confirmados carregados da convocatoria "${eventData.title}".`, goingPlayers.length >= 10 && goingPlayers.length <= 13 ? "good" : "warn");
+  if (options.autoGenerate) {
+    generateAndRenderSuggestions({ autoPreviewBest: true });
+  }
 }
 
 async function requestPlayerClaim(playerId) {
@@ -2582,7 +2588,11 @@ function setHint(message, level) {
   els.selectionHint.className = `hint ${level || ""}`.trim();
 }
 
-function generateAndRenderSuggestions() {
+function generateAndRenderSuggestions(options = {}) {
+  previewGame = null;
+  currentGameId = null;
+  renderCurrentGame();
+
   const selected = getSelectedPlayers();
   if (selected.length < 10 || selected.length > 13) {
     setHint("Seleciona entre 10 e 13 jogadores antes de gerar.", "warn");
@@ -2591,6 +2601,9 @@ function generateAndRenderSuggestions() {
 
   currentSuggestions = generateSuggestions(selected, state.games).slice(0, 6);
   renderSuggestions();
+  if (options.autoPreviewBest && currentSuggestions.length) {
+    previewSuggestion(0);
+  }
 }
 
 function renderSuggestions() {
@@ -2765,7 +2778,7 @@ function previewSuggestion(index) {
   previewGame = createGameFromSuggestion(suggestion);
   currentGameId = null;
   renderCurrentGame();
-  els.suggestions.innerHTML = `<div class="hint good">Sugestao no campo. Exporta o PNG e confirma so quando estiver certo.</div>`;
+  setHint("Sugestao no campo. Confirma so quando estiver certo.", "good");
 }
 
 async function confirmPreviewGame() {
@@ -3083,7 +3096,7 @@ function addSelectedPlayerToGame() {
   render();
 }
 
-function saveCurrentScore() {
+async function saveCurrentScore() {
   if (!requireAdmin()) return;
   const game = getCurrentGame();
   if (!game) return;
@@ -3092,7 +3105,15 @@ function saveCurrentScore() {
   game.scoreA = Number.isNaN(scoreA) ? null : scoreA;
   game.scoreB = Number.isNaN(scoreB) ? null : scoreB;
   game.status = game.scoreA == null || game.scoreB == null ? "open" : "finished";
-  if (game.status !== "preview") persistState();
+  if (game.status !== "preview") await persistState();
+  if (game.status === "finished") {
+    currentGameId = null;
+    previewGame = null;
+    currentSuggestions = [];
+    if (els.suggestions) {
+      els.suggestions.innerHTML = "";
+    }
+  }
   render();
 }
 
@@ -3343,7 +3364,7 @@ async function deleteGame(gameId) {
   }
   state.games = state.games.filter((item) => item.id !== gameId);
   if (currentGameId === gameId) {
-    currentGameId = state.games[0]?.id || null;
+    currentGameId = null;
     previewGame = null;
   }
   saveState();
@@ -3670,7 +3691,7 @@ function importData(event) {
       gameFinanceOverrides = migrated.gameFinanceOverrides;
       financeSettings = migrated.financeSettings;
       selectedIds.clear();
-      currentGameId = state.games[0]?.id || null;
+      currentGameId = null;
       persistState();
       render();
     } catch (error) {
