@@ -122,6 +122,9 @@ create table if not exists public.events (
   updated_at timestamptz default now()
 );
 
+alter table public.events
+alter column max_players set default 12;
+
 create table if not exists public.event_responses (
   id uuid primary key default gen_random_uuid(),
   event_id text not null references public.events(id) on delete cascade,
@@ -133,6 +136,51 @@ create table if not exists public.event_responses (
 
 create unique index if not exists event_responses_one_per_player
 on public.event_responses (event_id, player_id);
+
+create or replace function public.enforce_event_max_players()
+returns trigger
+language plpgsql
+as $$
+declare
+  event_limit integer;
+  going_count integer;
+begin
+  if new.status <> 'going' then
+    return new;
+  end if;
+
+  select max_players
+  into event_limit
+  from public.events
+  where id = new.event_id
+  for update;
+
+  if event_limit is null then
+    return new;
+  end if;
+
+  select count(*)
+  into going_count
+  from public.event_responses
+  where event_id = new.event_id
+    and status = 'going'
+    and player_id <> new.player_id;
+
+  if going_count >= event_limit then
+    raise exception 'event_max_players_reached'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_event_max_players on public.event_responses;
+create trigger enforce_event_max_players
+before insert or update of event_id, player_id, status
+on public.event_responses
+for each row
+execute function public.enforce_event_max_players();
 
 create table if not exists public.payments (
   id text primary key,

@@ -300,7 +300,7 @@ function normalizeEventRecord(record) {
     startsAt,
     location: String(record.location || ""),
     minPlayers: Number(record.minPlayers ?? record.min_players ?? 10),
-    maxPlayers: Number(record.maxPlayers ?? record.max_players ?? 13),
+    maxPlayers: Number(record.maxPlayers ?? record.max_players ?? 12),
     status: String(record.status || "open"),
     createdBy: record.createdBy || record.created_by || null,
   };
@@ -1994,6 +1994,18 @@ function getResponseForPlayer(eventId, playerId) {
   return eventResponses.find((response) => response.eventId === eventId && response.playerId === playerId) || null;
 }
 
+function getEventGoingCount(eventId, exceptPlayerId = null) {
+  return getEventResponses(eventId, "going")
+    .filter((response) => response.playerId !== exceptPlayerId)
+    .length;
+}
+
+function isEventFullForPlayer(eventData, playerId) {
+  const currentResponse = playerId ? getResponseForPlayer(eventData.id, playerId) : null;
+  if (currentResponse?.status === "going") return false;
+  return getEventGoingCount(eventData.id, playerId) >= eventData.maxPlayers;
+}
+
 function renderEventsList() {
   if (!els.eventsList) return;
   if (els.eventDate && !els.eventDate.value) {
@@ -2045,6 +2057,7 @@ function renderEventCard(eventData) {
   const maybe = getEventPlayers(eventData.id, "maybe");
   const notGoing = getEventPlayers(eventData.id, "not_going");
   const missing = Math.max(0, eventData.minPlayers - going.length);
+  const isFull = going.length >= eventData.maxPlayers;
   const isSelected = eventData.id === currentEventId;
   return `
     <article class="event-card ${isSelected ? "selected" : ""}">
@@ -2060,6 +2073,7 @@ function renderEventCard(eventData) {
         <span class="metric good-pill">Vou ${going.length}</span>
         <span class="metric">Talvez ${maybe.length}</span>
         <span class="metric">Nao vou ${notGoing.length}</span>
+        ${isFull ? `<span class="metric warn-pill">Cheio</span>` : ""}
         <span class="metric ${missing ? "warn-pill" : "good-pill"}">${missing ? `Faltam ${missing}` : "Pronto"}</span>
       </div>
       ${renderResponseActions(eventData, myResponse)}
@@ -2074,7 +2088,7 @@ function renderEventCard(eventData) {
         ${eventData.status === "cancelled" ? `
           <button class="danger-btn" data-event-delete="${eventData.id}">Apagar convocatoria</button>
         ` : `
-          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < 10 || going.length > 13 ? "disabled" : ""}>Gerar com confirmados</button>
+          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < eventData.minPlayers || going.length > Math.min(eventData.maxPlayers, 13) ? "disabled" : ""}>Gerar com confirmados</button>
           <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
         `}
       </div>
@@ -2097,11 +2111,13 @@ function renderResponseActions(eventData, myResponse) {
     return `<div class="hint">Admin sem perfil associado. Podes acompanhar e gerar equipas.</div>`;
   }
   const status = myResponse?.status || "";
+  const goingDisabled = status !== "going" && isEventFullForPlayer(eventData, linkedPlayer.id);
   return `
     <div class="response-row">
-      <button class="ghost-btn ${status === "going" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="going">Vou</button>
+      <button class="ghost-btn ${status === "going" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="going" ${goingDisabled ? "disabled" : ""}>Vou</button>
       <button class="ghost-btn ${status === "maybe" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="maybe">Talvez</button>
       <button class="ghost-btn ${status === "not_going" ? "selected" : ""}" data-event-id="${eventData.id}" data-event-response="not_going">Nao vou</button>
+      ${goingDisabled ? `<span class="hint warn">Limite de ${eventData.maxPlayers} jogadores atingido.</span>` : ""}
     </div>
   `;
 }
@@ -2120,6 +2136,7 @@ function renderRosterMini(label, players) {
 
 function renderEventAdminAdds(eventData) {
   if (!isAdmin || eventData.status === "cancelled") return "";
+  const isFull = getEventGoingCount(eventData.id) >= eventData.maxPlayers;
   const assignedIds = new Set(getEventResponses(eventData.id).map((response) => response.playerId));
   const availablePlayers = state.players
     .filter((p) => !p.isGuest && !assignedIds.has(p.id))
@@ -2131,13 +2148,14 @@ function renderEventAdminAdds(eventData) {
           <option value="">Adicionar jogador existente</option>
           ${availablePlayers.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} - ${p.overall}</option>`).join("")}
         </select>
-        <button class="ghost-btn" data-event-add-existing-btn="${eventData.id}">Adicionar como Vou</button>
+        <button class="ghost-btn" data-event-add-existing-btn="${eventData.id}" ${isFull ? "disabled" : ""}>Adicionar como Vou</button>
       </div>
       <div class="add-guest-row">
         <input data-event-guest-name="${eventData.id}" placeholder="Amigo novo">
         <input data-event-guest-score="${eventData.id}" type="number" min="0" max="10" step="0.5" placeholder="0-10">
-        <button class="ghost-btn" data-event-add-guest-btn="${eventData.id}">Adicionar convidado</button>
+        <button class="ghost-btn" data-event-add-guest-btn="${eventData.id}" ${isFull ? "disabled" : ""}>Adicionar convidado</button>
       </div>
+      ${isFull ? `<div class="hint warn">Limite de ${eventData.maxPlayers} jogadores atingido.</div>` : ""}
     </div>
   `;
 }
@@ -2148,7 +2166,7 @@ async function saveEventFromForm(event) {
   const title = els.eventTitle.value.trim();
   const startsAt = fromDateTimeLocalInput(els.eventDate.value);
   const location = els.eventLocation.value.trim();
-  const maxPlayers = Number(els.eventMaxPlayers.value || 13);
+  const maxPlayers = Number(els.eventMaxPlayers.value || 12);
   if (!title || !startsAt) return;
 
   const eventData = normalizeEventRecord({
@@ -2193,7 +2211,7 @@ async function saveEventResponse(eventId, status) {
   try {
     await saveEventResponseForPlayer(eventId, linkedPlayer.id, status, currentSession.user.id);
   } catch (error) {
-    alert(`Nao consegui guardar resposta: ${error.message}`);
+    alert(`Nao consegui guardar resposta: ${formatEventResponseError(error)}`);
     return;
   }
   currentEventId = eventId;
@@ -2201,6 +2219,12 @@ async function saveEventResponse(eventId, status) {
 }
 
 async function saveEventResponseForPlayer(eventId, playerId, status, userId = null) {
+  const eventData = (state.events || []).find((item) => item.id === eventId);
+  const existing = getResponseForPlayer(eventId, playerId);
+  if (eventData && status === "going" && existing?.status !== "going" && getEventGoingCount(eventId, playerId) >= eventData.maxPlayers) {
+    throw new Error(`Limite de ${eventData.maxPlayers} jogadores atingido.`);
+  }
+
   const row = {
     event_id: eventId,
     player_id: playerId,
@@ -2218,7 +2242,6 @@ async function saveEventResponseForPlayer(eventId, playerId, status, userId = nu
     return;
   }
 
-  const existing = getResponseForPlayer(eventId, playerId);
   if (existing) {
     existing.status = status;
     existing.updatedAt = row.updated_at;
@@ -2237,7 +2260,7 @@ async function addExistingPlayerToEvent(eventId) {
     currentEventId = eventId;
     render();
   } catch (error) {
-    alert(`Nao consegui adicionar jogador: ${error.message}`);
+    alert(`Nao consegui adicionar jogador: ${formatEventResponseError(error)}`);
   }
 }
 
@@ -2281,8 +2304,15 @@ async function addGuestToEvent(eventId) {
     render();
   } catch (error) {
     state.players = state.players.filter((p) => p.id !== guest.id);
-    alert(`Nao consegui adicionar convidado: ${error.message}`);
+    alert(`Nao consegui adicionar convidado: ${formatEventResponseError(error)}`);
   }
+}
+
+function formatEventResponseError(error) {
+  if (String(error?.message || "").includes("event_max_players_reached")) {
+    return "a convocatoria ja atingiu o limite de jogadores.";
+  }
+  return error?.message || "erro inesperado.";
 }
 
 function shareEventOnWhatsApp(eventId) {
