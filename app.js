@@ -62,6 +62,7 @@ let currentPaymentsMonth = monthKey(new Date());
 let selectedIds = new Set();
 let currentSuggestions = [];
 let currentGameId = null;
+let currentGenerationDateIso = new Date().toISOString();
 let previewGame = null;
 let authActionBusy = false;
 let currentPlayerProfileId = null;
@@ -639,6 +640,7 @@ function bindEvents() {
     renderPlayerList();
   });
   on(els.addGuest, "click", addGuest);
+  on(els.gameDate, "input", updatePreviewGameDate);
   on(els.gameDate, "change", updatePreviewGameDate);
   on(els.generateTeams, "click", generateAndRenderSuggestions);
   on(els.confirmGame, "click", confirmPreviewGame);
@@ -2788,22 +2790,40 @@ function previewSuggestion(index) {
 
 function ensureGameDateInput() {
   if (!els.gameDate || els.gameDate.value) return;
-  setGameDateInput(new Date().toISOString());
+  setGameDateInput(currentGenerationDateIso || new Date().toISOString());
 }
 
 function setGameDateInput(value) {
   if (!els.gameDate || !value) return;
-  els.gameDate.value = toDateTimeLocalInput(value);
+  const iso = normalizeGenerationDate(value);
+  if (!iso) return;
+  currentGenerationDateIso = iso;
+  els.gameDate.value = toDateTimeLocalInput(iso);
 }
 
 function getGenerationDateIso() {
   ensureGameDateInput();
-  return fromDateTimeLocalInput(els.gameDate?.value) || new Date().toISOString();
+  syncGenerationDateFromInput();
+  return currentGenerationDateIso || new Date().toISOString();
+}
+
+function normalizeGenerationDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function syncGenerationDateFromInput() {
+  const iso = fromDateTimeLocalInput(els.gameDate?.value);
+  if (iso) {
+    currentGenerationDateIso = iso;
+  }
+  return currentGenerationDateIso;
 }
 
 function updatePreviewGameDate() {
+  syncGenerationDateFromInput();
   if (!previewGame) return;
-  previewGame.date = getGenerationDateIso();
+  previewGame.date = currentGenerationDateIso;
   renderCurrentGame();
 }
 
