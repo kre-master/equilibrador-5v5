@@ -1259,10 +1259,10 @@ h3 {
 
 .card-stats {
   position: absolute;
-  top: 65.69%;
-  left: 8.45%;
-  width: 81.86%;
-  height: 22.72%;
+  top: 64%;
+  left: 12%;
+  width: 76%;
+  height: 23%;
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-content: center;

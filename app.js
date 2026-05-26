@@ -3813,17 +3813,17 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
     ["DEF", playerData.defending],
     ["PHY", playerData.physical],
   ];
-  const startY = y + height * 0.725;
+  const startY = y + height * 0.70;
   const rowGap = height * 0.064;
   ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
   ctx.font = `800 ${Math.round(width * 0.027)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   left.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.165, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.18, startY + index * rowGap);
   });
   right.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.545, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.55, startY + index * rowGap);
   });
 }
 
