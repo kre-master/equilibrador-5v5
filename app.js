@@ -3789,13 +3789,16 @@ async function drawPlayerDot(ctx, playerData, pos, color) {
   ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
   ctx.textAlign = "left";
   ctx.font = `900 ${Math.round(width * 0.086)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.12, y + height * 0.238);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.1717, y + height * 0.2304);
 
   ctx.textAlign = "center";
   ctx.font = `900 ${Math.round(width * 0.092)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), pos.x, y + height * 0.612);
+  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.491, y + height * 0.5917);
 
   drawFutStats(ctx, playerData, x, y, width, height, variant);
+  ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
 }
 
@@ -3810,26 +3813,26 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
     ["DEF", playerData.defending],
     ["PHY", playerData.physical],
   ];
-  const startY = y + height * 0.715;
-  const rowGap = height * 0.088;
+  const startY = y + height * 0.725;
+  const rowGap = height * 0.064;
   ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
   ctx.font = `800 ${Math.round(width * 0.027)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   left.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.18, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.165, startY + index * rowGap);
   });
   right.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.56, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.545, startY + index * rowGap);
   });
 }
 
 function getCardPhotoRect(x, y, width, height) {
   return {
-    x: x + width * 0.36,
-    y: y + height * 0.182,
-    w: width * 0.47,
-    h: height * 0.23,
+    x: x + width * 0.3324,
+    y: y + height * 0.1232,
+    w: width * 0.5499,
+    h: height * 0.4042,
   };
 }
 
