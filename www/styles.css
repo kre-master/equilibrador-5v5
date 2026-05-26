@@ -1184,8 +1184,8 @@ h3 {
 .card-rating {
   position: absolute;
   z-index: 3;
-  top: 20%;
-  left: 17%;
+  top: 20.8%;
+  left: 12%;
   display: grid;
   line-height: .9;
   text-align: left;
@@ -1193,7 +1193,7 @@ h3 {
 }
 
 .card-rating strong {
-  font-size: 21px;
+  font-size: 13px;
   font-weight: 950;
 }
 
@@ -1207,10 +1207,10 @@ h3 {
 .card-photo {
   position: absolute;
   z-index: 2;
-  top: 20.5%;
-  left: 32%;
-  width: 55%;
-  height: 28%;
+  top: 18.2%;
+  left: 36%;
+  width: 47%;
+  height: 23%;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1221,7 +1221,7 @@ h3 {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 38%;
+  object-position: center 32%;
 }
 
 .card-photo span {
@@ -1238,7 +1238,7 @@ h3 {
 
 .card-name {
   position: absolute;
-  top: 55.6%;
+  top: 57.8%;
   left: 16%;
   width: 68%;
   overflow: hidden;
@@ -1251,19 +1251,19 @@ h3 {
 
 .card-stats {
   position: absolute;
-  top: 68.5%;
-  left: 14%;
-  width: 72%;
+  top: 70%;
+  left: 18%;
+  width: 64%;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2.4% 10%;
-  font-size: 8.5px;
+  gap: 2.4% 14%;
+  font-size: 3.4px;
   font-weight: 900;
   line-height: 1;
 }
 
 .player-card-profile .card-rating strong {
-  font-size: 48px;
+  font-size: 29px;
 }
 
 .player-card-profile .card-rating span {
@@ -1279,7 +1279,7 @@ h3 {
 }
 
 .player-card-profile .card-stats {
-  font-size: 19px;
+  font-size: 17px;
 }
 
 .card-stats span {
