@@ -1136,7 +1136,7 @@ h3 {
 }
 
 .player-dot {
-  width: clamp(86px, 12%, 118px);
+  width: clamp(72px, 10.5%, 104px);
   min-height: 0;
   aspect-ratio: 733 / 1024;
   border: 0;
@@ -1183,19 +1183,22 @@ h3 {
 
 .card-rating {
   position: absolute;
-  top: 9.5%;
-  left: 12.5%;
+  z-index: 3;
+  top: 20%;
+  left: 17%;
   display: grid;
   line-height: .9;
   text-align: left;
+  text-shadow: 0 1px 4px rgba(255,255,255,.42);
 }
 
 .card-rating strong {
-  font-size: 28px;
+  font-size: 21px;
   font-weight: 950;
 }
 
 .card-rating span {
+  display: none;
   margin-top: 3px;
   font-size: 11px;
   font-weight: 950;
@@ -1203,6 +1206,7 @@ h3 {
 
 .card-photo {
   position: absolute;
+  z-index: 2;
   top: 20.5%;
   left: 32%;
   width: 55%;
@@ -1259,7 +1263,7 @@ h3 {
 }
 
 .player-card-profile .card-rating strong {
-  font-size: 68px;
+  font-size: 48px;
 }
 
 .player-card-profile .card-rating span {

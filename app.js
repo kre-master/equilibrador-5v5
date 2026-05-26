@@ -3192,12 +3192,10 @@ function renderPlayerCard(playerData, options = {}) {
   const variant = options.variant || getPlayerCardVariant(playerData, form);
   const mode = options.mode || "field";
   const rating = canSeeCurrentRatings() ? form.currentRating : playerData.overall;
-  const formLabel = variant.key === "mvp" ? "MVP" : formatSigned(form.adjustment);
   return `
     <article class="player-card player-card-${mode} card-variant-${variant.key}" style="--card-bg: url('${variant.asset}')">
       <div class="card-rating">
         <strong>${rating}</strong>
-        <span>${formLabel}</span>
       </div>
       <div class="card-photo">
         ${renderPlayerCardPhoto(playerData)}
@@ -3790,10 +3788,8 @@ async function drawPlayerDot(ctx, playerData, pos, color) {
 
   ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
   ctx.textAlign = "left";
-  ctx.font = `900 ${Math.round(width * 0.18)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.10, y + height * 0.16);
-  ctx.font = `900 ${Math.round(width * 0.064)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(variant.key === "mvp" ? "MVP" : formatSigned(form.adjustment), x + width * 0.11, y + height * 0.22);
+  ctx.font = `900 ${Math.round(width * 0.14)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
+  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.16, y + height * 0.235);
 
   ctx.textAlign = "center";
   ctx.font = `900 ${Math.round(width * 0.092)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
