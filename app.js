@@ -13,6 +13,15 @@ const FORM_LEVELS = {
   recovery: { label: "A recuperar", className: "form-recovery" },
 };
 
+const PLAYER_CARD_VARIANTS = {
+  recovery: { key: "recovery", asset: "assets/cards/form-recovery.png", label: "-1X" },
+  bad: { key: "bad", asset: "assets/cards/form-bad.png", label: "-1" },
+  normal: { key: "normal", asset: "assets/cards/form-normal.png", label: "0" },
+  good: { key: "good", asset: "assets/cards/form-good.png", label: "+1" },
+  hot: { key: "hot", asset: "assets/cards/form-hot.png", label: "+1X" },
+  mvp: { key: "mvp", asset: "assets/cards/mvp.png", label: "MVP" },
+};
+
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
 
@@ -133,6 +142,7 @@ const els = {
 
 let pendingPhotoDataUrl = null;
 const photoCache = new Map();
+const cardAssetCache = new Map();
 
 window.addEventListener("error", (event) => {
   if (els.playerList) {
@@ -1316,20 +1326,23 @@ function renderPlayerProfile() {
   const form = getPlayerForm(playerData);
   const canSeePrivateForm = canSeeCurrentRatings();
   const synergies = getPlayerSynergies(playerData.id);
+  const variant = getPlayerCardVariant(playerData, form);
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
       <button class="ghost-btn" data-player-profile-back>Voltar</button>
-      <div class="player-hero">
-        ${renderAvatar(playerData)}
-        <div>
+      <div class="player-hero card-hero-${variant.key}">
+        <div class="player-hero-copy">
           <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
           <h2>${escapeHtml(playerData.name)}</h2>
           ${account ? `<p>${escapeHtml(account.email || account.username || "")}</p>` : ""}
+          <div class="player-rating-stack">
+            <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
+            ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>${renderFormSign(form)}`}
+          </div>
         </div>
-        <div class="player-rating-stack">
-          <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
-          ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>${renderFormSign(form)}`}
+        <div class="player-profile-card-wrap">
+          ${renderPlayerCard(playerData, { mode: "profile", form, variant })}
         </div>
       </div>
     </div>
@@ -1424,10 +1437,37 @@ function renderFormSign(form, options = {}) {
 }
 
 function renderRatingBadge(playerData, form = getPlayerForm(playerData)) {
+  const variant = getPlayerCardVariant(playerData, form);
   if (canSeeCurrentRatings()) {
-    return `<span class="rating-badge admin-rating">${playerData.overall}&rarr;${form.currentRating}</span>`;
+    return `<span class="rating-badge admin-rating ${renderCardHaloClass(playerData, variant)}">${playerData.overall}&rarr;${form.currentRating}</span>`;
   }
-  return `<span class="rating-badge public-rating"><strong>${playerData.overall}</strong>${renderFormSign(form, { compact: true })}</span>`;
+  return `<span class="rating-badge public-rating ${renderCardHaloClass(playerData, variant)}"><strong>${playerData.overall}</strong>${renderFormSign(form, { compact: true })}</span>`;
+}
+
+function renderCardHaloClass(playerData, variant = getPlayerCardVariant(playerData)) {
+  if (!playerData || !variant) return "";
+  return `card-halo card-halo-${variant.key}`;
+}
+
+function getPlayerCardVariant(playerData, form = getPlayerForm(playerData)) {
+  if (!playerData) return PLAYER_CARD_VARIANTS.normal;
+  const latestMvpIds = getLatestOfficialMvpIds();
+  if (latestMvpIds.has(playerData.id)) return PLAYER_CARD_VARIANTS.mvp;
+  return PLAYER_CARD_VARIANTS[form?.levelKey] || PLAYER_CARD_VARIANTS.normal;
+}
+
+function getLatestOfficialMvpIds() {
+  const finishedGames = [...state.games]
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  for (const game of finishedGames) {
+    const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
+    const winners = getOfficialMvpWinners(countMvpVotes(votes));
+    if (winners.length) return new Set(winners.map((playerData) => playerData.id));
+  }
+
+  return new Set();
 }
 
 function canSeeCurrentRatings() {
@@ -1470,7 +1510,7 @@ function renderSynergyCard(item) {
   if (!playerData) return "";
   return `
     <article class="synergy-card">
-      <button class="player-open-link" data-open-player="${playerData.id}" type="button">${renderAvatar(playerData)}</button>
+      <button class="player-open-link ${renderCardHaloClass(playerData)}" data-open-player="${playerData.id}" type="button">${renderAvatar(playerData)}</button>
       <div>
         <strong>${escapeHtml(playerData.name)}</strong>
         <span>${item.wins}V em ${item.gamesTogether} jogos juntos</span>
@@ -1510,7 +1550,7 @@ function getPlayerSynergies(playerId) {
   const byPlayer = new Map();
 
   state.games
-    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .filter(isFinishedGame)
     .forEach((game) => {
       const participation = getPlayerParticipation(game, playerId);
       if (!participation) return;
@@ -2291,7 +2331,7 @@ function renderResponseActions(eventData, myResponse) {
 function renderRosterMini(label, players) {
   const roster = players.length
     ? players.map((p) => `
-      <button class="roster-player-chip" data-open-player="${p.id}" type="button">
+      <button class="roster-player-chip ${renderCardHaloClass(p)}" data-open-player="${p.id}" type="button">
         ${renderAvatar(p)}
         <span>${escapeHtml(p.name)}</span>
       </button>
@@ -2673,8 +2713,9 @@ function renderPlayerList() {
   els.playerList.innerHTML = players.map((p) => {
     const selected = selectedIds.has(p.id);
     const form = getPlayerForm(p);
+    const variant = getPlayerCardVariant(p, form);
     return `
-      <label class="player-chip ${selected ? "selected" : ""}">
+      <label class="player-chip ${renderCardHaloClass(p, variant)} ${selected ? "selected" : ""}">
         <input type="checkbox" data-select-player="${p.id}" ${selected ? "checked" : ""}>
         <button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button>
         <button class="player-meta player-open-link" data-open-player="${p.id}" type="button">
@@ -3138,21 +3179,42 @@ function renderField(game) {
 
 function renderDot(playerData, teamClass, pos) {
   const form = getPlayerForm(playerData);
+  const variant = getPlayerCardVariant(playerData, form);
   return `
-    <div class="player-dot fut-card ${teamClass} ${playerData.photoDataUrl ? "has-photo" : ""}" style="left:${pos.x}%;top:${pos.y}%">
-      <div class="fut-head">
-        <strong>${canSeeCurrentRatings() ? form.currentRating : playerData.overall}</strong>
-        <small>${formatSigned(form.adjustment)}</small>
-      </div>
-      <div class="fut-photo">
-        ${playerData.photoDataUrl ? `<img src="${escapeHtml(playerData.photoDataUrl)}" alt="">` : renderAvatar(playerData)}
-      </div>
-      <strong class="fut-name">${escapeHtml(shortName(playerData.name, 11))}</strong>
-      <div class="fut-stats">
-        ${renderFutStats(playerData)}
-      </div>
+    <div class="player-dot ${teamClass} card-variant-${variant.key}" style="left:${pos.x}%;top:${pos.y}%">
+      ${renderPlayerCard(playerData, { mode: "field", form, variant })}
     </div>
   `;
+}
+
+function renderPlayerCard(playerData, options = {}) {
+  const form = options.form || getPlayerForm(playerData);
+  const variant = options.variant || getPlayerCardVariant(playerData, form);
+  const mode = options.mode || "field";
+  const rating = canSeeCurrentRatings() ? form.currentRating : playerData.overall;
+  const formLabel = variant.key === "mvp" ? "MVP" : formatSigned(form.adjustment);
+  return `
+    <article class="player-card player-card-${mode} card-variant-${variant.key}" style="--card-bg: url('${variant.asset}')">
+      <div class="card-rating">
+        <strong>${rating}</strong>
+        <span>${formLabel}</span>
+      </div>
+      <div class="card-photo">
+        ${renderPlayerCardPhoto(playerData)}
+      </div>
+      <strong class="card-name">${escapeHtml(shortName(playerData.name, mode === "profile" ? 15 : 11))}</strong>
+      <div class="card-stats">
+        ${renderFutStats(playerData)}
+      </div>
+    </article>
+  `;
+}
+
+function renderPlayerCardPhoto(playerData) {
+  if (playerData.photoDataUrl) {
+    return `<img src="${escapeHtml(playerData.photoDataUrl)}" alt="">`;
+  }
+  return `<span>${escapeHtml(initials(playerData.name))}</span>`;
 }
 
 function renderFutStats(playerData) {
@@ -3163,7 +3225,7 @@ function renderFutStats(playerData) {
     ["DRI", playerData.dribbling],
     ["DEF", playerData.defending],
     ["PHY", playerData.physical],
-  ].map(([label, value]) => `<span><b>${value}</b> ${label}</span>`).join("");
+  ].map(([label, value]) => `<span><b>${value}</b><em>${label}</em></span>`).join("");
 }
 
 function orderTeamForField(players) {
@@ -3368,9 +3430,10 @@ function renderPlayersTable() {
   const players = [...state.players].sort((a, b) => a.name.localeCompare(b.name));
   els.playersTable.innerHTML = players.map((p) => {
     const form = getPlayerForm(p);
+    const variant = getPlayerCardVariant(p, form);
     return `
-      <tr>
-        <td><button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
+      <tr class="player-table-row ${renderCardHaloClass(p, variant)}">
+        <td><button class="player-open-link ${renderCardHaloClass(p, variant)}" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button></td>
         <td><button class="player-name-link" data-open-player="${p.id}" type="button"><strong>${escapeHtml(p.name)}</strong>${p.isGuest ? " <span class=\"metric\">Guest</span>" : ""}</button></td>
         <td class="ovr-col">${renderRatingBadge(p, form)}</td>
         <td class="stat-col">${p.pace}</td>
@@ -3686,33 +3749,33 @@ async function drawPlayerDot(ctx, playerData, pos, color) {
   const height = pos.cardHeight || 258;
   const x = pos.x - width / 2;
   const y = pos.y - height / 2;
+  const form = getPlayerForm(playerData);
+  const variant = getPlayerCardVariant(playerData, form);
 
-  const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
-  gradient.addColorStop(0, "#fff2b8");
-  gradient.addColorStop(0.52, "#d6aa45");
-  gradient.addColorStop(1, "#8a6420");
-
-  ctx.save();
-  cardPath(ctx, x, y, width, height);
-  ctx.clip();
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, width, height);
-
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.18;
-  ctx.fillRect(x, y, width, height);
-  ctx.globalAlpha = 1;
-
-  ctx.fillStyle = "rgba(255,255,255,.25)";
-  ctx.beginPath();
-  ctx.moveTo(x + width * 0.18, y + 12);
-  ctx.lineTo(x + width * 0.92, y + height * 0.18);
-  ctx.lineTo(x + width * 0.42, y + height * 0.86);
-  ctx.lineTo(x + width * 0.08, y + height * 0.62);
-  ctx.closePath();
-  ctx.fill();
+  try {
+    const cardImg = await loadCardAsset(variant.asset);
+    ctx.drawImage(cardImg, x, y, width, height);
+  } catch (error) {
+    const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
+    gradient.addColorStop(0, "#fff2b8");
+    gradient.addColorStop(0.52, "#d6aa45");
+    gradient.addColorStop(1, "#8a6420");
+    ctx.save();
+    cardPath(ctx, x, y, width, height);
+    ctx.clip();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(x, y, width, height);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
 
   const photo = getCardPhotoRect(x, y, width, height);
+  ctx.save();
+  roundRect(ctx, photo.x, photo.y, photo.w, photo.h, Math.max(6, width * 0.05));
+  ctx.clip();
   if (playerData.photoDataUrl) {
     try {
       const img = await loadPhoto(playerData.photoDataUrl);
@@ -3723,37 +3786,24 @@ async function drawPlayerDot(ctx, playerData, pos, color) {
   } else {
     drawInitials(ctx, playerData.name, photo.x + photo.w / 2, photo.y + photo.h / 2, Math.min(photo.w, photo.h));
   }
-
   ctx.restore();
-  ctx.strokeStyle = "#f8e7a8";
-  ctx.lineWidth = 5;
-  cardPath(ctx, x, y, width, height);
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(62,42,8,.62)";
-  ctx.lineWidth = 2;
-  cardPath(ctx, x + 5, y + 5, width - 10, height - 10);
-  ctx.stroke();
 
-  ctx.fillStyle = "#2c2615";
+  ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
   ctx.textAlign = "left";
-  ctx.font = `900 ${Math.round(width * 0.18)}px Segoe UI, Arial`;
-  ctx.fillText(String(playerData.overall), x + width * 0.09, y + height * 0.16);
+  ctx.font = `900 ${Math.round(width * 0.18)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
+  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.10, y + height * 0.16);
+  ctx.font = `900 ${Math.round(width * 0.064)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
+  ctx.fillText(variant.key === "mvp" ? "MVP" : formatSigned(form.adjustment), x + width * 0.11, y + height * 0.22);
 
   ctx.textAlign = "center";
-  ctx.font = `900 ${Math.round(width * 0.095)}px Segoe UI, Arial`;
+  ctx.font = `900 ${Math.round(width * 0.092)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   ctx.fillText(shortName(playerData.name, 12).toUpperCase(), pos.x, y + height * 0.59);
-  ctx.strokeStyle = "rgba(90,64,12,.45)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + width * 0.17, y + height * 0.62);
-  ctx.lineTo(x + width * 0.83, y + height * 0.62);
-  ctx.stroke();
 
-  drawFutStats(ctx, playerData, x, y, width, height);
+  drawFutStats(ctx, playerData, x, y, width, height, variant);
   ctx.textAlign = "left";
 }
 
-function drawFutStats(ctx, playerData, x, y, width, height) {
+function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CARD_VARIANTS.normal) {
   const left = [
     ["PAC", playerData.pace],
     ["SHO", playerData.shooting],
@@ -3766,8 +3816,8 @@ function drawFutStats(ctx, playerData, x, y, width, height) {
   ];
   const startY = y + height * 0.70;
   const rowGap = height * 0.088;
-  ctx.fillStyle = "#2c2615";
-  ctx.font = `800 ${Math.round(width * 0.068)}px Segoe UI, Arial`;
+  ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
+  ctx.font = `800 ${Math.round(width * 0.068)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   left.forEach(([label, value], index) => {
     ctx.textAlign = "left";
     ctx.fillText(`${value} ${label}`, x + width * 0.14, startY + index * rowGap);
@@ -3776,19 +3826,14 @@ function drawFutStats(ctx, playerData, x, y, width, height) {
     ctx.textAlign = "left";
     ctx.fillText(`${value} ${label}`, x + width * 0.57, startY + index * rowGap);
   });
-  ctx.strokeStyle = "rgba(90,64,12,.35)";
-  ctx.beginPath();
-  ctx.moveTo(x + width * 0.50, y + height * 0.66);
-  ctx.lineTo(x + width * 0.50, y + height * 0.90);
-  ctx.stroke();
 }
 
 function getCardPhotoRect(x, y, width, height) {
   return {
-    x: x + width * 0.31,
-    y: y + height * 0.18,
-    w: width * 0.61,
-    h: height * 0.34,
+    x: x + width * 0.32,
+    y: y + height * 0.205,
+    w: width * 0.56,
+    h: height * 0.28,
   };
 }
 
@@ -3882,6 +3927,18 @@ function loadPhoto(src) {
   return promise;
 }
 
+function loadCardAsset(src) {
+  if (cardAssetCache.has(src)) return cardAssetCache.get(src);
+  const promise = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+  cardAssetCache.set(src, promise);
+  return promise;
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -3949,10 +4006,14 @@ function getCurrentGame() {
   return game ? ensureGameShape(game) : null;
 }
 
+function isFinishedGame(game) {
+  return Boolean(game && (game.status === "finished" || (game.scoreA != null && game.scoreB != null)));
+}
+
 function getPlayerForm(playerData, games = state.games) {
   const baseOverall = clampRating(playerData?.overall ?? 0);
   const finishedAppearances = [...games]
-    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .filter(isFinishedGame)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map((game) => {
       const participation = getPlayerParticipation(game, playerData.id);
@@ -4009,7 +4070,7 @@ function countCurrentStreak(items, outcome) {
 
 function countRecentAbsences(playerId, games) {
   return [...games]
-    .filter((game) => game?.status === "finished" || (game?.scoreA != null && game?.scoreB != null))
+    .filter(isFinishedGame)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, FORM_LOOKBACK_GAMES)
     .filter((game) => !getPlayerParticipation(game, playerId))

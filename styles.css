@@ -548,6 +548,49 @@ h3 {
   background: rgba(255,245,206,.96);
 }
 
+.card-halo {
+  --halo-color: rgba(201, 159, 63, .26);
+  --halo-ring: rgba(201, 159, 63, .44);
+}
+
+.card-halo-recovery {
+  --halo-color: rgba(32, 137, 19, .25);
+  --halo-ring: rgba(32, 137, 19, .46);
+}
+
+.card-halo-bad {
+  --halo-color: rgba(184, 149, 86, .28);
+  --halo-ring: rgba(92, 70, 24, .38);
+}
+
+.card-halo-normal {
+  --halo-color: rgba(222, 205, 155, .28);
+  --halo-ring: rgba(181, 148, 61, .36);
+}
+
+.card-halo-good {
+  --halo-color: rgba(234, 186, 58, .32);
+  --halo-ring: rgba(205, 132, 25, .48);
+}
+
+.card-halo-hot {
+  --halo-color: rgba(170, 54, 225, .30);
+  --halo-ring: rgba(217, 57, 235, .52);
+}
+
+.card-halo-mvp {
+  --halo-color: rgba(36, 102, 219, .34);
+  --halo-ring: rgba(231, 196, 84, .55);
+}
+
+.player-chip.card-halo,
+.roster-player-chip.card-halo,
+.rating-badge.card-halo,
+.player-open-link.card-halo {
+  border-color: var(--halo-ring);
+  box-shadow: 0 0 0 1px var(--halo-ring), 0 10px 26px var(--halo-color);
+}
+
 .player-rating-stack {
   display: grid;
   gap: 4px;
@@ -1092,6 +1135,165 @@ h3 {
   font-size: 8.5px;
 }
 
+.player-dot {
+  width: clamp(86px, 12%, 118px);
+  min-height: 0;
+  aspect-ratio: 733 / 1024;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+  clip-path: none;
+}
+
+.player-dot::before {
+  content: none;
+}
+
+.player-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 733 / 1024;
+  color: #1f1a10;
+  background-image: var(--card-bg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  filter: drop-shadow(0 16px 20px rgba(0,0,0,.23));
+  font-family: "Bahnschrift Condensed", "Arial Narrow", Inter, system-ui, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.player-card-field {
+  height: 100%;
+}
+
+.player-card-profile {
+  width: min(320px, 72vw);
+}
+
+.card-variant-hot,
+.card-variant-mvp {
+  color: #f8eecb;
+}
+
+.card-rating {
+  position: absolute;
+  top: 9.5%;
+  left: 12.5%;
+  display: grid;
+  line-height: .9;
+  text-align: left;
+}
+
+.card-rating strong {
+  font-size: 28px;
+  font-weight: 950;
+}
+
+.card-rating span {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.card-photo {
+  position: absolute;
+  top: 20.5%;
+  left: 32%;
+  width: 55%;
+  height: 28%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8%;
+}
+
+.card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 38%;
+}
+
+.card-photo span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 8%;
+  color: #16201d;
+  background: rgba(220,230,226,.96);
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.card-name {
+  position: absolute;
+  top: 55.6%;
+  left: 16%;
+  width: 68%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.card-stats {
+  position: absolute;
+  top: 68.5%;
+  left: 14%;
+  width: 72%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.4% 10%;
+  font-size: 8.5px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.player-card-profile .card-rating strong {
+  font-size: 68px;
+}
+
+.player-card-profile .card-rating span {
+  font-size: 22px;
+}
+
+.player-card-profile .card-photo span {
+  font-size: 44px;
+}
+
+.player-card-profile .card-name {
+  font-size: 27px;
+}
+
+.player-card-profile .card-stats {
+  font-size: 19px;
+}
+
+.card-stats span {
+  display: inline-flex;
+  gap: .28em;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.card-stats b {
+  font-size: 1.05em;
+}
+
+.card-stats em {
+  font-style: normal;
+  font-weight: 850;
+}
+
 .avatar {
   display: inline-grid;
   place-items: center;
@@ -1313,14 +1515,21 @@ th.stat-col {
 
 .player-hero {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 22px;
+  overflow: hidden;
   border: 1px solid rgba(190, 205, 198, 0.62);
   border-radius: 26px;
   padding: 18px;
   background: linear-gradient(135deg, rgba(255,255,255,.82), rgba(255,255,255,.48));
   box-shadow: var(--shadow-soft);
+}
+
+.player-hero-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .player-hero .avatar {
@@ -1337,6 +1546,11 @@ th.stat-col {
 .player-hero p {
   margin-top: 4px;
   color: var(--muted);
+}
+
+.player-profile-card-wrap {
+  display: grid;
+  justify-items: center;
 }
 
 .player-ovr {
