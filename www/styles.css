@@ -1146,6 +1146,7 @@ h3 {
   background: transparent;
   box-shadow: none;
   clip-path: none;
+  transform: translate(calc(-50% + var(--field-offset-x, 0px)), -50%);
 }
 
 .player-dot::before {

@@ -3181,7 +3181,7 @@ function renderDot(playerData, teamClass, pos) {
   const form = getPlayerForm(playerData);
   const variant = getPlayerCardVariant(playerData, form);
   return `
-    <div class="player-dot ${teamClass} card-variant-${variant.key}" style="left:${pos.x}%;top:${pos.y}%">
+    <div class="player-dot ${teamClass} card-variant-${variant.key}" style="left:${pos.x}%;top:${pos.y}%;--field-offset-x:${pos.offsetXPx || 0}px">
       ${renderPlayerCard(playerData, { mode: "field", form, variant })}
     </div>
   `;
@@ -3267,10 +3267,10 @@ function getPosition(side, index) {
     { x: 11, y: 50 },
     { x: 27, y: 18 },
     { x: 27, y: 82 },
-    { x: 41, y: 38 },
-    { x: 41, y: 62 },
+    { x: 41, y: 38, offsetXPx: -12 },
+    { x: 41, y: 62, offsetXPx: -12 },
   ];
-  const right = left.map((p) => ({ x: 100 - p.x, y: p.y }));
+  const right = left.map((p) => ({ x: 100 - p.x, y: p.y, offsetXPx: p.offsetXPx ? Math.abs(p.offsetXPx) : 0 }));
   return (side === "a" ? left : right)[index] || { x: side === "a" ? 45 : 55, y: 50 };
 }
 
