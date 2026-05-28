@@ -24,6 +24,8 @@ const PLAYER_CARD_VARIANTS = {
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
+const TEAM_RADAR_MIN = 40;
+const TEAM_RADAR_MAX = 85;
 const TEAM_RADAR_STATS = [
   { key: "pace", label: "PAC" },
   { key: "shooting", label: "SHO" },
@@ -4289,7 +4291,8 @@ function getTeamRadarStats(players) {
 
 function radarPoint(centerX, centerY, radius, index, total, value = 100) {
   const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total;
-  const scaledRadius = radius * clampNumber(value, 0, 100) / 100;
+  const normalizedValue = (clampNumber(value, TEAM_RADAR_MIN, TEAM_RADAR_MAX) - TEAM_RADAR_MIN) / (TEAM_RADAR_MAX - TEAM_RADAR_MIN);
+  const scaledRadius = radius * normalizedValue;
   return {
     x: centerX + Math.cos(angle) * scaledRadius,
     y: centerY + Math.sin(angle) * scaledRadius,
@@ -4310,7 +4313,7 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
   const centerX = 110;
   const centerY = compact ? 82 : 90;
   const radius = compact ? 52 : 64;
-  const gridRings = [25, 50, 75, 100];
+  const gridRings = [TEAM_RADAR_MIN, 55, 70, TEAM_RADAR_MAX];
   const labels = TEAM_RADAR_STATS.map((stat, index) => {
     const point = radarPoint(centerX, centerY, radius + (compact ? 14 : 20), index, TEAM_RADAR_STATS.length);
     return `<text x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle">${stat.label}</text>`;
