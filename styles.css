@@ -1444,10 +1444,10 @@ body.mvp-gate-open {
 .card-photo {
   position: absolute;
   z-index: 2;
-  top: 28.95%;
-  left: 31.55%;
-  width: 42.9%;
-  height: 37.05%;
+  top: 23.3925%;
+  left: calc(31.55% - 5px);
+  width: 49.335%;
+  height: 42.6075%;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1459,6 +1459,14 @@ body.mvp-gate-open {
   height: 100%;
   object-fit: cover;
   object-position: center 36%;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  mask-composite: intersect;
 }
 
 .card-photo span {
@@ -1471,6 +1479,14 @@ body.mvp-gate-open {
   background: rgba(220,230,226,.96);
   font-size: 20px;
   font-weight: 950;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  mask-composite: intersect;
 }
 
 .card-name {
@@ -1961,6 +1977,29 @@ th.stat-col {
 .summary-card strong {
   font-size: 26px;
   line-height: 1;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-title-row h3 {
+  margin: 0;
+}
+
+.unlock-progress {
+  border: 1px solid rgba(31, 122, 77, .22);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: #1f7a4d;
+  background: rgba(230, 247, 238, .76);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .profile-games {

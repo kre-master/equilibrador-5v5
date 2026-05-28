@@ -1493,7 +1493,10 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Montra de premios</h3>
+      <div class="section-title-row">
+        <h3>Montra de premios</h3>
+        <span class="unlock-progress">${awards.length}/${getTotalAwardCardTypes()} cartas desbloqueadas</span>
+      </div>
       ${awards.length ? `
         <div class="award-grid">
           ${awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("")}
@@ -1610,6 +1613,10 @@ function renderAwardShowcaseCard(playerData, award) {
       <strong>${escapeHtml(variant.label)}</strong>
     </article>
   `;
+}
+
+function getTotalAwardCardTypes() {
+  return Object.keys(PLAYER_CARD_VARIANTS).length;
 }
 
 function showAwardDetail(playerData, award, count = 1) {
@@ -4657,7 +4664,7 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   if (playerData.photoDataUrl) {
     try {
       const img = await loadPhoto(playerData.photoDataUrl);
-      drawImageCover(ctx, img, photo.x, photo.y, photo.w, photo.h);
+      drawSoftImageCover(ctx, img, photo.x, photo.y, photo.w, photo.h);
     } catch (error) {
       drawInitials(ctx, playerData.name, photo.x + photo.w / 2, photo.y + photo.h / 2, Math.min(photo.w, photo.h));
     }
@@ -4727,11 +4734,13 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
 }
 
 function getCardPhotoRect(x, y, width, height) {
+  const photoW = width * 0.49335;
+  const photoH = height * 0.426075;
   return {
-    x: x + width * 0.3155,
-    y: y + height * 0.2895,
-    w: width * 0.429,
-    h: height * 0.3705,
+    x: x + width * 0.3155 - 5,
+    y: y + height * 0.66 - photoH,
+    w: photoW,
+    h: photoH,
   };
 }
 
@@ -4746,6 +4755,40 @@ function drawImageCover(ctx, img, x, y, width, height) {
   const dx = x + (width - drawWidth) / 2;
   const dy = y + (height - drawHeight) * 0.38;
   ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
+}
+
+function drawSoftImageCover(ctx, img, x, y, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const softCtx = canvas.getContext("2d");
+  const scale = Math.max(width / img.width, height / img.height);
+  const drawWidth = img.width * scale;
+  const drawHeight = img.height * scale;
+  const dx = (width - drawWidth) / 2;
+  const dy = (height - drawHeight) * 0.38;
+  softCtx.drawImage(img, dx, dy, drawWidth, drawHeight);
+
+  const fade = Math.min(20, width / 4, height / 4);
+  softCtx.globalCompositeOperation = "destination-in";
+  const horizontal = softCtx.createLinearGradient(0, 0, width, 0);
+  horizontal.addColorStop(0, "rgba(0,0,0,0)");
+  horizontal.addColorStop(fade / width, "rgba(0,0,0,1)");
+  horizontal.addColorStop(1 - fade / width, "rgba(0,0,0,1)");
+  horizontal.addColorStop(1, "rgba(0,0,0,0)");
+  softCtx.fillStyle = horizontal;
+  softCtx.fillRect(0, 0, width, height);
+
+  const vertical = softCtx.createLinearGradient(0, 0, 0, height);
+  vertical.addColorStop(0, "rgba(0,0,0,0)");
+  vertical.addColorStop(fade / height, "rgba(0,0,0,1)");
+  vertical.addColorStop(1 - fade / height, "rgba(0,0,0,1)");
+  vertical.addColorStop(1, "rgba(0,0,0,0)");
+  softCtx.fillStyle = vertical;
+  softCtx.fillRect(0, 0, width, height);
+  softCtx.globalCompositeOperation = "source-over";
+
+  ctx.drawImage(canvas, x, y, width, height);
 }
 
 async function drawBenchGroup(ctx, label, players, x, y, color, game = null) {
