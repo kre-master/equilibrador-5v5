@@ -3177,10 +3177,12 @@ function renderMvpPanel(game) {
         <p class="eyebrow">MVP interno</p>
         <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length} votos (min. 5)`}</strong>
       </div>
-      ${canVote ? `
+      ${canVote && myVote ? `
+        <span class="metric good-pill">Voto registado</span>
+      ` : canVote ? `
         <select data-mvp-candidate="${game.id}">
           <option value="">Escolher MVP</option>
-          ${participants.filter((p) => p.id !== linkedPlayer.id).map((p) => `<option value="${p.id}" ${myVote?.candidatePlayerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+          ${participants.filter((p) => p.id !== linkedPlayer.id).map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}
         </select>
         <button class="ghost-btn" data-save-mvp-vote="${game.id}">Votar</button>
       ` : `<span class="metric">So participantes votam</span>`}
@@ -3274,9 +3276,8 @@ async function saveMvpVote(game, linkedPlayer, candidateId) {
 
   let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
   if (vote) {
-    vote.candidatePlayerId = candidateId;
-    vote.userId = currentSession?.user?.id || vote.userId || null;
-    vote.updatedAt = new Date().toISOString();
+    alert("O teu voto MVP ja foi registado e nao pode ser alterado.");
+    return false;
   } else {
     vote = {
       id: createUuid(),

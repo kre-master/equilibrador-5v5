@@ -866,7 +866,7 @@ h3 {
 }
 
 .team-radar-legend .team-a {
-  color: #dff7e8;
+  color: #ffe36f;
 }
 
 .team-radar-legend .team-b {
@@ -875,7 +875,7 @@ h3 {
 
 .suggestion-card .team-radar-legend .team-a,
 .game-card .team-radar-legend .team-a {
-  color: #1f7a4d;
+  color: #b98400;
 }
 
 .suggestion-card .team-radar-legend .team-b,
@@ -893,7 +893,7 @@ h3 {
 .team-radar-grid line {
   fill: none;
   stroke: rgba(255, 255, 255, .38);
-  stroke-width: 1;
+  stroke-width: .65;
 }
 
 .suggestion-card .team-radar-grid polygon,
@@ -904,13 +904,13 @@ h3 {
 }
 
 .team-radar-area {
-  stroke-width: 3;
+  stroke-width: 1.8;
   stroke-linejoin: round;
 }
 
 .team-radar-area.team-a {
-  fill: rgba(31, 122, 77, .36);
-  stroke: #1f7a4d;
+  fill: rgba(255, 211, 68, .38);
+  stroke: #f2c94c;
 }
 
 .team-radar-area.team-b {
@@ -933,12 +933,12 @@ h3 {
 .team-radar-axis-label .team-b-value {
   font-size: 11px;
   paint-order: stroke;
-  stroke: rgba(255, 255, 255, .68);
-  stroke-width: 2px;
+  stroke: rgba(9, 17, 14, .78);
+  stroke-width: 2.4px;
 }
 
 .team-radar-axis-label .team-a-value {
-  fill: #1f7a4d;
+  fill: #ffd344;
 }
 
 .team-radar-axis-label .team-b-value {
@@ -947,7 +947,7 @@ h3 {
 
 .field-card .team-radar-axis-label .team-a-value,
 .field-card .team-radar-axis-label .team-b-value {
-  stroke: rgba(31, 122, 77, .52);
+  stroke: rgba(9, 17, 14, .82);
 }
 
 .suggestion-card .team-radar-labels,
