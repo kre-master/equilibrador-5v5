@@ -4682,9 +4682,9 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.1820, y + height * 0.2482);
 
   const nameBox = {
-    x: x + width * 0.08,
+    x: x + width * 0.12,
     y: y + height * 0.592,
-    w: width * 0.84,
+    w: width * 0.76,
     h: height * 0.105,
   };
   ctx.save();
@@ -4733,10 +4733,10 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
 
 function getCardPhotoRect(x, y, width, height) {
   return {
-    x: x + width * 0.20,
-    y: y + height * 0.09,
-    w: width * 0.66,
-    h: height * 0.57,
+    x: x + width * 0.3155,
+    y: y + height * 0.2895,
+    w: width * 0.429,
+    h: height * 0.3705,
   };
 }
 
