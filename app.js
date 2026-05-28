@@ -4485,13 +4485,8 @@ function renderHistoryGameDetail() {
     els.historyGameDetail.innerHTML = `<div class="empty-state">Escolhe um jogo finalizado no historico.</div>`;
     return;
   }
-  const result = game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
   els.historyGameDetail.innerHTML = `
-    <div class="panel-head history-detail-head">
-      <div>
-        <p class="eyebrow">Historico</p>
-        <h2>${formatDate(game.date)} - ${result}</h2>
-      </div>
+    <div class="history-detail-actions">
       <button class="ghost-btn" data-back-to-games>Voltar</button>
     </div>
     <div class="field-card history-field-card">
