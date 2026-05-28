@@ -24,8 +24,8 @@ const PLAYER_CARD_VARIANTS = {
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
-const TEAM_RADAR_MIN = 40;
-const TEAM_RADAR_MAX = 85;
+const TEAM_RADAR_MIN = 55;
+const TEAM_RADAR_MAX = 75;
 const TEAM_RADAR_AGGREGATION = "power";
 const TEAM_RADAR_POWER = 1.35;
 const TEAM_RADAR_STATS = [
@@ -83,6 +83,7 @@ let currentPaymentsMonth = monthKey(new Date());
 let selectedIds = new Set();
 let currentSuggestions = [];
 let currentGameId = null;
+let currentHistoryGameId = null;
 let currentGenerationDateIso = new Date().toISOString();
 let previewGame = null;
 let authActionBusy = false;
@@ -133,6 +134,7 @@ const els = {
   importData: document.querySelector("#import-data"),
   resetData: document.querySelector("#reset-data"),
   gamesList: document.querySelector("#games-list"),
+  historyGameDetail: document.querySelector("#history-game-detail"),
   playerProfile: document.querySelector("#player-profile"),
   exportCanvas: document.querySelector("#export-canvas"),
   dataStatus: document.querySelector("#data-status"),
@@ -1138,7 +1140,8 @@ function showView(viewName, options = {}) {
     previewGame = null;
   }
   currentViewName = viewName;
-  els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
+  const activeTabName = viewName === "history-game" ? "games" : viewName;
+  els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === activeTabName));
   els.views.forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
   if (navigationHistoryReady && options.push !== false) {
     pushNavigationState();
@@ -1159,6 +1162,7 @@ function captureNavigationState() {
     viewName: currentViewName,
     currentPlayerProfileId,
     currentGameId,
+    currentHistoryGameId,
   };
 }
 
@@ -1185,6 +1189,7 @@ function handleNavigationPopState(event) {
 
   currentPlayerProfileId = event.state.currentPlayerProfileId || currentPlayerProfileId;
   currentGameId = event.state.currentGameId || null;
+  currentHistoryGameId = event.state.currentHistoryGameId || null;
   showView(event.state.viewName || "events", { push: false });
   render();
 }
@@ -1195,6 +1200,7 @@ function render() {
   renderPlayersTable();
   renderCurrentGame();
   renderGamesList();
+  renderHistoryGameDetail();
   renderAccountPanel();
   renderClaimsList();
   renderAccountsList();
@@ -3292,7 +3298,7 @@ async function saveMvpVote(game, linkedPlayer, candidateId) {
   return true;
 }
 
-function renderField(game) {
+function renderField(game, options = {}) {
   const teamA = hydrate(game.teamA);
   const teamB = hydrate(game.teamB);
   const benchA = hydrate(getBenchA(game));
@@ -3303,6 +3309,8 @@ function renderField(game) {
   const squadBStats = getTeamStats([...teamB, ...benchB]);
   const result = game.scoreA == null || game.scoreB == null ? "vs" : `${game.scoreA} - ${game.scoreB}`;
   const date = formatDate(game.date);
+  const radar = renderTeamRadarChart(teamA, teamB);
+  const radarPosition = options.radarPosition || "top";
 
   return `
     <div class="field-head">
@@ -3317,7 +3325,7 @@ function renderField(game) {
         <strong>Equipa B</strong>
       </div>
     </div>
-    ${renderTeamRadarChart(teamA, teamB)}
+    ${radarPosition === "top" ? radar : ""}
     <div class="pitch">
       ${orderTeamForField(teamA).map((p, i) => renderDot(p, "team-a", getPosition("a", i), game)).join("")}
       ${orderTeamForField(teamB).map((p, i) => renderDot(p, "team-b", getPosition("b", i), game)).join("")}
@@ -3327,6 +3335,7 @@ function renderField(game) {
       <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b", game)}</div>
     </div>
     ${renderMvpPanel(game)}
+    ${radarPosition === "bottom" ? radar : ""}
   `;
 }
 
@@ -3775,7 +3784,16 @@ function renderGamesList() {
 
   els.gamesList.querySelectorAll("[data-open-game]").forEach((button) => {
     button.addEventListener("click", () => {
-      currentGameId = button.dataset.openGame;
+      const game = state.games.find((item) => item.id === button.dataset.openGame);
+      if (isFinishedGame(game)) {
+        currentHistoryGameId = game.id;
+        currentGameId = null;
+        showView("history-game");
+        renderHistoryGameDetail();
+        return;
+      }
+      currentGameId = game?.id || button.dataset.openGame;
+      currentHistoryGameId = null;
       showView("today");
       renderCurrentGame();
     });
@@ -3783,6 +3801,33 @@ function renderGamesList() {
   els.gamesList.querySelectorAll("[data-delete-game]").forEach((button) => {
     button.addEventListener("click", () => deleteGame(button.dataset.deleteGame));
   });
+}
+
+function renderHistoryGameDetail() {
+  if (!els.historyGameDetail) return;
+  const game = state.games.find((item) => item.id === currentHistoryGameId);
+  if (!game) {
+    els.historyGameDetail.innerHTML = `<div class="empty-state">Escolhe um jogo finalizado no historico.</div>`;
+    return;
+  }
+  const result = game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
+  els.historyGameDetail.innerHTML = `
+    <div class="panel-head history-detail-head">
+      <div>
+        <p class="eyebrow">Historico</p>
+        <h2>${formatDate(game.date)} - ${result}</h2>
+      </div>
+      <button class="ghost-btn" data-back-to-games>Voltar</button>
+    </div>
+    <div class="field-card history-field-card">
+      ${renderField(game, { radarPosition: "bottom" })}
+    </div>
+  `;
+  els.historyGameDetail.querySelector("[data-back-to-games]")?.addEventListener("click", () => {
+    currentHistoryGameId = null;
+    showView("games");
+  });
+  bindMvpPanelActions(game);
 }
 
 async function deleteGame(gameId) {
@@ -3802,6 +3847,9 @@ async function deleteGame(gameId) {
   if (currentGameId === gameId) {
     currentGameId = null;
     previewGame = null;
+  }
+  if (currentHistoryGameId === gameId) {
+    currentHistoryGameId = null;
   }
   saveState();
   render();
@@ -4323,12 +4371,20 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
   const statsA = getTeamRadarStats(teamA);
   const statsB = getTeamRadarStats(teamB);
   const centerX = 110;
-  const centerY = compact ? 82 : 90;
-  const radius = compact ? 52 : 64;
-  const gridRings = [TEAM_RADAR_MIN, 55, 70, TEAM_RADAR_MAX];
+  const centerY = compact ? 88 : 98;
+  const radius = compact ? 44 : 56;
+  const gridRings = [TEAM_RADAR_MIN, 60, 65, 70, TEAM_RADAR_MAX];
   const labels = TEAM_RADAR_STATS.map((stat, index) => {
-    const point = radarPoint(centerX, centerY, radius + (compact ? 14 : 20), index, TEAM_RADAR_STATS.length);
-    return `<text x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle">${stat.label}</text>`;
+    const point = radarPoint(centerX, centerY, radius + (compact ? 24 : 30), index, TEAM_RADAR_STATS.length);
+    const valueA = statsA[index]?.value ?? 0;
+    const valueB = statsB[index]?.value ?? 0;
+    return `
+      <text class="team-radar-axis-label" x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle">
+        <tspan class="axis-name" x="${point.x.toFixed(1)}" dy="-0.65em">${stat.label}</tspan>
+        <tspan class="team-a-value" x="${point.x.toFixed(1)}" dy="1.25em">${valueA}</tspan>
+        <tspan class="team-b-value" dx="5">${valueB}</tspan>
+      </text>
+    `;
   }).join("");
   const axes = TEAM_RADAR_STATS.map((stat, index) => {
     const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length);
@@ -4350,7 +4406,7 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
         <span class="team-a">Equipa A ${aAverage}</span>
         <span class="team-b">Equipa B ${bAverage}</span>
       </div>
-      <svg viewBox="0 0 220 ${compact ? 164 : 182}" role="img" aria-label="Comparacao PAC SHO PAS DRI DEF PHY">
+      <svg viewBox="0 0 220 ${compact ? 176 : 204}" role="img" aria-label="Comparacao PAC SHO PAS DRI DEF PHY">
         <g class="team-radar-grid">
           ${rings}
           ${axes}

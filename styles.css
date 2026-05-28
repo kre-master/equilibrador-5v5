@@ -919,13 +919,40 @@ h3 {
 }
 
 .team-radar-labels {
+  color: rgba(255, 255, 255, .86);
   fill: rgba(255, 255, 255, .86);
   font-size: 10px;
   font-weight: 900;
 }
 
+.team-radar-axis-label .axis-name {
+  fill: currentColor;
+}
+
+.team-radar-axis-label .team-a-value,
+.team-radar-axis-label .team-b-value {
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, .68);
+  stroke-width: 2px;
+}
+
+.team-radar-axis-label .team-a-value {
+  fill: #1f7a4d;
+}
+
+.team-radar-axis-label .team-b-value {
+  fill: #c86422;
+}
+
+.field-card .team-radar-axis-label .team-a-value,
+.field-card .team-radar-axis-label .team-b-value {
+  stroke: rgba(31, 122, 77, .52);
+}
+
 .suggestion-card .team-radar-labels,
 .game-card .team-radar-labels {
+  color: var(--muted);
   fill: var(--muted);
 }
 
@@ -1679,6 +1706,20 @@ th.stat-col {
 .games-list {
   display: grid;
   gap: 10px;
+}
+
+.history-game-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.history-detail-head {
+  margin-bottom: 0;
+}
+
+.history-field-card .team-radar {
+  margin-top: 12px;
+  margin-bottom: 12px;
 }
 
 .player-profile {
