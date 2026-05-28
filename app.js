@@ -4664,7 +4664,7 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   if (playerData.photoDataUrl) {
     try {
       const img = await loadPhoto(playerData.photoDataUrl);
-      drawSoftImageCover(ctx, img, photo.x, photo.y, photo.w, photo.h);
+      drawSoftImageCover(ctx, img, photo.x, photo.y, photo.w, photo.h, 6);
     } catch (error) {
       drawInitials(ctx, playerData.name, photo.x + photo.w / 2, photo.y + photo.h / 2, Math.min(photo.w, photo.h));
     }
@@ -4757,7 +4757,7 @@ function drawImageCover(ctx, img, x, y, width, height) {
   ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
 }
 
-function drawSoftImageCover(ctx, img, x, y, width, height) {
+function drawSoftImageCover(ctx, img, x, y, width, height, fadePx = 20) {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));
@@ -4769,7 +4769,7 @@ function drawSoftImageCover(ctx, img, x, y, width, height) {
   const dy = (height - drawHeight) * 0.38;
   softCtx.drawImage(img, dx, dy, drawWidth, drawHeight);
 
-  const fade = Math.min(20, width / 4, height / 4);
+  const fade = Math.min(fadePx, width / 4, height / 4);
   softCtx.globalCompositeOperation = "destination-in";
   const horizontal = softCtx.createLinearGradient(0, 0, width, 0);
   horizontal.addColorStop(0, "rgba(0,0,0,0)");

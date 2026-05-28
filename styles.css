@@ -1388,6 +1388,7 @@ body.mvp-gate-open {
 
 .player-card-field {
   height: 100%;
+  --photo-edge-fade: 6px;
 }
 
 .player-card-profile {
@@ -1397,6 +1398,7 @@ body.mvp-gate-open {
 .player-card-award {
   width: 86px;
   pointer-events: none;
+  --photo-edge-fade: 6px;
 }
 
 .card-variant-hot,
@@ -1460,12 +1462,12 @@ body.mvp-gate-open {
   object-fit: cover;
   object-position: center 36%;
   -webkit-mask-image:
-    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
-    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    linear-gradient(to right, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%);
   -webkit-mask-composite: source-in;
   mask-image:
-    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
-    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    linear-gradient(to right, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%);
   mask-composite: intersect;
 }
 
@@ -1480,12 +1482,12 @@ body.mvp-gate-open {
   font-size: 20px;
   font-weight: 950;
   -webkit-mask-image:
-    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
-    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    linear-gradient(to right, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%);
   -webkit-mask-composite: source-in;
   mask-image:
-    linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%),
-    linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    linear-gradient(to right, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--photo-edge-fade, 20px), #000 calc(100% - var(--photo-edge-fade, 20px)), transparent 100%);
   mask-composite: intersect;
 }
 
