@@ -127,6 +127,7 @@ const els = {
   adminLogin: document.querySelector("#admin-login"),
   accountSignup: document.querySelector("#account-signup"),
   adminLogout: document.querySelector("#admin-logout"),
+  mvpGate: document.querySelector("#mvp-gate"),
   accountPanel: document.querySelector("#account-panel"),
   claimsList: document.querySelector("#claims-list"),
   accountsList: document.querySelector("#accounts-list"),
@@ -1188,6 +1189,7 @@ function render() {
   renderPaymentsPanel();
   renderEventsList();
   renderPlayerProfile();
+  renderMvpVoteGate();
 }
 
 function getLinkedPlayer() {
@@ -1327,6 +1329,8 @@ function renderPlayerProfile() {
   const canSeePrivateForm = canSeeCurrentRatings();
   const synergies = getPlayerSynergies(playerData.id);
   const variant = getPlayerCardVariant(playerData, form);
+  const teamRecentItems = getPlayerTeamRecentItems(playerData.id);
+  const teamRecentRecord = teamRecentItems.map((item) => item.outcome);
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
@@ -1369,7 +1373,8 @@ function renderPlayerProfile() {
           ${renderSummaryCard("Derrotas", summary.losses)}
           ${renderSummaryCard("Win rate", `${winRate}%`)}
           ${canSeePrivateForm ? renderSummaryCard("Forma", form.level) : ""}
-          ${canSeePrivateForm ? renderSummaryCard("Ultimos 5", renderRecordDots(form.recentRecord)) : ""}
+          ${renderSummaryCard("Ult. 5 equipa", renderRecordDots(teamRecentRecord))}
+          ${renderSummaryCard("Ult. 5 jogador", renderRecordDots(form.recentRecord))}
         </div>
       </section>
     </div>
@@ -1384,10 +1389,19 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Ultimos jogos</h3>
+      <h3>Ultimos 5 da equipa</h3>
+      ${teamRecentItems.length ? `
+        <div class="profile-games">
+          ${teamRecentItems.map((item) => renderTeamRecentGameRow(item)).join("")}
+        </div>
+      ` : `<div class="empty-state">Ainda nao ha jogos finalizados.</div>`}
+    </section>
+
+    <section class="profile-section">
+      <h3>Ultimos jogos do jogador</h3>
       ${summary.games.length ? `
         <div class="profile-games">
-          ${summary.games.map((item) => renderPlayerGameRow(item)).join("")}
+          ${summary.games.slice(0, FORM_LOOKBACK_GAMES).map((item) => renderPlayerGameRow(item)).join("")}
         </div>
       ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
     </section>
@@ -1449,10 +1463,9 @@ function renderCardHaloClass(playerData, variant = getPlayerCardVariant(playerDa
   return `card-halo card-halo-${variant.key}`;
 }
 
-function getPlayerCardVariant(playerData, form = getPlayerForm(playerData)) {
+function getPlayerCardVariant(playerData, form = getPlayerForm(playerData), game = null) {
   if (!playerData) return PLAYER_CARD_VARIANTS.normal;
-  const latestMvpIds = getLatestOfficialMvpIds();
-  if (latestMvpIds.has(playerData.id)) return PLAYER_CARD_VARIANTS.mvp;
+  if (game && getNextGameMvpIds(game).has(playerData.id)) return PLAYER_CARD_VARIANTS.mvp;
   return PLAYER_CARD_VARIANTS[form?.levelKey] || PLAYER_CARD_VARIANTS.normal;
 }
 
@@ -1470,6 +1483,25 @@ function getLatestOfficialMvpIds() {
   return new Set();
 }
 
+function getPreviousFinishedGameFor(game) {
+  if (!game?.date) return null;
+  const gameTime = new Date(game.date).getTime();
+  const finishedGames = [...state.games]
+    .filter((item) => isFinishedGame(item) && item.id !== game.id)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  return finishedGames.find((item) => new Date(item.date).getTime() < gameTime) || null;
+}
+
+function getOfficialMvpIdsForGame(game) {
+  const counts = countMvpVotes(gameMvpVotes.filter((vote) => vote.gameId === game?.id));
+  return new Set(getOfficialMvpWinners(counts).map((playerData) => playerData.id));
+}
+
+function getNextGameMvpIds(game) {
+  const previousGame = getPreviousFinishedGameFor(game);
+  return previousGame ? getOfficialMvpIdsForGame(previousGame) : new Set();
+}
+
 function canSeeCurrentRatings() {
   return canWriteOfficialData();
 }
@@ -1481,8 +1513,32 @@ function formatSigned(value) {
 
 function renderRecordDots(record) {
   if (!record.length) return `<span class="record-empty">Sem jogos</span>`;
-  const labels = { win: "V", draw: "E", loss: "D" };
-  return record.map((outcome) => `<span class="record-dot ${outcome}">${labels[outcome] || "-"}</span>`).join("");
+  const labels = { win: "V", draw: "E", loss: "D", absent: "-" };
+  const titles = { win: "Vitoria", draw: "Empate", loss: "Derrota", absent: "Nao jogou" };
+  return record.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("");
+}
+
+function renderTeamRecentGameRow(item) {
+  const resultText = item.game.scoreA == null || item.game.scoreB == null ? "Resultado em aberto" : `${item.game.scoreA} - ${item.game.scoreB}`;
+  const outcomeLabel = {
+    win: "Vitoria",
+    draw: "Empate",
+    loss: "Derrota",
+    absent: "Nao foi",
+  }[item.outcome] || "Nao foi";
+  const detail = item.participation
+    ? `${item.participation.teamLabel}${item.participation.wasBench ? " suplente" : ""}`
+    : "Ausente";
+  return `
+    <article class="profile-game-row">
+      <div>
+        <strong>${formatDate(item.game.date)} - ${resultText}</strong>
+        <span>${detail}</span>
+      </div>
+      <span class="metric ${item.outcome === "win" ? "good-pill" : item.outcome === "loss" ? "warn-pill" : item.outcome === "absent" ? "muted-pill" : ""}">${outcomeLabel}</span>
+      <button class="ghost-btn" data-profile-open-game="${item.game.id}">Abrir</button>
+    </article>
+  `;
 }
 
 function renderPlayerGameRow(item) {
@@ -1619,6 +1675,28 @@ function getPlayerOutcome(game, side) {
   if (Number(game.scoreA) === Number(game.scoreB)) return "draw";
   const teamAWon = Number(game.scoreA) > Number(game.scoreB);
   return (side === "A" && teamAWon) || (side === "B" && !teamAWon) ? "win" : "loss";
+}
+
+function getFinishedGames(limit = null) {
+  const games = [...state.games]
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  return limit ? games.slice(0, limit) : games;
+}
+
+function getPlayerTeamRecentItems(playerId, limit = FORM_LOOKBACK_GAMES) {
+  return getFinishedGames(limit).map((game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    return {
+      game,
+      participation,
+      outcome: participation ? getPlayerOutcome(game, participation.side) : "absent",
+    };
+  });
+}
+
+function getPlayerTeamRecentRecord(playerId, limit = FORM_LOOKBACK_GAMES) {
+  return getPlayerTeamRecentItems(playerId, limit).map((item) => item.outcome);
 }
 
 function bindAccountPanelActions() {
@@ -3091,6 +3169,60 @@ function renderMvpPanel(game) {
   `;
 }
 
+function getLatestFinishedGame() {
+  return [...state.games]
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+}
+
+function getPendingMvpVoteRequirement() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) return null;
+  const game = getLatestFinishedGame();
+  if (!game) return null;
+  const participants = hydrate(getGamePlayerIds(game));
+  if (!participants.some((playerData) => playerData.id === linkedPlayer.id)) return null;
+  if (gameMvpVotes.some((vote) => vote.gameId === game.id && vote.voterPlayerId === linkedPlayer.id)) return null;
+  const candidates = participants.filter((playerData) => playerData.id !== linkedPlayer.id);
+  if (!candidates.length) return null;
+  return { game, linkedPlayer, candidates };
+}
+
+function renderMvpVoteGate() {
+  if (!els.mvpGate) return;
+  const requirement = getPendingMvpVoteRequirement();
+  document.body.classList.toggle("mvp-gate-open", Boolean(requirement));
+  els.mvpGate.classList.toggle("hidden", !requirement);
+  if (!requirement) {
+    els.mvpGate.innerHTML = "";
+    return;
+  }
+
+  const { game, candidates } = requirement;
+  els.mvpGate.innerHTML = `
+    <div class="mvp-gate-card">
+      <p class="eyebrow">Voto MVP pendente</p>
+      <h2>Vota no MVP do ultimo jogo para continuar</h2>
+      <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
+      <select data-gate-mvp-candidate="${game.id}">
+        <option value="">Escolher MVP</option>
+        ${candidates.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)}</option>`).join("")}
+      </select>
+      <button class="primary-btn" data-gate-save-mvp-vote="${game.id}">Votar e continuar</button>
+      <span class="hint">O voto e confidencial. Nao podes votar em ti proprio.</span>
+    </div>
+  `;
+
+  els.mvpGate.querySelector("[data-gate-save-mvp-vote]")?.addEventListener("click", async () => {
+    const linkedPlayer = getLinkedPlayer();
+    const select = els.mvpGate.querySelector(`[data-gate-mvp-candidate="${game.id}"]`);
+    const candidateId = select?.value;
+    if (!linkedPlayer || !candidateId) return;
+    const ok = await saveMvpVote(game, linkedPlayer, candidateId);
+    if (ok) render();
+  });
+}
+
 function countMvpVotes(votes) {
   const counts = new Map();
   votes.forEach((vote) => counts.set(vote.candidatePlayerId, (counts.get(vote.candidatePlayerId) || 0) + 1));
@@ -3108,36 +3240,43 @@ function getOfficialMvpWinners(counts) {
 function bindMvpPanelActions(game) {
   els.fieldCard.querySelector("[data-save-mvp-vote]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
-    const participants = new Set(getGamePlayerIds(game));
     const select = els.fieldCard.querySelector(`[data-mvp-candidate="${game.id}"]`);
     const candidateId = select?.value;
-    if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId) return;
-    if (!participants.has(linkedPlayer.id) || !participants.has(candidateId)) return;
-    let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
-    if (vote) {
-      vote.candidatePlayerId = candidateId;
-      vote.userId = currentSession?.user?.id || vote.userId || null;
-      vote.updatedAt = new Date().toISOString();
-    } else {
-      vote = {
-        id: createUuid(),
-        gameId: game.id,
-        voterPlayerId: linkedPlayer.id,
-        candidatePlayerId: candidateId,
-        userId: currentSession?.user?.id || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      gameMvpVotes.push(vote);
-    }
-    try {
-      await persistMvpVote(vote);
-    } catch (error) {
-      alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
-      return;
-    }
-    renderCurrentGame();
+    if (!linkedPlayer || !candidateId) return;
+    const ok = await saveMvpVote(game, linkedPlayer, candidateId);
+    if (ok) renderCurrentGame();
   });
+}
+
+async function saveMvpVote(game, linkedPlayer, candidateId) {
+  const participants = new Set(getGamePlayerIds(game));
+  if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId) return false;
+  if (!participants.has(linkedPlayer.id) || !participants.has(candidateId)) return false;
+
+  let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
+  if (vote) {
+    vote.candidatePlayerId = candidateId;
+    vote.userId = currentSession?.user?.id || vote.userId || null;
+    vote.updatedAt = new Date().toISOString();
+  } else {
+    vote = {
+      id: createUuid(),
+      gameId: game.id,
+      voterPlayerId: linkedPlayer.id,
+      candidatePlayerId: candidateId,
+      userId: currentSession?.user?.id || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    gameMvpVotes.push(vote);
+  }
+  try {
+    await persistMvpVote(vote);
+  } catch (error) {
+    alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 function renderField(game) {
@@ -3166,20 +3305,20 @@ function renderField(game) {
       </div>
     </div>
     <div class="pitch">
-      ${orderTeamForField(teamA).map((p, i) => renderDot(p, "team-a", getPosition("a", i))).join("")}
-      ${orderTeamForField(teamB).map((p, i) => renderDot(p, "team-b", getPosition("b", i))).join("")}
+      ${orderTeamForField(teamA).map((p, i) => renderDot(p, "team-a", getPosition("a", i), game)).join("")}
+      ${orderTeamForField(teamB).map((p, i) => renderDot(p, "team-b", getPosition("b", i), game)).join("")}
     </div>
     <div class="bench-strip">
-      <div class="bench-side bench-left">${renderBenchCards("Supl. A", benchA, "team-a")}</div>
-      <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b")}</div>
+      <div class="bench-side bench-left">${renderBenchCards("Supl. A", benchA, "team-a", game)}</div>
+      <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b", game)}</div>
     </div>
     ${renderMvpPanel(game)}
   `;
 }
 
-function renderDot(playerData, teamClass, pos) {
+function renderDot(playerData, teamClass, pos, game = null) {
   const form = getPlayerForm(playerData);
-  const variant = getPlayerCardVariant(playerData, form);
+  const variant = getPlayerCardVariant(playerData, form, game);
   return `
     <div class="player-dot ${teamClass} card-variant-${variant.key}" style="left:${pos.x}%;top:${pos.y}%;--field-offset-x:${pos.offsetXPx || 0}px">
       ${renderPlayerCard(playerData, { mode: "field", form, variant })}
@@ -3245,11 +3384,11 @@ function orderTeamForField(players) {
   return [defender, wingOne, wingTwo, shooter, support].filter(Boolean);
 }
 
-function renderBenchCards(label, players, teamClass) {
+function renderBenchCards(label, players, teamClass, game = null) {
   if (!players.length) return `<span class="bench-empty">${label}: sem suplente</span>`;
   return players.map((p) => `
     <div class="bench-card">
-      ${renderDot(p, teamClass, { x: 50, y: 50 }).replace("player-dot", "player-dot bench-dot")}
+      ${renderDot(p, teamClass, { x: 50, y: 50 }, game).replace("player-dot", "player-dot bench-dot")}
       <span class="bench-label">${label}</span>
     </div>
   `).join("");
@@ -3446,7 +3585,7 @@ function renderPlayersTable() {
           ${p.linkedUserId ? `<button class="mini-btn" data-unlink-player="${p.id}">Desassociar</button>` : ""}
           <button class="mini-btn" data-delete-player="${p.id}">Apagar</button>
         </td>
-        <td class="form-col">${renderRecordDots(form.recentRecord)}</td>
+        <td class="form-col">${renderRecordDots(getPlayerTeamRecentRecord(p.id))}</td>
       </tr>
     `;
   }).join("");
@@ -3700,14 +3839,14 @@ async function drawGameCanvas(game) {
   const pitch = { x: 90, y: 410, w: 1420, h: 1230 };
   drawPitch(ctx, pitch);
   for (const [i, p] of orderTeamForField(teamA).entries()) {
-    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("a", i)), "#1f7a4d");
+    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("a", i)), "#1f7a4d", game);
   }
   for (const [i, p] of orderTeamForField(teamB).entries()) {
-    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("b", i)), "#c86422");
+    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("b", i)), "#c86422", game);
   }
 
-  await drawBenchGroup(ctx, "Supl. A", benchA, 120, 1800, "#1f7a4d");
-  await drawBenchGroup(ctx, "Supl. B", benchB, 1160, 1800, "#c86422");
+  await drawBenchGroup(ctx, "Supl. A", benchA, 120, 1800, "#1f7a4d", game);
+  await drawBenchGroup(ctx, "Supl. B", benchB, 1160, 1800, "#c86422", game);
 }
 
 function drawTeamHeader(ctx, label, x, y, color, align = "left") {
@@ -3737,18 +3876,18 @@ function drawPitch(ctx, pitch) {
 
 function getCanvasPos(pitch, pos) {
   return {
-    x: pitch.x + pitch.w * (pos.x / 100),
+    x: pitch.x + pitch.w * (pos.x / 100) + (pos.offsetXPx || 0) * 2,
     y: pitch.y + pitch.h * (pos.y / 100),
   };
 }
 
-async function drawPlayerDot(ctx, playerData, pos, color) {
+async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   const width = pos.cardWidth || 188;
   const height = pos.cardHeight || 258;
   const x = pos.x - width / 2;
   const y = pos.y - height / 2;
   const form = getPlayerForm(playerData);
-  const variant = getPlayerCardVariant(playerData, form);
+  const variant = getPlayerCardVariant(playerData, form, game);
 
   try {
     const cardImg = await loadCardAsset(variant.asset);
@@ -3849,7 +3988,7 @@ function drawImageCover(ctx, img, x, y, width, height) {
   ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
 }
 
-async function drawBenchGroup(ctx, label, players, x, y, color) {
+async function drawBenchGroup(ctx, label, players, x, y, color, game = null) {
   if (!players.length) {
     ctx.fillStyle = "#fff4d7";
     roundRect(ctx, x, y + 95, 130, 42, 20);
@@ -3865,7 +4004,7 @@ async function drawBenchGroup(ctx, label, players, x, y, color) {
     const cardHeight = 258;
     const centerX = x + cardWidth / 2 + index * (cardWidth + 28);
     const centerY = y + cardHeight / 2;
-    await drawPlayerDot(ctx, playerData, { x: centerX, y: centerY, cardWidth, cardHeight }, color);
+    await drawPlayerDot(ctx, playerData, { x: centerX, y: centerY, cardWidth, cardHeight }, color, game);
     ctx.fillStyle = "#fff4d7";
     roundRect(ctx, centerX - 70, y + cardHeight + 18, 140, 46, 22);
     ctx.fill();

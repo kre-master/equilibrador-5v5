@@ -618,6 +618,10 @@ h3 {
 .record-dot.win { color: #1f7a4d; }
 .record-dot.draw { color: #66736d; }
 .record-dot.loss { color: #c86422; }
+.record-dot.absent {
+  color: #9aa39e;
+  background: rgba(230, 236, 233, .74);
+}
 .record-empty { color: var(--muted); }
 
 .fut-head small {
@@ -767,6 +771,11 @@ h3 {
   background: rgba(255, 243, 214, .86);
 }
 
+.muted-pill {
+  color: var(--muted);
+  background: rgba(230, 236, 233, .78);
+}
+
 .suggestion-card {
   border: 1px solid rgba(190, 205, 198, 0.62);
   border-radius: 20px;
@@ -824,6 +833,42 @@ h3 {
 
 .hidden {
   display: none !important;
+}
+
+body.mvp-gate-open {
+  overflow: hidden;
+}
+
+.mvp-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 32, 28, .62);
+  backdrop-filter: blur(10px);
+}
+
+.mvp-gate-card {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 430px);
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 28px;
+  padding: 24px;
+  background: var(--surface-strong);
+  box-shadow: 0 26px 70px rgba(18, 32, 28, .26);
+}
+
+.mvp-gate-card h2,
+.mvp-gate-card p {
+  margin: 0;
+}
+
+.mvp-gate-card select,
+.mvp-gate-card button {
+  width: 100%;
 }
 
 .account-panel,
