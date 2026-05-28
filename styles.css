@@ -1586,6 +1586,10 @@ body.mvp-gate-open {
   margin-bottom: 4px;
 }
 
+.player-dot[data-open-field-player] {
+  cursor: pointer;
+}
+
 .player-dot .fut-photo .avatar {
   width: 100%;
   height: 100%;
@@ -1958,6 +1962,78 @@ th.stat-col {
   font-weight: 950;
 }
 
+.award-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+}
+
+.award-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 25, 22, .58);
+  backdrop-filter: blur(8px);
+}
+
+.award-modal-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(190px, 300px) minmax(220px, 360px);
+  gap: 20px;
+  align-items: center;
+  max-width: min(760px, 96vw);
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 24px;
+  padding: 22px;
+  background: var(--surface-strong);
+  box-shadow: 0 30px 80px rgba(0,0,0,.32);
+}
+
+.award-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255,255,255,.9);
+  font-weight: 950;
+}
+
+.award-modal-card {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.award-count-large {
+  right: 10px;
+  bottom: 12px;
+  font-size: 15px;
+}
+
+.award-modal-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.award-modal-copy h3 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.award-modal-copy p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+  line-height: 1.45;
+}
+
 .synergy-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2141,13 +2217,23 @@ th.stat-col {
 
 .finance-game-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 12px;
   align-items: center;
   border: 1px solid rgba(190, 205, 198, 0.62);
   border-radius: 18px;
   padding: 10px 12px;
   background: rgba(255,255,255,.7);
+}
+
+.finance-cost-input {
+  width: 92px;
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 0 9px;
+  color: var(--ink);
+  background: var(--surface-strong);
 }
 
 .finance-game-row strong,
@@ -2424,6 +2510,16 @@ th.stat-col {
   .profile-game-row,
   .synergy-grid {
     grid-template-columns: 1fr;
+  }
+
+  .award-modal-panel {
+    grid-template-columns: 1fr;
+    max-height: 92vh;
+    overflow: auto;
+  }
+
+  .award-modal-card .player-card-profile {
+    width: min(250px, 70vw);
   }
 
   .player-hero .avatar {

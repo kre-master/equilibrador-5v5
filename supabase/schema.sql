@@ -223,9 +223,13 @@ create table if not exists public.game_finance_overrides (
   game_id text not null references public.games(id) on delete cascade,
   field_paid boolean not null default true,
   charge_players boolean not null default true,
+  field_cost numeric not null default 38,
   updated_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz default now()
 );
+
+alter table public.game_finance_overrides
+add column if not exists field_cost numeric not null default 38;
 
 create unique index if not exists game_finance_overrides_one_per_game
 on public.game_finance_overrides (game_id);

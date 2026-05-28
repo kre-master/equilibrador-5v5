@@ -530,11 +530,13 @@ function normalizeGameFinanceOverrideRecord(record) {
   if (!record || typeof record !== "object") return null;
   const gameId = record.gameId || record.game_id;
   if (!gameId) return null;
+  const fieldCost = Number(record.fieldCost ?? record.field_cost ?? PAYMENT_RULES.fieldCostPerGame);
   return {
     id: String(record.id || gameFinanceOverrideId(gameId)),
     gameId: String(gameId),
     fieldPaid: record.fieldPaid ?? record.field_paid ?? true,
     chargePlayers: record.chargePlayers ?? record.charge_players ?? true,
+    fieldCost: Number.isNaN(fieldCost) || fieldCost < 0 ? PAYMENT_RULES.fieldCostPerGame : fieldCost,
     updatedBy: record.updatedBy || record.updated_by || null,
     updatedAt: record.updatedAt || record.updated_at || new Date().toISOString(),
   };
@@ -546,6 +548,7 @@ function gameFinanceOverrideFromRow(row) {
     gameId: row.game_id,
     fieldPaid: row.field_paid,
     chargePlayers: row.charge_players,
+    fieldCost: row.field_cost,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   });
@@ -558,6 +561,7 @@ function gameFinanceOverrideToRow(override) {
     game_id: clean.gameId,
     field_paid: clean.fieldPaid,
     charge_players: clean.chargePlayers,
+    field_cost: clean.fieldCost,
     updated_by: currentSession?.user?.id || clean.updatedBy || null,
     updated_at: new Date().toISOString(),
   };
@@ -671,7 +675,12 @@ async function saveRemoteState() {
 
   if (gameFinanceOverrideRows.length) {
     const { error } = await supabaseClient.from("game_finance_overrides").upsert(gameFinanceOverrideRows);
-    if (error) throw error;
+    if (error) {
+      const legacyRows = gameFinanceOverrideRows.map(({ field_cost, ...row }) => row);
+      const { error: legacyError } = await supabaseClient.from("game_finance_overrides").upsert(legacyRows);
+      if (legacyError) throw error;
+      console.warn("game_finance_overrides.field_cost is not available yet. Run supabase/schema.sql to persist custom field costs.");
+    }
   }
 
   const { error: financeError } = await supabaseClient.from("finance_settings").upsert(financeSettingsRow);
@@ -1525,10 +1534,17 @@ function renderPlayerProfile() {
     });
   });
   els.playerProfile.querySelectorAll("[data-award-key]").forEach((card) => {
-    card.addEventListener("click", () => {
+    const openAward = () => {
       const award = PLAYER_CARD_VARIANTS[card.dataset.awardKey];
       if (!award) return;
-      alert(`${award.label}\n\n${award.description}`);
+      showAwardDetail(playerData, award, Number(card.dataset.awardCount || 1));
+    };
+    card.addEventListener("click", openAward);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openAward();
+      }
     });
   });
 }
@@ -1554,7 +1570,7 @@ function renderSummaryCard(label, value) {
 function renderAwardShowcaseCard(playerData, award) {
   const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
   return `
-    <article class="award-card" data-award-key="${variant.key}" tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
+    <article class="award-card" data-award-key="${variant.key}" data-award-count="${award.count}" tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
       <div class="award-card-preview">
         ${renderPlayerCard(playerData, { mode: "award", variant })}
         <span class="award-count">x${award.count}</span>
@@ -1562,6 +1578,41 @@ function renderAwardShowcaseCard(playerData, award) {
       <strong>${escapeHtml(variant.label)}</strong>
     </article>
   `;
+}
+
+function showAwardDetail(playerData, award, count = 1) {
+  const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
+  const existing = document.querySelector(".award-modal");
+  if (existing) existing.remove();
+  const modal = document.createElement("div");
+  modal.className = "award-modal";
+  modal.innerHTML = `
+    <div class="award-modal-backdrop" data-close-award></div>
+    <section class="award-modal-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.label)}">
+      <button class="award-modal-close" data-close-award type="button" aria-label="Fechar">x</button>
+      <div class="award-modal-card">
+        ${renderPlayerCard(playerData, { mode: "profile", variant })}
+        <span class="award-count award-count-large">x${count}</span>
+      </div>
+      <div class="award-modal-copy">
+        <p class="eyebrow">Premio</p>
+        <h3>${escapeHtml(variant.label)}</h3>
+        <p>${escapeHtml(variant.description || "Carta especial obtida pelo jogador.")}</p>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(modal);
+  const handleKey = (event) => {
+    if (event.key === "Escape") {
+      close();
+    }
+  };
+  const close = () => {
+    modal.remove();
+    window.removeEventListener("keydown", handleKey);
+  };
+  modal.querySelectorAll("[data-close-award]").forEach((button) => button.addEventListener("click", close));
+  window.addEventListener("keydown", handleKey);
 }
 
 function addAwardCount(counts, key, amount = 1) {
@@ -1629,14 +1680,14 @@ function countPlayerMvpAwards(playerId, counts) {
       }
     });
 
-  const months = new Set(state.games.filter(isFinishedGame).map((game) => getMonthId(game.date)));
+  const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
   months.forEach((monthId) => {
     if (getOfficialMvpWinnersByMonth(monthId).includes(playerId)) addAwardCount(counts, "mvp_month");
   });
 }
 
 function countPlayerSeasonAwards(playerId, counts) {
-  const seasons = new Set(state.games.filter(isFinishedGame).map((game) => getSeasonId(game.date)));
+  const seasons = new Set(state.games.filter((game) => isFinishedGame(game) && isSeasonComplete(getSeasonId(game.date))).map((game) => getSeasonId(game.date)));
   seasons.forEach((seasonId) => {
     if (!getSeasonChampionIds(seasonId).includes(playerId)) return;
     const seasonKey = seasonId.split("-")[0];
@@ -1645,7 +1696,7 @@ function countPlayerSeasonAwards(playerId, counts) {
 }
 
 function countPlayerAttendanceAwards(playerId, counts) {
-  const months = new Set(state.games.filter(isFinishedGame).map((game) => getMonthId(game.date)));
+  const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
   months.forEach((monthId) => {
     const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
     if (games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId))) addAwardCount(counts, "ironman_month");
@@ -1705,8 +1756,8 @@ function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), 
     }
   }
 
-  if (isCurrentSeasonChampion(playerData.id)) return getSeasonChampionCardKey(new Date());
-  if (isCurrentMonthMvpLeader(playerData.id)) return "mvp_month";
+  if (isLatestCompletedSeasonChampion(playerData.id)) return getSeasonChampionCardKey(getLatestCompletedSeasonDate());
+  if (isLatestCompletedMonthMvpLeader(playerData.id)) return "mvp_month";
   if (form.winStreak >= 5) return "win_5x";
   if (form.winStreak >= 4) return "win_4x";
   if (form.winStreak >= 3) return "win_3x";
@@ -1715,7 +1766,7 @@ function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), 
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 5) return "form_5w_5";
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 4) return "form_4w_5";
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 3) return "form_3w_5";
-  if (isCurrentMonthIronman(playerData.id)) return "ironman_month";
+  if (isLatestCompletedMonthIronman(playerData.id)) return "ironman_month";
   if (form.adjustment >= 4) return "rising";
   if (hasRecentReturn(playerData.id)) return "return";
   if (hasRegularRecentAttendance(playerData.id)) return "regular";
@@ -1822,6 +1873,68 @@ function getSeasonChampionCardKey(value) {
   return `champion_${getSeasonInfo(value).key}`;
 }
 
+function getMonthEnd(value) {
+  const date = new Date(value);
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function getSeasonEnd(value) {
+  const season = getSeasonInfo(value);
+  const year = season.year;
+  if (season.key === "spring") return new Date(year, 4, 31, 23, 59, 59, 999);
+  if (season.key === "summer") return new Date(year, 7, 31, 23, 59, 59, 999);
+  if (season.key === "autumn") return new Date(year, 10, 30, 23, 59, 59, 999);
+  return new Date(year + 1, 2, 0, 23, 59, 59, 999);
+}
+
+function isMonthComplete(monthId) {
+  const games = state.games.filter((game) => monthKey(game.date) === monthId);
+  if (!games.some(isFinishedGame)) return false;
+  if (games.some((game) => !isFinishedGame(game))) return false;
+  return getMonthEnd(games[0].date).getTime() < Date.now() || games.every((game) => new Date(game.date).getTime() < Date.now());
+}
+
+function isSeasonComplete(seasonId) {
+  const games = state.games.filter((game) => getSeasonId(game.date) === seasonId);
+  if (!games.some(isFinishedGame)) return false;
+  if (games.some((game) => !isFinishedGame(game))) return false;
+  return getSeasonEnd(games[0].date).getTime() < Date.now() || games.every((game) => new Date(game.date).getTime() < Date.now());
+}
+
+function getCompletedMonthIds() {
+  return [...new Set(state.games.map((game) => monthKey(game.date)))]
+    .filter(isMonthComplete)
+    .sort();
+}
+
+function getLatestCompletedMonthId() {
+  const months = getCompletedMonthIds();
+  return months[months.length - 1] || null;
+}
+
+function getCompletedSeasonIds() {
+  return [...new Set(state.games.map((game) => getSeasonId(game.date)))]
+    .filter(isSeasonComplete)
+    .sort((a, b) => getSeasonEnd(seasonIdToDate(a)) - getSeasonEnd(seasonIdToDate(b)));
+}
+
+function getLatestCompletedSeasonId() {
+  const seasons = getCompletedSeasonIds();
+  return seasons[seasons.length - 1] || null;
+}
+
+function seasonIdToDate(seasonId) {
+  const [key, yearText] = seasonId.split("-");
+  const year = Number(yearText) || new Date().getFullYear();
+  const monthBySeason = { spring: 2, summer: 5, autumn: 8, winter: 11 };
+  return new Date(year, monthBySeason[key] ?? 0, 1, 12);
+}
+
+function getLatestCompletedSeasonDate() {
+  const seasonId = getLatestCompletedSeasonId();
+  return seasonId ? seasonIdToDate(seasonId) : new Date();
+}
+
 function getOfficialMvpWinnersByMonth(monthId) {
   const counts = new Map();
   state.games
@@ -1835,6 +1948,11 @@ function getOfficialMvpWinnersByMonth(monthId) {
 
 function isCurrentMonthMvpLeader(playerId) {
   return getOfficialMvpWinnersByMonth(getMonthId(new Date())).includes(playerId);
+}
+
+function isLatestCompletedMonthMvpLeader(playerId) {
+  const monthId = getLatestCompletedMonthId();
+  return Boolean(monthId && getOfficialMvpWinnersByMonth(monthId).includes(playerId));
 }
 
 function getSeasonChampionIds(seasonId) {
@@ -1870,8 +1988,20 @@ function isCurrentSeasonChampion(playerId) {
   return getSeasonChampionIds(getSeasonId(new Date())).includes(playerId);
 }
 
+function isLatestCompletedSeasonChampion(playerId) {
+  const seasonId = getLatestCompletedSeasonId();
+  return Boolean(seasonId && getSeasonChampionIds(seasonId).includes(playerId));
+}
+
 function isCurrentMonthIronman(playerId) {
   const monthId = getMonthId(new Date());
+  const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
+  return games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId));
+}
+
+function isLatestCompletedMonthIronman(playerId) {
+  const monthId = getLatestCompletedMonthId();
+  if (!monthId) return false;
   const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
   return games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId));
 }
@@ -2295,6 +2425,12 @@ function renderPaymentsPanel() {
   els.paymentsPanel.querySelectorAll("[data-game-finance-toggle]").forEach((input) => {
     input.addEventListener("change", () => updateGameFinanceOverride(input.dataset.gameFinanceToggle, input.dataset.gameFinanceField, input.checked));
   });
+  els.paymentsPanel.querySelectorAll("[data-game-field-cost]").forEach((input) => {
+    input.addEventListener("change", () => updateGameFinanceOverride(input.dataset.gameFieldCost, "fieldCost", Number(input.value || 0)));
+  });
+  els.paymentsPanel.querySelectorAll("[data-edit-payment]").forEach((button) => {
+    button.addEventListener("click", () => editPayment(button.dataset.editPayment));
+  });
 }
 
 function renderPaymentRow(row, games) {
@@ -2349,6 +2485,10 @@ function renderGameFinanceControls(report) {
                 <input type="checkbox" data-game-finance-toggle="${game.id}" data-game-finance-field="chargePlayers" ${settings.chargePlayers ? "checked" : ""}>
                 Cobrar jogadores
               </label>
+              <label>
+                Campo
+                <input class="finance-cost-input" type="number" min="0" step="0.5" data-game-field-cost="${game.id}" value="${settings.fieldCost}">
+              </label>
             </article>
           `;
         }).join("")}
@@ -2369,6 +2509,7 @@ function renderPaymentsHistory(monthPayments) {
               <strong>${escapeHtml(playerData?.name || "Jogador removido")} - ${euro(payment.amount)}</strong>
               <span>${formatDate(payment.paidAt)}${payment.note ? ` - ${escapeHtml(payment.note)}` : ""}</span>
             </div>
+            <button class="mini-btn" data-edit-payment="${payment.id}" type="button">Editar</button>
           </article>
         `;
       }).join("")}
@@ -2406,6 +2547,52 @@ async function addManualPayment() {
     alert(`Nao consegui guardar pagamento. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
   }
   renderPaymentsPanel();
+}
+
+async function editPayment(paymentId) {
+  if (!requireAdmin()) return;
+  const payment = payments.find((item) => item.id === paymentId);
+  if (!payment) return;
+  const amountText = prompt("Novo valor pago:", String(payment.amount));
+  if (amountText === null) return;
+  const nextAmount = Number(amountText);
+  if (Number.isNaN(nextAmount) || nextAmount < 0) {
+    alert("Valor invalido.");
+    return;
+  }
+  const currentDate = toDateInputValue(payment.paidAt);
+  const nextDateValue = prompt("Nova data do pagamento (YYYY-MM-DD):", currentDate);
+  if (nextDateValue === null) return;
+  const parsedDate = new Date(`${nextDateValue}T12:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) {
+    alert("Data invalida.");
+    return;
+  }
+  const nextNote = prompt("Nota do pagamento:", payment.note || "") ?? "";
+  const editNote = prompt("Nota da edicao:", "Corrigido pelo admin") ?? "";
+  const previousPayments = payments.map((item) => ({ ...item }));
+  payment.amount = nextAmount;
+  payment.paidAt = parsedDate.toISOString();
+  payment.note = appendPaymentEditNote(nextNote.trim(), editNote.trim());
+  try {
+    await persistState();
+  } catch (error) {
+    payments = previousPayments;
+    saveState();
+    alert(`Nao consegui editar pagamento. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+  }
+  renderPaymentsPanel();
+}
+
+function appendPaymentEditNote(note, editNote) {
+  const stamp = `Editado ${new Date().toLocaleDateString("pt-PT")}${editNote ? `: ${editNote}` : ""}`;
+  return note ? `${note} | ${stamp}` : stamp;
+}
+
+function toDateInputValue(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return todayInputDate();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 async function saveFinanceSettingsFromPanel() {
@@ -2453,13 +2640,18 @@ async function updateAttendanceOverride(gameId, playerId, attended) {
 
 async function updateGameFinanceOverride(gameId, field, value) {
   if (!requireAdmin()) return;
-  if (!["fieldPaid", "chargePlayers"].includes(field)) return;
+  if (!["fieldPaid", "chargePlayers", "fieldCost"].includes(field)) return;
+  if (field === "fieldCost" && (Number.isNaN(value) || value < 0)) {
+    alert("Insere um valor valido para o campo.");
+    renderPaymentsPanel();
+    return;
+  }
   const existing = gameFinanceOverrides.find((item) => item.gameId === gameId) || getGameFinanceSettings({ id: gameId });
   const next = {
     ...existing,
     id: gameFinanceOverrideId(gameId),
     gameId,
-    [field]: value,
+    [field]: field === "fieldCost" ? Number(value) : value,
     updatedBy: currentSession?.user?.id || null,
     updatedAt: new Date().toISOString(),
   };
@@ -2528,7 +2720,7 @@ function buildMonthlyPaymentReport(month) {
     .filter((payment) => monthKey(payment.paidAt) === month)
     .sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
   const fieldPaidGames = games.filter((game) => getGameFinanceSettings(game).fieldPaid);
-  const fieldCost = fieldPaidGames.length * PAYMENT_RULES.fieldCostPerGame;
+  const fieldCost = fieldPaidGames.reduce((sum, game) => sum + getGameFinanceSettings(game).fieldCost, 0);
   const totalPaidMonth = rows.reduce((sum, row) => sum + row.paidMonth, 0);
   return {
     month,
@@ -2611,6 +2803,7 @@ function getGameFinanceSettings(game) {
     gameId,
     fieldPaid: override?.fieldPaid ?? true,
     chargePlayers: override?.chargePlayers ?? true,
+    fieldCost: override?.fieldCost ?? PAYMENT_RULES.fieldCostPerGame,
     updatedBy: override?.updatedBy || null,
     updatedAt: override?.updatedAt || new Date().toISOString(),
   };
@@ -3670,14 +3863,17 @@ function renderMvpAdminVoteBreakdown(game, votes) {
   `;
 }
 
-function bindMvpPanelActions(game) {
-  els.fieldCard.querySelector("[data-save-mvp-vote]")?.addEventListener("click", async () => {
+function bindMvpPanelActions(game, root = els.fieldCard) {
+  root?.querySelector("[data-save-mvp-vote]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
-    const select = els.fieldCard.querySelector(`[data-mvp-candidate="${game.id}"]`);
+    const select = root.querySelector(`[data-mvp-candidate="${game.id}"]`);
     const candidateId = select?.value;
     if (!linkedPlayer || !candidateId) return;
     const ok = await saveMvpVote(game, linkedPlayer, candidateId);
-    if (ok) renderCurrentGame();
+    if (ok) {
+      if (currentHistoryGameId === game.id) renderHistoryGameDetail();
+      else renderCurrentGame();
+    }
   });
 }
 
@@ -3716,13 +3912,11 @@ function renderField(game, options = {}) {
   const teamB = hydrate(game.teamB);
   const benchA = hydrate(getBenchA(game));
   const benchB = hydrate(getBenchB(game));
-  const statsA = getTeamStats(teamA);
-  const statsB = getTeamStats(teamB);
-  const squadAStats = getTeamStats([...teamA, ...benchA]);
-  const squadBStats = getTeamStats([...teamB, ...benchB]);
+  const squadA = [...teamA, ...benchA];
+  const squadB = [...teamB, ...benchB];
   const result = game.scoreA == null || game.scoreB == null ? "vs" : `${game.scoreA} - ${game.scoreB}`;
   const date = formatDate(game.date);
-  const radar = renderTeamRadarChart(teamA, teamB);
+  const radar = renderTeamRadarChart(squadA, squadB);
   const radarPosition = options.radarPosition || "top";
 
   return `
@@ -3740,23 +3934,20 @@ function renderField(game, options = {}) {
     </div>
     ${radarPosition === "top" ? radar : ""}
     <div class="pitch">
-      ${orderTeamForField(teamA).map((p, i) => renderDot(p, "team-a", getPosition("a", i), game)).join("")}
-      ${orderTeamForField(teamB).map((p, i) => renderDot(p, "team-b", getPosition("b", i), game)).join("")}
-    </div>
-    <div class="bench-strip">
-      <div class="bench-side bench-left">${renderBenchCards("Supl. A", benchA, "team-a", game)}</div>
-      <div class="bench-side bench-right">${renderBenchCards("Supl. B", benchB, "team-b", game)}</div>
+      ${orderTeamForField(squadA).map((p, i) => renderDot(p, "team-a", getPosition("a", i, squadA.length), game, options)).join("")}
+      ${orderTeamForField(squadB).map((p, i) => renderDot(p, "team-b", getPosition("b", i, squadB.length), game, options)).join("")}
     </div>
     ${renderMvpPanel(game)}
     ${radarPosition === "bottom" ? radar : ""}
   `;
 }
 
-function renderDot(playerData, teamClass, pos, game = null) {
+function renderDot(playerData, teamClass, pos, game = null, options = {}) {
   const form = getPlayerForm(playerData);
   const variant = getPlayerCardVariant(playerData, form, game);
+  const playerAttr = options.clickablePlayers ? ` data-open-field-player="${playerData.id}" role="button" tabindex="0"` : "";
   return `
-    <div class="player-dot ${teamClass} card-variant-${variant.key}" style="left:${pos.x}%;top:${pos.y}%;--field-offset-x:${pos.offsetXPx || 0}px">
+    <div class="player-dot ${teamClass} card-variant-${variant.key}"${playerAttr} style="left:${pos.x}%;top:${pos.y}%;--field-offset-x:${pos.offsetXPx || 0}px">
       ${renderPlayerCard(playerData, { mode: "field", form, variant })}
     </div>
   `;
@@ -3803,6 +3994,27 @@ function renderFutStats(playerData) {
 
 function orderTeamForField(players) {
   const remaining = [...players];
+  if (remaining.length <= 5) return orderFiveForField(remaining);
+  const takeBest = (scoreFn) => {
+    let bestIndex = 0;
+    for (let i = 1; i < remaining.length; i += 1) {
+      if (scoreFn(remaining[i]) > scoreFn(remaining[bestIndex])) bestIndex = i;
+    }
+    return remaining.splice(bestIndex, 1)[0];
+  };
+
+  const backOne = takeBest((p) => p.defending * 2 + p.physical + p.overall * 0.1);
+  const backTwo = takeBest((p) => p.defending * 1.6 + p.physical * 1.2 + p.passing * 0.3);
+  const wingOne = takeBest((p) => p.dribbling * 2 + p.passing + p.pace * 0.4);
+  const wingTwo = takeBest((p) => p.dribbling * 2 + p.passing + p.pace * 0.4);
+  const frontOne = takeBest((p) => p.shooting * 2 + p.dribbling + p.overall * 0.2);
+  const frontTwo = takeBest((p) => p.shooting * 1.4 + p.pace + p.dribbling * 0.8);
+
+  return [backOne, backTwo, wingOne, wingTwo, frontOne, frontTwo, ...remaining].filter(Boolean);
+}
+
+function orderFiveForField(players) {
+  const remaining = [...players];
   const takeBest = (scoreFn) => {
     let bestIndex = 0;
     for (let i = 1; i < remaining.length; i += 1) {
@@ -3837,14 +4049,24 @@ function renderAvatar(playerData) {
   return `<span class="avatar avatar-fallback">${escapeHtml(initials(playerData.name))}</span>`;
 }
 
-function getPosition(side, index) {
-  const left = [
+function getPosition(side, index, teamSize = 5) {
+  const leftFive = [
     { x: 11, y: 50 },
     { x: 27, y: 18 },
     { x: 27, y: 82 },
     { x: 41, y: 38, offsetXPx: -12 },
     { x: 41, y: 62, offsetXPx: -12 },
   ];
+  const leftSix = [
+    { x: 14, y: 38 },
+    { x: 14, y: 62 },
+    { x: 28, y: 20 },
+    { x: 28, y: 80 },
+    { x: 42, y: 38, offsetXPx: -12 },
+    { x: 42, y: 62, offsetXPx: -12 },
+    { x: 35, y: 50, offsetXPx: -12 },
+  ];
+  const left = teamSize > 5 ? leftSix : leftFive;
   const right = left.map((p) => ({ x: 100 - p.x, y: p.y, offsetXPx: p.offsetXPx ? Math.abs(p.offsetXPx) : 0 }));
   return (side === "a" ? left : right)[index] || { x: side === "a" ? 45 : 55, y: 50 };
 }
@@ -4240,14 +4462,23 @@ function renderHistoryGameDetail() {
       <button class="ghost-btn" data-back-to-games>Voltar</button>
     </div>
     <div class="field-card history-field-card">
-      ${renderField(game, { radarPosition: "bottom" })}
+      ${renderField(game, { radarPosition: "bottom", clickablePlayers: true })}
     </div>
   `;
   els.historyGameDetail.querySelector("[data-back-to-games]")?.addEventListener("click", () => {
     currentHistoryGameId = null;
     showView("games");
   });
-  bindMvpPanelActions(game);
+  els.historyGameDetail.querySelectorAll("[data-open-field-player]").forEach((card) => {
+    card.addEventListener("click", () => openPlayerProfile(card.dataset.openFieldPlayer));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openPlayerProfile(card.dataset.openFieldPlayer);
+      }
+    });
+  });
+  bindMvpPanelActions(game, els.historyGameDetail);
 }
 
 async function deleteGame(gameId) {
@@ -4292,6 +4523,8 @@ async function drawGameCanvas(game) {
   const teamB = hydrate(game.teamB);
   const benchA = hydrate(getBenchA(game));
   const benchB = hydrate(getBenchB(game));
+  const squadA = [...teamA, ...benchA];
+  const squadB = [...teamB, ...benchB];
   const result = game.scoreA == null || game.scoreB == null ? "vs" : `${game.scoreA} - ${game.scoreB}`;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -4321,15 +4554,12 @@ async function drawGameCanvas(game) {
 
   const pitch = { x: 90, y: 410, w: 1420, h: 1230 };
   drawPitch(ctx, pitch);
-  for (const [i, p] of orderTeamForField(teamA).entries()) {
-    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("a", i)), "#1f7a4d", game);
+  for (const [i, p] of orderTeamForField(squadA).entries()) {
+    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("a", i, squadA.length)), "#1f7a4d", game);
   }
-  for (const [i, p] of orderTeamForField(teamB).entries()) {
-    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("b", i)), "#c86422", game);
+  for (const [i, p] of orderTeamForField(squadB).entries()) {
+    await drawPlayerDot(ctx, p, getCanvasPos(pitch, getPosition("b", i, squadB.length)), "#c86422", game);
   }
-
-  await drawBenchGroup(ctx, "Supl. A", benchA, 120, 1800, "#1f7a4d", game);
-  await drawBenchGroup(ctx, "Supl. B", benchB, 1160, 1800, "#c86422", game);
 }
 
 function drawTeamHeader(ctx, label, x, y, color, align = "left") {
