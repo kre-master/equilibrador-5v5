@@ -3681,12 +3681,42 @@ function resizePhoto(file) {
         canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        const hasTransparentBackground = removeLightPhotoBackground(ctx, canvas.width, canvas.height);
+        resolve(hasTransparentBackground ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.82));
       };
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+function removeLightPhotoBackground(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  let transparentPixels = 0;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const red = data[index];
+    const green = data[index + 1];
+    const blue = data[index + 2];
+    const brightness = (red + green + blue) / 3;
+    const maxChannel = Math.max(red, green, blue);
+    const minChannel = Math.min(red, green, blue);
+    const saturation = maxChannel - minChannel;
+
+    if (brightness > 238 && saturation < 22) {
+      data[index + 3] = 0;
+      transparentPixels += 1;
+    } else if (brightness > 222 && saturation < 18) {
+      data[index + 3] = Math.min(data[index + 3], 80);
+      transparentPixels += 1;
+    }
+  }
+
+  if (transparentPixels > 0) {
+    ctx.putImageData(imageData, 0, 0);
+  }
+  return transparentPixels > width * height * 0.02;
 }
 
 function renderPlayersTable() {
