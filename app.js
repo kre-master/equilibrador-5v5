@@ -26,6 +26,7 @@ const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
 const TEAM_RADAR_MIN = 55;
 const TEAM_RADAR_MAX = 75;
+const TEAM_RADAR_DYNAMIC_MAX = true;
 const TEAM_RADAR_AGGREGATION = "power";
 const TEAM_RADAR_POWER = 1.35;
 const TEAM_RADAR_STATS = [
@@ -1267,9 +1268,16 @@ function renderAccountPanel() {
           <strong>${canSeeCurrentRatings() ? form.currentRating : linkedPlayer.overall}</strong>
           <span>${canSeeCurrentRatings() ? renderFormChip(form) : renderFormSign(form)}</span>
         </div>
+        <div class="actions">
+          <label class="file-btn">
+            Alterar foto
+            <input data-own-player-photo type="file" accept="image/*">
+          </label>
+        </div>
         ${renderSecurityActions()}
       </div>
     `;
+    els.accountPanel.querySelector("[data-own-player-photo]")?.addEventListener("change", handleOwnPlayerPhotoSelection);
     bindAccountPanelActions();
     return;
   }
@@ -1320,6 +1328,39 @@ function renderSecurityActions() {
       <button class="danger-btn" data-unlink-own-player>Desassociar perfil</button>
     </div>
   `;
+}
+
+async function handleOwnPlayerPhotoSelection(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) {
+    alert("Esta conta nao tem perfil de jogador associado.");
+    return;
+  }
+  try {
+    const photoDataUrl = await resizePhoto(file);
+    await updateOwnPlayerPhoto(linkedPlayer.id, photoDataUrl);
+  } catch (error) {
+    alert(`Nao consegui atualizar a foto: ${error.message}`);
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function updateOwnPlayerPhoto(playerId, photoDataUrl) {
+  const playerIndex = state.players.findIndex((playerData) => playerData.id === playerId);
+  if (playerIndex < 0) return;
+  const updatedPlayer = { ...state.players[playerIndex], photoDataUrl };
+  state.players[playerIndex] = updatedPlayer;
+  saveState();
+
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("players").upsert(playerToRow(updatedPlayer));
+    if (error) throw error;
+  }
+
+  render();
 }
 
 function openPlayerProfile(playerId) {
@@ -4350,9 +4391,25 @@ function aggregateTeamRadarStat(players, key) {
   return Math.round(Math.pow(poweredAverage, 1 / power));
 }
 
-function radarPoint(centerX, centerY, radius, index, total, value = 100) {
+function getTeamRadarMax(statsA, statsB) {
+  if (!TEAM_RADAR_DYNAMIC_MAX) return TEAM_RADAR_MAX;
+  const highestStat = Math.max(
+    TEAM_RADAR_MIN,
+    ...statsA.map((item) => item.value),
+    ...statsB.map((item) => item.value)
+  );
+  return clampNumber(Math.ceil(highestStat * 1.05), TEAM_RADAR_MIN + 1, 100);
+}
+
+function getTeamRadarGridRings(maxValue) {
+  const range = Math.max(1, maxValue - TEAM_RADAR_MIN);
+  return [0, 0.25, 0.5, 0.75, 1].map((step) => Math.round(TEAM_RADAR_MIN + range * step));
+}
+
+function radarPoint(centerX, centerY, radius, index, total, value = 100, maxValue = TEAM_RADAR_MAX) {
   const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total;
-  const normalizedValue = (clampNumber(value, TEAM_RADAR_MIN, TEAM_RADAR_MAX) - TEAM_RADAR_MIN) / (TEAM_RADAR_MAX - TEAM_RADAR_MIN);
+  const scaleMax = Math.max(TEAM_RADAR_MIN + 1, maxValue);
+  const normalizedValue = (clampNumber(value, TEAM_RADAR_MIN, scaleMax) - TEAM_RADAR_MIN) / (scaleMax - TEAM_RADAR_MIN);
   const scaledRadius = radius * normalizedValue;
   return {
     x: centerX + Math.cos(angle) * scaledRadius,
@@ -4360,9 +4417,9 @@ function radarPoint(centerX, centerY, radius, index, total, value = 100) {
   };
 }
 
-function radarPolygonPoints(values, centerX, centerY, radius) {
+function radarPolygonPoints(values, centerX, centerY, radius, maxValue) {
   return values.map((item, index) => {
-    const point = radarPoint(centerX, centerY, radius, index, values.length, item.value);
+    const point = radarPoint(centerX, centerY, radius, index, values.length, item.value, maxValue);
     return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
   }).join(" ");
 }
@@ -4374,9 +4431,10 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
   const centerX = 110;
   const centerY = compact ? 88 : 98;
   const radius = compact ? 44 : 56;
-  const gridRings = [TEAM_RADAR_MIN, 60, 65, 70, TEAM_RADAR_MAX];
+  const radarMax = getTeamRadarMax(statsA, statsB);
+  const gridRings = getTeamRadarGridRings(radarMax);
   const labels = TEAM_RADAR_STATS.map((stat, index) => {
-    const point = radarPoint(centerX, centerY, radius + (compact ? 24 : 30), index, TEAM_RADAR_STATS.length);
+    const point = radarPoint(centerX, centerY, radius + (compact ? 24 : 30), index, TEAM_RADAR_STATS.length, radarMax, radarMax);
     const valueA = statsA[index]?.value ?? 0;
     const valueB = statsB[index]?.value ?? 0;
     return `
@@ -4388,12 +4446,12 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
     `;
   }).join("");
   const axes = TEAM_RADAR_STATS.map((stat, index) => {
-    const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length);
+    const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length, radarMax, radarMax);
     return `<line x1="${centerX}" y1="${centerY}" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}" />`;
   }).join("");
   const rings = gridRings.map((ring) => {
     const points = TEAM_RADAR_STATS.map((stat, index) => {
-      const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length, ring);
+      const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length, ring, radarMax);
       return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
     }).join(" ");
     return `<polygon points="${points}" />`;
@@ -4412,8 +4470,8 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
           ${rings}
           ${axes}
         </g>
-        <polygon class="team-radar-area team-a" points="${radarPolygonPoints(statsA, centerX, centerY, radius)}" />
-        <polygon class="team-radar-area team-b" points="${radarPolygonPoints(statsB, centerX, centerY, radius)}" />
+        <polygon class="team-radar-area team-a" points="${radarPolygonPoints(statsA, centerX, centerY, radius, radarMax)}" />
+        <polygon class="team-radar-area team-b" points="${radarPolygonPoints(statsB, centerX, centerY, radius, radarMax)}" />
         <g class="team-radar-labels">${labels}</g>
       </svg>
     </div>
