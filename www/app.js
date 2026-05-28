@@ -731,8 +731,49 @@ function bindEvents() {
 
 async function initApp() {
   await initRemote();
+  applyLandingRoute();
   render();
   setupNavigationHistory();
+}
+
+function applyLandingRoute() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) return;
+
+  const activeEvent = getLandingActiveEvent();
+  if (activeEvent && !getResponseForPlayer(activeEvent.id, linkedPlayer.id)) {
+    currentEventId = activeEvent.id;
+    showView("events", { push: false });
+    return;
+  }
+
+  const openGame = getLandingOpenGame(linkedPlayer.id);
+  if (openGame) {
+    currentGameId = openGame.id;
+    currentHistoryGameId = null;
+    showView("today", { push: false });
+    return;
+  }
+
+  currentPlayerProfileId = linkedPlayer.id;
+  showView("player-profile", { push: false });
+}
+
+function getLandingOpenGame(playerId) {
+  return [...state.games]
+    .filter((game) => !isFinishedGame(game) && getGamePlayerIds(ensureGameShape(game)).includes(playerId))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null;
+}
+
+function getLandingActiveEvent() {
+  const now = Date.now();
+  return [...(state.events || [])]
+    .filter((eventData) => eventData.status === "open")
+    .sort((a, b) => {
+      const aFuture = new Date(a.startsAt).getTime() >= now ? 0 : 1;
+      const bFuture = new Date(b.startsAt).getTime() >= now ? 0 : 1;
+      return aFuture - bFuture || new Date(a.startsAt) - new Date(b.startsAt);
+    })[0] || null;
 }
 
 async function initRemote() {
@@ -1429,7 +1470,6 @@ function renderPlayerProfile() {
   const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
   const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
   const form = getPlayerForm(playerData);
-  const canSeePrivateForm = canSeeCurrentRatings();
   const synergies = getPlayerSynergies(playerData.id);
   const variant = getPlayerCardVariant(playerData, form);
   const teamRecentItems = getPlayerTeamRecentItems(playerData.id);
@@ -1438,50 +1478,19 @@ function renderPlayerProfile() {
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
-      <button class="ghost-btn" data-player-profile-back>Voltar</button>
-      <div class="player-hero card-hero-${variant.key}">
-        <div class="player-hero-copy">
-          <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
-          <h2>${escapeHtml(playerData.name)}</h2>
-          ${account ? `<p>${escapeHtml(account.email || account.username || "")}</p>` : ""}
-          <div class="player-rating-stack">
-            <strong class="player-ovr">${canSeePrivateForm ? form.currentRating : playerData.overall}</strong>
-            ${canSeePrivateForm ? `<span>Base ${playerData.overall}</span>${renderFormChip(form)}` : `<span>OVR base</span>${renderFormSign(form)}`}
-          </div>
-        </div>
-        <div class="player-profile-card-wrap">
-          ${renderPlayerCard(playerData, { mode: "profile", form, variant })}
-        </div>
+      <div class="player-profile-card-wrap player-profile-card-hero">
+        ${renderPlayerCard(playerData, { mode: "profile", form, variant })}
       </div>
     </div>
 
-    <div class="profile-grid">
-      <section class="profile-section">
-        <h3>Stats</h3>
-        <div class="stats-grid">
-          ${renderProfileStat("PAC", playerData.pace)}
-          ${renderProfileStat("SHO", playerData.shooting)}
-          ${renderProfileStat("PAS", playerData.passing)}
-          ${renderProfileStat("DRI", playerData.dribbling)}
-          ${renderProfileStat("DEF", playerData.defending)}
-          ${renderProfileStat("PHY", playerData.physical)}
-        </div>
-      </section>
-
-      <section class="profile-section">
-        <h3>Historico</h3>
-        <div class="summary-grid">
-          ${renderSummaryCard("Jogos", summary.appearances)}
-          ${renderSummaryCard("Vitorias", summary.wins)}
-          ${renderSummaryCard("Empates", summary.draws)}
-          ${renderSummaryCard("Derrotas", summary.losses)}
-          ${renderSummaryCard("Win rate", `${winRate}%`)}
-          ${canSeePrivateForm ? renderSummaryCard("Forma", form.level) : ""}
-          ${renderSummaryCard("Ult. 5 equipa", renderRecordDots(teamRecentRecord))}
-          ${renderSummaryCard("Ult. 5 jogador", renderRecordDots(form.recentRecord))}
-        </div>
-      </section>
-    </div>
+    <section class="profile-section">
+      <h3>Historico</h3>
+      ${renderHistorySummaryCard(summary, winRate)}
+      <div class="recent-summary-grid">
+        ${renderSummaryCard("Ult. 5 equipa", renderRecordDots(teamRecentRecord))}
+        ${renderSummaryCard("Ult. 5 jogador", renderRecordDots(form.recentRecord))}
+      </div>
+    </section>
 
     <section class="profile-section">
       <h3>Montra de premios</h3>
@@ -1518,11 +1527,17 @@ function renderPlayerProfile() {
         </div>
       ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
     </section>
+
+    <section class="profile-section player-identity-section">
+      <h3>Perfil</h3>
+      <div class="player-identity-card">
+        <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
+        <strong>${escapeHtml(playerData.name)}</strong>
+        ${account ? `<span>${escapeHtml(account.email || account.username || "")}</span>` : ""}
+      </div>
+    </section>
   `;
 
-  els.playerProfile.querySelector("[data-player-profile-back]")?.addEventListener("click", () => {
-    showView("players");
-  });
   els.playerProfile.querySelectorAll("[data-open-player]").forEach((button) => {
     button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
   });
@@ -1554,6 +1569,23 @@ function renderProfileStat(label, value) {
     <div class="profile-stat">
       <span>${label}</span>
       <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function renderHistorySummaryCard(summary, winRate) {
+  return `
+    <div class="history-summary-card">
+      <div>
+        <span>Jogos</span>
+        <strong>${summary.appearances}</strong>
+      </div>
+      <dl>
+        <div><dt>V</dt><dd>${summary.wins}</dd></div>
+        <div><dt>E</dt><dd>${summary.draws}</dd></div>
+        <div><dt>D</dt><dd>${summary.losses}</dd></div>
+        <div><dt>Wrate</dt><dd>${winRate}%</dd></div>
+      </dl>
     </div>
   `;
 }
@@ -1740,10 +1772,11 @@ function getPlayerCardVariant(playerData, form = getPlayerForm(playerData), game
 }
 
 function isLightTextCardVariant(variant) {
-  return ["hot", "mvp", "mvp_2x", "mvp_3x", "mvp_month", "champion_autumn", "champion_winter"].includes(variant?.key);
+  return ["hot", "mvp", "mvp_2x", "mvp_3x", "mvp_month", "champion_autumn", "champion_winter", "ironman_month"].includes(variant?.key);
 }
 
 function getCardTextColor(variant) {
+  if (variant?.key === "ironman_month") return "#dfe4e7";
   return isLightTextCardVariant(variant) ? "#f8eecb" : "#201809";
 }
 
@@ -4648,9 +4681,22 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   ctx.textBaseline = "middle";
   ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.1820, y + height * 0.2482);
 
+  const nameBox = {
+    x: x + width * 0.08,
+    y: y + height * 0.592,
+    w: width * 0.84,
+    h: height * 0.105,
+  };
+  ctx.save();
+  roundRect(ctx, nameBox.x, nameBox.y, nameBox.w, nameBox.h, Math.max(8, width * 0.035));
+  ctx.fillStyle = isLightTextCardVariant(variant) ? "rgba(14, 20, 22, .38)" : "rgba(255, 241, 208, .45)";
+  ctx.fill();
+  ctx.restore();
+
   ctx.textAlign = "center";
   ctx.font = `900 ${Math.round(width * 0.092)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.4987, y + height * 0.6259);
+  ctx.fillStyle = getCardTextColor(variant);
+  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.5, y + height * 0.645);
 
   drawFutStats(ctx, playerData, x, y, width, height, variant);
   ctx.shadowColor = "transparent";
@@ -4687,10 +4733,10 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
 
 function getCardPhotoRect(x, y, width, height) {
   return {
-    x: x + width * 0.2927,
-    y: y + height * 0.1376,
-    w: width * 0.4922,
-    h: height * 0.4222,
+    x: x + width * 0.20,
+    y: y + height * 0.09,
+    w: width * 0.66,
+    h: height * 0.57,
   };
 }
 

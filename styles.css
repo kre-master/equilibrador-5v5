@@ -1405,8 +1405,13 @@ body.mvp-gate-open {
 .card-variant-mvp_3x,
 .card-variant-mvp_month,
 .card-variant-champion_autumn,
-.card-variant-champion_winter {
+.card-variant-champion_winter,
+.card-variant-ironman_month {
   color: #f8eecb;
+}
+
+.card-variant-ironman_month {
+  color: #dfe4e7;
 }
 
 .card-rating {
@@ -1439,10 +1444,10 @@ body.mvp-gate-open {
 .card-photo {
   position: absolute;
   z-index: 2;
-  top: 13.76%;
-  left: 29.27%;
-  width: 49.22%;
-  height: 42.22%;
+  top: 9%;
+  left: 20%;
+  width: 66%;
+  height: 57%;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1470,10 +1475,11 @@ body.mvp-gate-open {
 
 .card-name {
   position: absolute;
-  top: 57.35%;
-  left: 13.34%;
-  width: 73.06%;
-  height: 10.48%;
+  z-index: 4;
+  top: 59.2%;
+  left: 8%;
+  width: 84%;
+  height: 10.5%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1483,6 +1489,9 @@ body.mvp-gate-open {
   white-space: nowrap;
   font-size: 12px;
   font-weight: 950;
+  border-radius: 10px;
+  background: rgba(255, 241, 208, .48);
+  backdrop-filter: blur(8px);
   text-shadow: 0 1px 5px rgba(255,255,255,.58);
 }
 
@@ -1524,8 +1533,22 @@ body.mvp-gate-open {
 .card-variant-champion_autumn .card-stats,
 .card-variant-champion_winter .card-rating,
 .card-variant-champion_winter .card-name,
-.card-variant-champion_winter .card-stats {
+.card-variant-champion_winter .card-stats,
+.card-variant-ironman_month .card-rating,
+.card-variant-ironman_month .card-name,
+.card-variant-ironman_month .card-stats {
   text-shadow: 0 2px 6px rgba(0,0,0,.6);
+}
+
+.card-variant-hot .card-name,
+.card-variant-mvp .card-name,
+.card-variant-mvp_2x .card-name,
+.card-variant-mvp_3x .card-name,
+.card-variant-mvp_month .card-name,
+.card-variant-champion_autumn .card-name,
+.card-variant-champion_winter .card-name,
+.card-variant-ironman_month .card-name {
+  background: rgba(14, 20, 22, .38);
 }
 
 .player-card-profile .card-rating strong {
@@ -1798,42 +1821,8 @@ th.stat-col {
 
 .player-profile-head {
   display: grid;
-  gap: 16px;
-}
-
-.player-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 22px;
-  overflow: hidden;
-  border: 1px solid rgba(190, 205, 198, 0.62);
-  border-radius: 26px;
-  padding: 18px;
-  background: linear-gradient(135deg, rgba(255,255,255,.82), rgba(255,255,255,.48));
-  box-shadow: var(--shadow-soft);
-}
-
-.player-hero-copy {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.player-hero .avatar {
-  width: 78px;
-  height: 78px;
-  font-size: 22px;
-}
-
-.player-hero h2 {
-  font-size: clamp(28px, 4vw, 48px);
-  line-height: 1;
-}
-
-.player-hero p {
-  margin-top: 4px;
-  color: var(--muted);
+  justify-items: center;
+  gap: 8px;
 }
 
 .player-profile-card-wrap {
@@ -1841,17 +1830,13 @@ th.stat-col {
   justify-items: center;
 }
 
-.player-ovr {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border: 1px solid rgba(255,255,255,.78);
-  border-radius: 22px;
-  color: #fff;
-  background: linear-gradient(135deg, #248758, var(--green-deep));
-  box-shadow: var(--shadow-soft);
-  font-size: 30px;
+.player-profile-card-hero {
+  width: 100%;
+  padding-block: 4px 10px;
+}
+
+.player-profile-card-hero .player-card-profile {
+  width: min(380px, 84vw);
 }
 
 .profile-grid {
@@ -1882,6 +1867,70 @@ th.stat-col {
 
 .summary-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.recent-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.history-summary-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(247,250,249,.72);
+}
+
+.history-summary-card span,
+.history-summary-card dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.history-summary-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.history-summary-card dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.history-summary-card dd {
+  margin: 4px 0 0;
+  color: #a20f2a;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.player-identity-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(247,250,249,.72);
+}
+
+.player-identity-card strong {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.player-identity-card span {
+  color: var(--muted);
+  font-size: 15px;
 }
 
 .profile-stat,
@@ -2506,7 +2555,6 @@ th.stat-col {
     width: 68px;
   }
 
-  .player-hero,
   .profile-game-row,
   .synergy-grid {
     grid-template-columns: 1fr;
@@ -2522,13 +2570,20 @@ th.stat-col {
     width: min(250px, 70vw);
   }
 
-  .player-hero .avatar {
-    width: 86px;
-    height: 86px;
-  }
-
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .recent-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .history-summary-card dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .payments-toolbar,
