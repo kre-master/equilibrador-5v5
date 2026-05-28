@@ -1114,7 +1114,7 @@ body.mvp-gate-open {
 .visitor-mode #reset-data,
 .visitor-mode #event-form,
 .visitor-mode .admin-actions,
-.visitor-mode .file-btn,
+.visitor-mode .admin-file-btn,
 .visitor-mode .admin-only {
   display: none !important;
 }

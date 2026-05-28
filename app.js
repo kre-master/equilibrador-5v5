@@ -29,6 +29,8 @@ const TEAM_RADAR_MAX = 75;
 const TEAM_RADAR_DYNAMIC_MAX = true;
 const TEAM_RADAR_AGGREGATION = "power";
 const TEAM_RADAR_POWER = 1.35;
+const MVP_MIN_VOTES = 5;
+const MVP_LOCK_HOURS = 24;
 const TEAM_RADAR_STATS = [
   { key: "pace", label: "PAC" },
   { key: "shooting", label: "SHO" },
@@ -299,6 +301,7 @@ function gameFromRow(row) {
     benchB: row.bench_b || [],
     scoreA: row.score_a,
     scoreB: row.score_b,
+    scoreSavedAt: row.score_saved_at || null,
     notes: row.notes || "",
   });
 }
@@ -315,6 +318,7 @@ function gameToRow(game) {
     bench_b: clean.benchB,
     score_a: clean.scoreA,
     score_b: clean.scoreB,
+    score_saved_at: clean.scoreSavedAt || null,
     notes: clean.notes || "",
     updated_at: new Date().toISOString(),
   };
@@ -1356,7 +1360,13 @@ async function updateOwnPlayerPhoto(playerId, photoDataUrl) {
   saveState();
 
   if (remoteEnabled && supabaseClient) {
-    const { error } = await supabaseClient.from("players").upsert(playerToRow(updatedPlayer));
+    const { error } = await supabaseClient
+      .from("players")
+      .update({
+        photo_data_url: photoDataUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", playerId);
     if (error) throw error;
   }
 
@@ -1552,13 +1562,18 @@ function getPreviousFinishedGameFor(game) {
 }
 
 function getOfficialMvpIdsForGame(game) {
+  if (!isMvpVotingClosed(game)) return new Set();
   const counts = countMvpVotes(gameMvpVotes.filter((vote) => vote.gameId === game?.id));
   return new Set(getOfficialMvpWinners(counts).map((playerData) => playerData.id));
 }
 
 function getNextGameMvpIds(game) {
   const previousGame = getPreviousFinishedGameFor(game);
-  return previousGame ? getOfficialMvpIdsForGame(previousGame) : new Set();
+  if (!previousGame) return new Set();
+  const mvpIds = getOfficialMvpIdsForGame(previousGame);
+  if (!mvpIds.size) return new Set();
+  const previousMvpPlaysThisGame = getGamePlayerIds(game).some((playerId) => mvpIds.has(playerId));
+  return previousMvpPlaysThisGame ? mvpIds : new Set();
 }
 
 function canSeeCurrentRatings() {
@@ -3210,13 +3225,21 @@ function renderMvpPanel(game) {
   const canVote = linkedPlayer && participants.some((p) => p.id === linkedPlayer.id);
   const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
   const counts = countMvpVotes(votes);
-  const winners = getOfficialMvpWinners(counts);
+  const votingClosed = isMvpVotingClosed(game);
+  const winners = votingClosed ? getOfficialMvpWinners(counts) : [];
   const myVote = linkedPlayer ? votes.find((vote) => vote.voterPlayerId === linkedPlayer.id) : null;
+  const lockAt = getMvpLockAt(game);
+  const statusText = votingClosed
+    ? "Votacao fechada"
+    : votes.length < MVP_MIN_VOTES
+      ? `${votes.length} votos (min. ${MVP_MIN_VOTES})`
+      : lockAt ? `Fecha ${formatDate(lockAt.toISOString())}` : `${votes.length} votos`;
   return `
     <section class="mvp-panel">
       <div>
         <p class="eyebrow">MVP interno</p>
-        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : `${votes.length} votos (min. 5)`}</strong>
+        <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : statusText}</strong>
+        ${renderMvpAdminVoteBreakdown(game, votes)}
       </div>
       ${canVote && myVote ? `
         <span class="metric good-pill">Voto registado</span>
@@ -3294,9 +3317,41 @@ function countMvpVotes(votes) {
 function getOfficialMvpWinners(counts) {
   const entries = [...counts.entries()];
   const totalVotes = entries.reduce((sum, [, count]) => sum + count, 0);
-  if (totalVotes < 5) return [];
+  if (totalVotes < MVP_MIN_VOTES) return [];
   const max = Math.max(...entries.map(([, count]) => count));
   return entries.filter(([, count]) => count === max).map(([id]) => findPlayer(id)).filter(Boolean);
+}
+
+function getMvpLockAt(game) {
+  const referenceDate = game?.scoreSavedAt || game?.date;
+  if (!referenceDate) return null;
+  const time = new Date(referenceDate).getTime();
+  if (Number.isNaN(time)) return null;
+  return new Date(time + MVP_LOCK_HOURS * 60 * 60 * 1000);
+}
+
+function hasMinimumMvpVotes(game) {
+  return gameMvpVotes.filter((vote) => vote.gameId === game?.id).length >= MVP_MIN_VOTES;
+}
+
+function isMvpVotingClosed(game) {
+  const lockAt = getMvpLockAt(game);
+  return Boolean(lockAt && hasMinimumMvpVotes(game) && Date.now() >= lockAt.getTime());
+}
+
+function renderMvpAdminVoteBreakdown(game, votes) {
+  if (!isAdmin || !votes.length) return "";
+  const counts = countMvpVotes(votes);
+  const rows = [...counts.entries()]
+    .map(([playerId, count]) => ({ playerData: findPlayer(playerId), count }))
+    .filter((item) => item.playerData)
+    .sort((a, b) => b.count - a.count || a.playerData.name.localeCompare(b.playerData.name));
+  if (!rows.length) return "";
+  return `
+    <div class="mvp-breakdown admin-only">
+      ${rows.map((item) => `<span>${escapeHtml(item.playerData.name)}: <strong>${item.count}</strong></span>`).join("")}
+    </div>
+  `;
 }
 
 function bindMvpPanelActions(game) {
@@ -3573,9 +3628,16 @@ async function saveCurrentScore() {
   if (!game) return;
   const scoreA = els.scoreA.value === "" ? null : Number(els.scoreA.value);
   const scoreB = els.scoreB.value === "" ? null : Number(els.scoreB.value);
+  const wasFinished = isFinishedGame(game);
   game.scoreA = Number.isNaN(scoreA) ? null : scoreA;
   game.scoreB = Number.isNaN(scoreB) ? null : scoreB;
   game.status = game.scoreA == null || game.scoreB == null ? "open" : "finished";
+  if (game.status === "finished" && !wasFinished) {
+    game.scoreSavedAt = new Date().toISOString();
+  }
+  if (game.status !== "finished") {
+    game.scoreSavedAt = null;
+  }
   if (game.status !== "preview") await persistState();
   if (game.status === "finished") {
     currentGameId = null;
@@ -4351,6 +4413,7 @@ function ensureGameShape(game) {
   game.teamB = game.teamB || [];
   game.benchA = game.benchA || [];
   game.benchB = game.benchB || [];
+  game.scoreSavedAt = game.scoreSavedAt || null;
 
   if (Array.isArray(game.bench) && game.bench.length && !game.benchA.length && !game.benchB.length) {
     game.bench.forEach((id, index) => {

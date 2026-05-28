@@ -104,9 +104,13 @@ create table if not exists public.games (
   bench_b text[] not null default '{}',
   score_a integer,
   score_b integer,
+  score_saved_at timestamptz,
   notes text default '',
   updated_at timestamptz default now()
 );
+
+alter table public.games
+add column if not exists score_saved_at timestamptz;
 
 create table if not exists public.events (
   id text primary key,
@@ -265,6 +269,7 @@ revoke select on public.events from anon;
 revoke select on public.event_responses from anon;
 
 grant select on public.players to authenticated;
+grant update (photo_data_url, updated_at) on public.players to authenticated;
 grant select on public.games to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.player_claims to authenticated;
@@ -432,6 +437,13 @@ on public.players for update
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "players update own photo" on public.players;
+create policy "players update own photo"
+on public.players for update
+to authenticated
+using (linked_user_id = auth.uid())
+with check (linked_user_id = auth.uid());
 
 drop policy if exists "admin players delete" on public.players;
 create policy "admin players delete"
