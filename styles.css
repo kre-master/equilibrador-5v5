@@ -909,12 +909,12 @@ h3 {
 }
 
 .team-radar-area.team-a {
-  fill: rgba(31, 122, 77, .30);
+  fill: rgba(31, 122, 77, .36);
   stroke: #1f7a4d;
 }
 
 .team-radar-area.team-b {
-  fill: rgba(200, 100, 34, .28);
+  fill: rgba(200, 100, 34, .34);
   stroke: #c86422;
 }
 

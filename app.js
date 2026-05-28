@@ -26,6 +26,8 @@ const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
 const TEAM_RADAR_MIN = 40;
 const TEAM_RADAR_MAX = 85;
+const TEAM_RADAR_AGGREGATION = "power";
+const TEAM_RADAR_POWER = 1.35;
 const TEAM_RADAR_STATS = [
   { key: "pace", label: "PAC" },
   { key: "shooting", label: "SHO" },
@@ -4285,8 +4287,18 @@ function getGamePlayerIds(game) {
 function getTeamRadarStats(players) {
   return TEAM_RADAR_STATS.map((stat) => ({
     ...stat,
-    value: avg(players, stat.key),
+    value: aggregateTeamRadarStat(players, stat.key),
   }));
+}
+
+function aggregateTeamRadarStat(players, key) {
+  if (!players.length) return 0;
+  if (TEAM_RADAR_AGGREGATION !== "power") return avg(players, key);
+  const power = TEAM_RADAR_POWER;
+  const poweredAverage = players.reduce((sum, playerData) => {
+    return sum + Math.pow(Number(playerData[key] || 0), power);
+  }, 0) / players.length;
+  return Math.round(Math.pow(poweredAverage, 1 / power));
 }
 
 function radarPoint(centerX, centerY, radius, index, total, value = 100) {
