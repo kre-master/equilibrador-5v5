@@ -24,6 +24,14 @@ const PLAYER_CARD_VARIANTS = {
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
+const TEAM_RADAR_STATS = [
+  { key: "pace", label: "PAC" },
+  { key: "shooting", label: "SHO" },
+  { key: "passing", label: "PAS" },
+  { key: "dribbling", label: "DRI" },
+  { key: "defending", label: "DEF" },
+  { key: "physical", label: "PHY" },
+];
 
 const INITIAL_FINANCE_BALANCES = {};
 
@@ -2916,6 +2924,7 @@ function renderSuggestions() {
           <div class="team-line bench"><strong>Supl. A</strong> - ${escapeHtml(benchA)}</div>
           <div class="team-line bench"><strong>Supl. B</strong> - ${escapeHtml(benchB)}</div>
         </div>
+        ${renderTeamRadarChart(suggestion.teamA, suggestion.teamB, { compact: true })}
         <div class="metric-row">
           <span class="metric">Diferenca ${suggestion.diffTotal}</span>
           <span class="metric">Plantel ${suggestion.squadDiff}</span>
@@ -3304,6 +3313,7 @@ function renderField(game) {
         <strong>Equipa B</strong>
       </div>
     </div>
+    ${renderTeamRadarChart(teamA, teamB)}
     <div class="pitch">
       ${orderTeamForField(teamA).map((p, i) => renderDot(p, "team-a", getPosition("a", i), game)).join("")}
       ${orderTeamForField(teamB).map((p, i) => renderDot(p, "team-b", getPosition("b", i), game)).join("")}
@@ -3749,6 +3759,7 @@ function renderGamesList() {
         <div>
           <strong>${formatDate(game.date)} - ${result}</strong>
           <span>A ${getTeamStats(teamA).total} vs B ${getTeamStats(teamB).total} - ${game.status === "finished" ? "finalizado" : "em aberto"}</span>
+          ${renderTeamRadarChart(teamA, teamB, { compact: true })}
         </div>
         <div class="game-actions">
           <button class="primary-btn" data-open-game="${game.id}">Abrir</button>
@@ -4267,6 +4278,74 @@ function getBenchB(game) {
 function getGamePlayerIds(game) {
   ensureGameShape(game);
   return [...game.teamA, ...game.teamB, ...game.benchA, ...game.benchB];
+}
+
+function getTeamRadarStats(players) {
+  return TEAM_RADAR_STATS.map((stat) => ({
+    ...stat,
+    value: avg(players, stat.key),
+  }));
+}
+
+function radarPoint(centerX, centerY, radius, index, total, value = 100) {
+  const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total;
+  const scaledRadius = radius * clampNumber(value, 0, 100) / 100;
+  return {
+    x: centerX + Math.cos(angle) * scaledRadius,
+    y: centerY + Math.sin(angle) * scaledRadius,
+  };
+}
+
+function radarPolygonPoints(values, centerX, centerY, radius) {
+  return values.map((item, index) => {
+    const point = radarPoint(centerX, centerY, radius, index, values.length, item.value);
+    return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }).join(" ");
+}
+
+function renderTeamRadarChart(teamA, teamB, options = {}) {
+  const compact = Boolean(options.compact);
+  const statsA = getTeamRadarStats(teamA);
+  const statsB = getTeamRadarStats(teamB);
+  const centerX = 110;
+  const centerY = compact ? 82 : 90;
+  const radius = compact ? 52 : 64;
+  const gridRings = [25, 50, 75, 100];
+  const labels = TEAM_RADAR_STATS.map((stat, index) => {
+    const point = radarPoint(centerX, centerY, radius + (compact ? 14 : 20), index, TEAM_RADAR_STATS.length);
+    return `<text x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle">${stat.label}</text>`;
+  }).join("");
+  const axes = TEAM_RADAR_STATS.map((stat, index) => {
+    const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length);
+    return `<line x1="${centerX}" y1="${centerY}" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}" />`;
+  }).join("");
+  const rings = gridRings.map((ring) => {
+    const points = TEAM_RADAR_STATS.map((stat, index) => {
+      const point = radarPoint(centerX, centerY, radius, index, TEAM_RADAR_STATS.length, ring);
+      return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+    }).join(" ");
+    return `<polygon points="${points}" />`;
+  }).join("");
+  const aAverage = Math.round(statsA.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length);
+  const bAverage = Math.round(statsB.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length);
+
+  return `
+    <div class="team-radar ${compact ? "team-radar-compact" : ""}" aria-label="Radar das equipas">
+      <div class="team-radar-legend">
+        <span class="team-a">Equipa A ${aAverage}</span>
+        <span class="team-b">Equipa B ${bAverage}</span>
+      </div>
+      <svg viewBox="0 0 220 ${compact ? 164 : 182}" role="img" aria-label="Comparacao PAC SHO PAS DRI DEF PHY">
+        <g class="team-radar-grid">
+          ${rings}
+          ${axes}
+        </g>
+        <polygon class="team-radar-area team-a" points="${radarPolygonPoints(statsA, centerX, centerY, radius)}" />
+        <polygon class="team-radar-area team-b" points="${radarPolygonPoints(statsB, centerX, centerY, radius)}" />
+        <g class="team-radar-labels">${labels}</g>
+      </svg>
+    </div>
+  `;
 }
 
 function getTeamStats(players, options = {}) {
