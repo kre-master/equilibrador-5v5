@@ -1692,6 +1692,10 @@ function isLightTextCardVariant(variant) {
   return ["hot", "mvp", "mvp_2x", "mvp_3x", "mvp_month", "champion_autumn", "champion_winter"].includes(variant?.key);
 }
 
+function getCardTextColor(variant) {
+  return isLightTextCardVariant(variant) ? "#f8eecb" : "#201809";
+}
+
 function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), game = null) {
   if (!playerData) return "base";
   if (game) {
@@ -4404,18 +4408,24 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   }
   ctx.restore();
 
-  ctx.fillStyle = isLightTextCardVariant(variant) ? "#f8eecb" : "#2c2615";
+  ctx.fillStyle = getCardTextColor(variant);
+  ctx.shadowColor = isLightTextCardVariant(variant) ? "rgba(0,0,0,.62)" : "rgba(255,255,255,.58)";
+  ctx.shadowBlur = Math.max(2, width * 0.018);
+  ctx.shadowOffsetY = Math.max(1, width * 0.004);
   ctx.textAlign = "left";
   ctx.font = `900 ${Math.round(width * 0.086)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.1717, y + height * 0.2304);
+  ctx.fillText(String(canSeeCurrentRatings() ? form.currentRating : playerData.overall), x + width * 0.1820, y + height * 0.2482);
 
   ctx.textAlign = "center";
   ctx.font = `900 ${Math.round(width * 0.092)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.491, y + height * 0.5917);
+  ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.4987, y + height * 0.6259);
 
   drawFutStats(ctx, playerData, x, y, width, height, variant);
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
 }
@@ -4431,26 +4441,26 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
     ["DEF", playerData.defending],
     ["PHY", playerData.physical],
   ];
-  const startY = y + height * 0.70;
-  const rowGap = height * 0.064;
-  ctx.fillStyle = isLightTextCardVariant(variant) ? "#f8eecb" : "#2c2615";
+  const startY = y + height * 0.735;
+  const rowGap = height * 0.055;
+  ctx.fillStyle = getCardTextColor(variant);
   ctx.font = `800 ${Math.round(width * 0.027)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   left.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.18, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.19, startY + index * rowGap);
   });
   right.forEach(([label, value], index) => {
     ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.55, startY + index * rowGap);
+    ctx.fillText(`${value} ${label}`, x + width * 0.555, startY + index * rowGap);
   });
 }
 
 function getCardPhotoRect(x, y, width, height) {
   return {
-    x: x + width * 0.3324,
-    y: y + height * 0.1232,
-    w: width * 0.5499,
-    h: height * 0.4042,
+    x: x + width * 0.2927,
+    y: y + height * 0.1376,
+    w: width * 0.4922,
+    h: height * 0.4222,
   };
 }
 

@@ -1412,16 +1412,16 @@ body.mvp-gate-open {
 .card-rating {
   position: absolute;
   z-index: 3;
-  top: 15.97%;
-  left: 8.03%;
-  width: 18.28%;
-  height: 14.14%;
+  top: 18.52%;
+  left: 11.14%;
+  width: 14.12%;
+  height: 12.59%;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: .9;
   text-align: center;
-  text-shadow: 0 1px 4px rgba(255,255,255,.42);
+  text-shadow: 0 1px 5px rgba(255,255,255,.58);
 }
 
 .card-rating strong {
@@ -1439,14 +1439,14 @@ body.mvp-gate-open {
 .card-photo {
   position: absolute;
   z-index: 2;
-  top: 12.32%;
-  left: 33.24%;
-  width: 54.99%;
-  height: 40.42%;
+  top: 13.76%;
+  left: 29.27%;
+  width: 49.22%;
+  height: 42.22%;
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 8%;
+  border-radius: 7%;
 }
 
 .card-photo img {
@@ -1461,7 +1461,7 @@ body.mvp-gate-open {
   place-items: center;
   width: 100%;
   height: 100%;
-  border-radius: 8%;
+  border-radius: 7%;
   color: #16201d;
   background: rgba(220,230,226,.96);
   font-size: 20px;
@@ -1470,10 +1470,10 @@ body.mvp-gate-open {
 
 .card-name {
   position: absolute;
-  top: 53.65%;
-  left: 8.31%;
-  width: 81.58%;
-  height: 11.04%;
+  top: 57.35%;
+  left: 13.34%;
+  width: 73.06%;
+  height: 10.48%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1483,14 +1483,15 @@ body.mvp-gate-open {
   white-space: nowrap;
   font-size: 12px;
   font-weight: 950;
+  text-shadow: 0 1px 5px rgba(255,255,255,.58);
 }
 
 .card-stats {
   position: absolute;
-  top: 64%;
-  left: 12%;
-  width: 76%;
-  height: 23%;
+  top: 68.2%;
+  left: 13.4%;
+  width: 73.2%;
+  height: 20.2%;
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-content: center;
@@ -1500,6 +1501,31 @@ body.mvp-gate-open {
   font-size: 3.4px;
   font-weight: 900;
   line-height: 1;
+  text-shadow: 0 1px 5px rgba(255,255,255,.5);
+}
+
+.card-variant-hot .card-rating,
+.card-variant-hot .card-name,
+.card-variant-hot .card-stats,
+.card-variant-mvp .card-rating,
+.card-variant-mvp .card-name,
+.card-variant-mvp .card-stats,
+.card-variant-mvp_2x .card-rating,
+.card-variant-mvp_2x .card-name,
+.card-variant-mvp_2x .card-stats,
+.card-variant-mvp_3x .card-rating,
+.card-variant-mvp_3x .card-name,
+.card-variant-mvp_3x .card-stats,
+.card-variant-mvp_month .card-rating,
+.card-variant-mvp_month .card-name,
+.card-variant-mvp_month .card-stats,
+.card-variant-champion_autumn .card-rating,
+.card-variant-champion_autumn .card-name,
+.card-variant-champion_autumn .card-stats,
+.card-variant-champion_winter .card-rating,
+.card-variant-champion_winter .card-name,
+.card-variant-champion_winter .card-stats {
+  text-shadow: 0 2px 6px rgba(0,0,0,.6);
 }
 
 .player-card-profile .card-rating strong {
