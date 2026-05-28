@@ -583,6 +583,35 @@ h3 {
   --halo-ring: rgba(231, 196, 84, .55);
 }
 
+.card-halo-mvp_2x,
+.card-halo-mvp_3x,
+.card-halo-mvp_month,
+.card-halo-champion_autumn,
+.card-halo-champion_winter {
+  --halo-color: rgba(71, 64, 204, .30);
+  --halo-ring: rgba(231, 196, 84, .58);
+}
+
+.card-halo-rookie,
+.card-halo-base,
+.card-halo-win_1x,
+.card-halo-win_2x,
+.card-halo-win_3x,
+.card-halo-win_4x,
+.card-halo-win_5x,
+.card-halo-form_3w_5,
+.card-halo-form_4w_5,
+.card-halo-form_5w_5,
+.card-halo-champion_spring,
+.card-halo-champion_summer,
+.card-halo-ironman_month,
+.card-halo-regular,
+.card-halo-return,
+.card-halo-rising {
+  --halo-color: rgba(201, 159, 63, .28);
+  --halo-ring: rgba(201, 159, 63, .48);
+}
+
 .player-chip.card-halo,
 .roster-player-chip.card-halo,
 .rating-badge.card-halo,
@@ -1365,8 +1394,18 @@ body.mvp-gate-open {
   width: min(320px, 72vw);
 }
 
+.player-card-award {
+  width: 86px;
+  pointer-events: none;
+}
+
 .card-variant-hot,
-.card-variant-mvp {
+.card-variant-mvp,
+.card-variant-mvp_2x,
+.card-variant-mvp_3x,
+.card-variant-mvp_month,
+.card-variant-champion_autumn,
+.card-variant-champion_winter {
   color: #f8eecb;
 }
 
@@ -1842,6 +1881,55 @@ th.stat-col {
 .profile-games {
   display: grid;
   gap: 10px;
+}
+
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 12px;
+}
+
+.award-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(247,250,249,.72);
+  cursor: pointer;
+  text-align: center;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.award-card:hover,
+.award-card:focus-visible {
+  outline: none;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(26,44,39,.12);
+}
+
+.award-card-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.award-card strong {
+  font-size: 13px;
+}
+
+.award-count {
+  position: absolute;
+  right: -8px;
+  bottom: 4px;
+  border: 1px solid rgba(255,255,255,.85);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #fff;
+  background: rgba(18, 32, 28, .82);
+  font-size: 12px;
+  font-weight: 950;
 }
 
 .synergy-grid {

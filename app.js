@@ -14,13 +14,38 @@ const FORM_LEVELS = {
 };
 
 const PLAYER_CARD_VARIANTS = {
-  recovery: { key: "recovery", asset: "assets/cards/form-recovery.png", label: "-1X" },
-  bad: { key: "bad", asset: "assets/cards/form-bad.png", label: "-1" },
-  normal: { key: "normal", asset: "assets/cards/form-normal.png", label: "0" },
-  good: { key: "good", asset: "assets/cards/form-good.png", label: "+1" },
-  hot: { key: "hot", asset: "assets/cards/form-hot.png", label: "+1X" },
-  mvp: { key: "mvp", asset: "assets/cards/mvp.png", label: "MVP" },
+  rookie: { key: "rookie", asset: "assets/new cards template/card_rookie.png", label: "Rookie", description: "Jogador ainda sem jogos registados pela equipa." },
+  base: { key: "base", asset: "assets/new cards template/card_base.png", label: "Base", description: "Carta normal quando nao existe outro destaque ativo." },
+  win_1x: { key: "win_1x", asset: "assets/new cards template/card_win_1x.png", label: "1 vitoria seguida", description: "Jogador venceu o ultimo jogo em que participou." },
+  win_2x: { key: "win_2x", asset: "assets/new cards template/card_win_2x.png", label: "2 vitorias seguidas", description: "Jogador venceu dois jogos seguidos em que participou." },
+  win_3x: { key: "win_3x", asset: "assets/new cards template/card_win_3x.png", label: "3 vitorias seguidas", description: "Jogador venceu tres jogos seguidos em que participou." },
+  win_4x: { key: "win_4x", asset: "assets/new cards template/card_win_4x.png", label: "4 vitorias seguidas", description: "Jogador venceu quatro jogos seguidos em que participou." },
+  win_5x: { key: "win_5x", asset: "assets/new cards template/card_win_5x.png", label: "5+ vitorias seguidas", description: "Jogador venceu cinco ou mais jogos seguidos em que participou." },
+  form_3w_5: { key: "form_3w_5", asset: "assets/new cards template/card_form_3w_5.png", label: "3 em 5", description: "Jogador venceu 3 dos ultimos 5 jogos em que participou." },
+  form_4w_5: { key: "form_4w_5", asset: "assets/new cards template/card_form_4w_5.png", label: "4 em 5", description: "Jogador venceu 4 dos ultimos 5 jogos em que participou." },
+  form_5w_5: { key: "form_5w_5", asset: "assets/new cards template/card_form_5w_5.png", label: "5 em 5", description: "Jogador venceu os ultimos 5 jogos em que participou." },
+  mvp: { key: "mvp", asset: "assets/new cards template/card_mvp.png", label: "MVP", description: "Jogador foi MVP oficial do jogo anterior e joga o jogo seguinte." },
+  mvp_2x: { key: "mvp_2x", asset: "assets/new cards template/card_mvp_2x.png", label: "MVP 2x", description: "Jogador foi MVP oficial em dois jogos consecutivos." },
+  mvp_3x: { key: "mvp_3x", asset: "assets/new cards template/card_mvp_3x.png", label: "MVP 3x", description: "Jogador foi MVP oficial em tres ou mais jogos consecutivos." },
+  mvp_month: { key: "mvp_month", asset: "assets/new cards template/card_mvp_month.png", label: "MVP do mes", description: "Jogador lidera os MVPs oficiais do mes." },
+  champion_spring: { key: "champion_spring", asset: "assets/new cards template/card_champion_spring.png", label: "Campeao primavera", description: "Jogador foi campeao da primavera por vitorias, com win rate como desempate." },
+  champion_summer: { key: "champion_summer", asset: "assets/new cards template/card_champion_summer.png", label: "Campeao verao", description: "Jogador foi campeao do verao por vitorias, com win rate como desempate." },
+  champion_autumn: { key: "champion_autumn", asset: "assets/new cards template/card_champion_autumn.png", label: "Campeao outono", description: "Jogador foi campeao do outono por vitorias, com win rate como desempate." },
+  champion_winter: { key: "champion_winter", asset: "assets/new cards template/card_champion_winter.png", label: "Campeao inverno", description: "Jogador foi campeao do inverno por vitorias, com win rate como desempate." },
+  ironman_month: { key: "ironman_month", asset: "assets/new cards template/card_ironman_month.png", label: "Ironman do mes", description: "Jogador participou em todos os jogos finalizados do mes." },
+  regular: { key: "regular", asset: "assets/new cards template/card_regular.png", label: "Regular", description: "Jogador teve presenca elevada nos jogos recentes da equipa." },
+  return: { key: "return", asset: "assets/new cards template/card_return.png", label: "Regresso", description: "Jogador voltou a jogar depois de uma ausencia longa." },
+  rising: { key: "rising", asset: "assets/new cards template/card_rising.png", label: "A subir", description: "Jogador esta com subida forte de forma/rating recente." },
+  hot: { key: "hot", asset: "assets/new cards template/card_hot.png", label: "Em alta", description: "Jogador esta em grande forma recente." },
+  recovery: { key: "recovery", asset: "assets/new cards template/card_recovery.png", label: "Recuperacao", description: "Jogador esta em fase negativa ou de recuperacao." },
 };
+const CARD_AWARD_PRIORITY = [
+  "mvp_3x", "mvp_2x", "mvp", "mvp_month",
+  "champion_spring", "champion_summer", "champion_autumn", "champion_winter",
+  "win_5x", "win_4x", "win_3x", "win_2x", "win_1x",
+  "form_5w_5", "form_4w_5", "form_3w_5",
+  "ironman_month", "rising", "hot", "regular", "return", "recovery", "rookie", "base",
+];
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
@@ -1400,6 +1425,7 @@ function renderPlayerProfile() {
   const variant = getPlayerCardVariant(playerData, form);
   const teamRecentItems = getPlayerTeamRecentItems(playerData.id);
   const teamRecentRecord = teamRecentItems.map((item) => item.outcome);
+  const awards = getPlayerAwardShowcase(playerData);
 
   els.playerProfile.innerHTML = `
     <div class="player-profile-head">
@@ -1449,6 +1475,15 @@ function renderPlayerProfile() {
     </div>
 
     <section class="profile-section">
+      <h3>Montra de premios</h3>
+      ${awards.length ? `
+        <div class="award-grid">
+          ${awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("")}
+        </div>
+      ` : `<div class="empty-state compact">Ainda nao ha cartas especiais registadas.</div>`}
+    </section>
+
+    <section class="profile-section">
       <h3>Melhores sinergias</h3>
       ${synergies.length ? `
         <div class="synergy-grid">
@@ -1489,6 +1524,13 @@ function renderPlayerProfile() {
       renderCurrentGame();
     });
   });
+  els.playerProfile.querySelectorAll("[data-award-key]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const award = PLAYER_CARD_VARIANTS[card.dataset.awardKey];
+      if (!award) return;
+      alert(`${award.label}\n\n${award.description}`);
+    });
+  });
 }
 
 function renderProfileStat(label, value) {
@@ -1507,6 +1549,114 @@ function renderSummaryCard(label, value) {
       <strong>${value}</strong>
     </div>
   `;
+}
+
+function renderAwardShowcaseCard(playerData, award) {
+  const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
+  return `
+    <article class="award-card" data-award-key="${variant.key}" tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
+      <div class="award-card-preview">
+        ${renderPlayerCard(playerData, { mode: "award", variant })}
+        <span class="award-count">x${award.count}</span>
+      </div>
+      <strong>${escapeHtml(variant.label)}</strong>
+    </article>
+  `;
+}
+
+function addAwardCount(counts, key, amount = 1) {
+  if (!PLAYER_CARD_VARIANTS[key]) return;
+  counts.set(key, (counts.get(key) || 0) + amount);
+}
+
+function getPlayerAwardShowcase(playerData) {
+  const counts = new Map();
+  const appearances = getPlayerFinishedAppearances(playerData.id, state.games, "asc");
+
+  if (!appearances.length) {
+    addAwardCount(counts, "rookie");
+  }
+
+  let winStreak = 0;
+  appearances.forEach((item, index) => {
+    if (item.outcome === "win") {
+      winStreak += 1;
+      addAwardCount(counts, `win_${Math.min(winStreak, 5)}x`);
+    } else if (item.outcome === "loss") {
+      winStreak = 0;
+    }
+
+    const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
+    if (windowItems.length === FORM_LOOKBACK_GAMES) {
+      const wins = windowItems.filter((entry) => entry.outcome === "win").length;
+      if (wins >= 5) addAwardCount(counts, "form_5w_5");
+      else if (wins >= 4) addAwardCount(counts, "form_4w_5");
+      else if (wins >= 3) addAwardCount(counts, "form_3w_5");
+    }
+  });
+
+  countPlayerMvpAwards(playerData.id, counts);
+  countPlayerSeasonAwards(playerData.id, counts);
+  countPlayerAttendanceAwards(playerData.id, counts);
+
+  const form = getPlayerForm(playerData);
+  if (form.adjustment >= 4) addAwardCount(counts, "rising");
+  if (form.levelKey === "hot") addAwardCount(counts, "hot");
+  if (form.levelKey === "bad" || form.levelKey === "recovery") addAwardCount(counts, "recovery");
+  if (hasRecentReturn(playerData.id)) addAwardCount(counts, "return");
+  if (hasRegularRecentAttendance(playerData.id)) addAwardCount(counts, "regular");
+  if (!counts.size && appearances.length) addAwardCount(counts, "base");
+
+  return [...counts.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => CARD_AWARD_PRIORITY.indexOf(a.key) - CARD_AWARD_PRIORITY.indexOf(b.key));
+}
+
+function countPlayerMvpAwards(playerId, counts) {
+  let streak = 0;
+  state.games
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .forEach((game) => {
+      const mvpIds = getOfficialMvpIdsForGame(game);
+      if (mvpIds.has(playerId)) {
+        streak += 1;
+        addAwardCount(counts, "mvp");
+        if (streak === 2) addAwardCount(counts, "mvp_2x");
+        if (streak >= 3) addAwardCount(counts, "mvp_3x");
+      } else {
+        streak = 0;
+      }
+    });
+
+  const months = new Set(state.games.filter(isFinishedGame).map((game) => getMonthId(game.date)));
+  months.forEach((monthId) => {
+    if (getOfficialMvpWinnersByMonth(monthId).includes(playerId)) addAwardCount(counts, "mvp_month");
+  });
+}
+
+function countPlayerSeasonAwards(playerId, counts) {
+  const seasons = new Set(state.games.filter(isFinishedGame).map((game) => getSeasonId(game.date)));
+  seasons.forEach((seasonId) => {
+    if (!getSeasonChampionIds(seasonId).includes(playerId)) return;
+    const seasonKey = seasonId.split("-")[0];
+    addAwardCount(counts, `champion_${seasonKey}`);
+  });
+}
+
+function countPlayerAttendanceAwards(playerId, counts) {
+  const months = new Set(state.games.filter(isFinishedGame).map((game) => getMonthId(game.date)));
+  months.forEach((monthId) => {
+    const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
+    if (games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId))) addAwardCount(counts, "ironman_month");
+    if (games.length >= 5 && games.filter((game) => getPlayerParticipation(game, playerId)).length / games.length >= 0.8) addAwardCount(counts, "regular");
+  });
+
+  const gamesAsc = [...state.games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
+  for (let index = 3; index < gamesAsc.length; index += 1) {
+    const absentBefore = gamesAsc.slice(index - 3, index).every((game) => !getPlayerParticipation(game, playerId));
+    if (absentBefore && getPlayerParticipation(gamesAsc[index], playerId)) addAwardCount(counts, "return");
+  }
 }
 
 function renderFormChip(form) {
@@ -1533,9 +1683,42 @@ function renderCardHaloClass(playerData, variant = getPlayerCardVariant(playerDa
 }
 
 function getPlayerCardVariant(playerData, form = getPlayerForm(playerData), game = null) {
-  if (!playerData) return PLAYER_CARD_VARIANTS.normal;
-  if (game && getNextGameMvpIds(game).has(playerData.id)) return PLAYER_CARD_VARIANTS.mvp;
-  return PLAYER_CARD_VARIANTS[form?.levelKey] || PLAYER_CARD_VARIANTS.normal;
+  if (!playerData) return PLAYER_CARD_VARIANTS.base;
+  const award = getActivePlayerCardAward(playerData, form, game);
+  return PLAYER_CARD_VARIANTS[award] || PLAYER_CARD_VARIANTS.base;
+}
+
+function isLightTextCardVariant(variant) {
+  return ["hot", "mvp", "mvp_2x", "mvp_3x", "mvp_month", "champion_autumn", "champion_winter"].includes(variant?.key);
+}
+
+function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), game = null) {
+  if (!playerData) return "base";
+  if (game) {
+    const nextGameMvpIds = getNextGameMvpIds(game);
+    if (nextGameMvpIds.has(playerData.id)) {
+      return getMvpStreakCardKey(playerData.id, getPreviousFinishedGameFor(game));
+    }
+  }
+
+  if (isCurrentSeasonChampion(playerData.id)) return getSeasonChampionCardKey(new Date());
+  if (isCurrentMonthMvpLeader(playerData.id)) return "mvp_month";
+  if (form.winStreak >= 5) return "win_5x";
+  if (form.winStreak >= 4) return "win_4x";
+  if (form.winStreak >= 3) return "win_3x";
+  if (form.winStreak >= 2) return "win_2x";
+  if (form.winStreak >= 1) return "win_1x";
+  if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 5) return "form_5w_5";
+  if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 4) return "form_4w_5";
+  if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 3) return "form_3w_5";
+  if (isCurrentMonthIronman(playerData.id)) return "ironman_month";
+  if (form.adjustment >= 4) return "rising";
+  if (hasRecentReturn(playerData.id)) return "return";
+  if (hasRegularRecentAttendance(playerData.id)) return "regular";
+  if (!getPlayerFinishedAppearances(playerData.id).length) return "rookie";
+  if (form.levelKey === "hot") return "hot";
+  if (form.levelKey === "bad" || form.levelKey === "recovery") return "recovery";
+  return "base";
 }
 
 function getLatestOfficialMvpIds() {
@@ -1574,6 +1757,135 @@ function getNextGameMvpIds(game) {
   if (!mvpIds.size) return new Set();
   const previousMvpPlaysThisGame = getGamePlayerIds(game).some((playerId) => mvpIds.has(playerId));
   return previousMvpPlaysThisGame ? mvpIds : new Set();
+}
+
+function getPlayerFinishedAppearances(playerId, games = state.games, direction = "desc") {
+  return [...games]
+    .filter(isFinishedGame)
+    .sort((a, b) => direction === "asc" ? new Date(a.date) - new Date(b.date) : new Date(b.date) - new Date(a.date))
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return null;
+      return { game, ...participation, outcome: getPlayerOutcome(game, participation.side) };
+    })
+    .filter(Boolean);
+}
+
+function getMvpStreakCardKey(playerId, game) {
+  const streak = getOfficialMvpStreakEndingAt(playerId, game);
+  if (streak >= 3) return "mvp_3x";
+  if (streak >= 2) return "mvp_2x";
+  return "mvp";
+}
+
+function getOfficialMvpStreakEndingAt(playerId, game) {
+  if (!game) return 0;
+  const gameTime = new Date(game.date).getTime();
+  let streak = 0;
+  const finishedGames = [...state.games]
+    .filter((item) => isFinishedGame(item) && new Date(item.date).getTime() <= gameTime)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  for (const item of finishedGames) {
+    const ids = getOfficialMvpIdsForGame(item);
+    if (!ids.size || !ids.has(playerId)) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function getMonthId(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getSeasonInfo(value) {
+  const date = new Date(value);
+  const month = date.getMonth();
+  const year = month < 2 ? date.getFullYear() - 1 : date.getFullYear();
+  if (month >= 2 && month <= 4) return { key: "spring", year, label: "primavera" };
+  if (month >= 5 && month <= 7) return { key: "summer", year, label: "verao" };
+  if (month >= 8 && month <= 10) return { key: "autumn", year, label: "outono" };
+  return { key: "winter", year, label: "inverno" };
+}
+
+function getSeasonId(value) {
+  const season = getSeasonInfo(value);
+  return `${season.key}-${season.year}`;
+}
+
+function getSeasonChampionCardKey(value) {
+  return `champion_${getSeasonInfo(value).key}`;
+}
+
+function getOfficialMvpWinnersByMonth(monthId) {
+  const counts = new Map();
+  state.games
+    .filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId)
+    .forEach((game) => {
+      getOfficialMvpIdsForGame(game).forEach((playerId) => counts.set(playerId, (counts.get(playerId) || 0) + 1));
+    });
+  const max = Math.max(0, ...counts.values());
+  return max ? [...counts.entries()].filter(([, count]) => count === max).map(([playerId]) => playerId) : [];
+}
+
+function isCurrentMonthMvpLeader(playerId) {
+  return getOfficialMvpWinnersByMonth(getMonthId(new Date())).includes(playerId);
+}
+
+function getSeasonChampionIds(seasonId) {
+  const stats = new Map();
+  state.games
+    .filter((game) => isFinishedGame(game) && getSeasonId(game.date) === seasonId)
+    .forEach((game) => {
+      getGamePlayerIds(game).forEach((playerId) => {
+        const participation = getPlayerParticipation(game, playerId);
+        if (!participation) return;
+        const record = stats.get(playerId) || { playerId, games: 0, wins: 0 };
+        record.games += 1;
+        if (getPlayerOutcome(game, participation.side) === "win") record.wins += 1;
+        stats.set(playerId, record);
+      });
+    });
+
+  const rows = [...stats.values()].filter((row) => row.wins > 0);
+  if (!rows.length) return [];
+  rows.sort((a, b) =>
+    b.wins - a.wins ||
+    (b.wins / b.games) - (a.wins / a.games) ||
+    b.games - a.games ||
+    (findPlayer(a.playerId)?.name || "").localeCompare(findPlayer(b.playerId)?.name || "")
+  );
+  const best = rows[0];
+  return rows
+    .filter((row) => row.wins === best.wins && row.wins / row.games === best.wins / best.games && row.games === best.games)
+    .map((row) => row.playerId);
+}
+
+function isCurrentSeasonChampion(playerId) {
+  return getSeasonChampionIds(getSeasonId(new Date())).includes(playerId);
+}
+
+function isCurrentMonthIronman(playerId) {
+  const monthId = getMonthId(new Date());
+  const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
+  return games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId));
+}
+
+function hasRegularRecentAttendance(playerId) {
+  const recentGames = [...state.games]
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 10);
+  if (recentGames.length < 5) return false;
+  const attended = recentGames.filter((game) => getPlayerParticipation(game, playerId)).length;
+  return attended / recentGames.length >= 0.8;
+}
+
+function hasRecentReturn(playerId) {
+  const recentGames = [...state.games].filter(isFinishedGame).sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!recentGames.length || !getPlayerParticipation(recentGames[0], playerId)) return false;
+  return recentGames.slice(1, 4).length >= 3 && recentGames.slice(1, 4).every((game) => !getPlayerParticipation(game, playerId));
 }
 
 function canSeeCurrentRatings() {
@@ -4092,7 +4404,7 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   }
   ctx.restore();
 
-  ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
+  ctx.fillStyle = isLightTextCardVariant(variant) ? "#f8eecb" : "#2c2615";
   ctx.textAlign = "left";
   ctx.font = `900 ${Math.round(width * 0.086)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   ctx.textAlign = "center";
@@ -4108,7 +4420,7 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   ctx.textAlign = "left";
 }
 
-function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CARD_VARIANTS.normal) {
+function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CARD_VARIANTS.base) {
   const left = [
     ["PAC", playerData.pace],
     ["SHO", playerData.shooting],
@@ -4121,7 +4433,7 @@ function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CAR
   ];
   const startY = y + height * 0.70;
   const rowGap = height * 0.064;
-  ctx.fillStyle = variant.key === "mvp" || variant.key === "hot" ? "#f8eecb" : "#2c2615";
+  ctx.fillStyle = isLightTextCardVariant(variant) ? "#f8eecb" : "#2c2615";
   ctx.font = `800 ${Math.round(width * 0.027)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
   left.forEach(([label, value], index) => {
     ctx.textAlign = "left";
