@@ -2920,7 +2920,9 @@ function renderEventsList() {
   }
 
   document.body.classList.toggle("player-linked", Boolean(getLinkedPlayer()));
-  const events = [...(state.events || [])].sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  const events = [...(state.events || [])]
+    .filter((eventData) => eventData.status !== "completed")
+    .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
   if (!events.length) {
     els.eventsList.innerHTML = `<div class="empty-state">Ainda nao ha convocatorias. O admin pode lancar o proximo jogo.</div>`;
     return;
@@ -2995,7 +2997,7 @@ function renderEventCard(eventData) {
         ${eventData.status === "cancelled" ? `
           <button class="danger-btn" data-event-delete="${eventData.id}">Apagar convocatoria</button>
         ` : `
-          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < eventData.minPlayers || going.length > Math.min(eventData.maxPlayers, 13) ? "disabled" : ""}>Gerar com confirmados</button>
+          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < eventData.minPlayers || going.length > Math.min(eventData.maxPlayers, 12) ? "disabled" : ""}>Gerar com confirmados</button>
           <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
         `}
       </div>
@@ -3073,7 +3075,7 @@ async function saveEventFromForm(event) {
   const title = els.eventTitle.value.trim();
   const startsAt = fromDateTimeLocalInput(els.eventDate.value);
   const location = els.eventLocation.value.trim();
-  const maxPlayers = Number(els.eventMaxPlayers.value || 12);
+  const maxPlayers = clamp(Number(els.eventMaxPlayers.value || 12), 10, 12);
   if (!title || !startsAt) return;
 
   const eventData = normalizeEventRecord({
@@ -3504,8 +3506,8 @@ function generateAndRenderSuggestions(options = {}) {
   renderCurrentGame();
 
   const selected = getSelectedPlayers();
-  if (selected.length < 10 || selected.length > 13) {
-    setHint("Seleciona entre 10 e 13 jogadores antes de gerar.", "warn");
+  if (selected.length < 10 || selected.length > 12) {
+    setHint("Seleciona entre 10 e 12 jogadores antes de gerar.", "warn");
     return;
   }
 
@@ -3525,8 +3527,6 @@ function renderSuggestions() {
   els.suggestions.innerHTML = currentSuggestions.map((suggestion, index) => {
     const teamA = suggestion.teamA.map((p) => p.name).join(", ");
     const teamB = suggestion.teamB.map((p) => p.name).join(", ");
-    const benchA = suggestion.benchA.length ? suggestion.benchA.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente A";
-    const benchB = suggestion.benchB.length ? suggestion.benchB.map((p) => `${p.name} ${getPlayerRatingForBalance(p)}`).join(", ") : "Sem suplente B";
     return `
       <article class="suggestion-card">
         <div class="suggestion-top">
@@ -3536,8 +3536,6 @@ function renderSuggestions() {
         <div class="team-preview">
           <div class="team-line"><strong>A ${suggestion.teamAStats.total}</strong> - ${escapeHtml(teamA)}</div>
           <div class="team-line blue"><strong>B ${suggestion.teamBStats.total}</strong> - ${escapeHtml(teamB)}</div>
-          <div class="team-line bench"><strong>Supl. A</strong> - ${escapeHtml(benchA)}</div>
-          <div class="team-line bench"><strong>Supl. B</strong> - ${escapeHtml(benchB)}</div>
         </div>
         ${renderTeamRadarChart(suggestion.teamA, suggestion.teamB, { compact: true })}
         <div class="metric-row">
@@ -3576,71 +3574,53 @@ function getFormBalancePenalty(teamA, teamB) {
 }
 
 function generateSuggestions(players, games) {
-  const benchSize = players.length - 10;
   const pairHistory = buildPairHistory(games);
   const teamHistory = buildTeamHistory(games);
-  const benchHistory = buildBenchHistory(games);
   const suggestions = [];
   const seen = new Set();
 
-  const requiredBench = benchSize > 0 ? getThirdWorstPlayer(players) : null;
-  const benchCombos = benchSize === 0
-    ? [[]]
-    : combinations(players, benchSize).filter((bench) => bench.some((p) => p.id === requiredBench.id));
-  for (const bench of benchCombos) {
-    const benchIds = new Set(bench.map((p) => p.id));
-    const starters = players.filter((p) => !benchIds.has(p.id));
-    const teamCombos = combinations(starters, 5);
-    const benchSplits = getBenchSplits(bench);
+  const teamASize = Math.floor(players.length / 2);
+  const teamCombos = combinations(players, teamASize);
+  for (const teamA of teamCombos) {
+    const teamAIds = new Set(teamA.map((p) => p.id));
+    const teamB = players.filter((p) => !teamAIds.has(p.id));
+    const keyA = keyForIds(teamA);
+    const keyB = keyForIds(teamB);
+    const divisionKey = [keyA, keyB].sort().join("|");
+    if (seen.has(divisionKey)) continue;
+    seen.add(divisionKey);
 
-    for (const teamA of teamCombos) {
-      const teamAIds = new Set(teamA.map((p) => p.id));
-      const teamB = starters.filter((p) => !teamAIds.has(p.id));
-      const keyA = keyForIds(teamA);
-      const keyB = keyForIds(teamB);
+    const ratingOptions = { ratingFor: getPlayerRatingForBalance };
+    const teamAStats = getTeamStats(teamA, ratingOptions);
+    const teamBStats = getTeamStats(teamB, ratingOptions);
+    const diffTotal = Math.abs(teamAStats.total - teamBStats.total);
+    const squadDiff = Math.abs(teamAStats.average - teamBStats.average);
+    const attrDiff =
+      Math.abs(teamAStats.attack - teamBStats.attack) +
+      Math.abs(teamAStats.defense - teamBStats.defense) * 1.25 +
+      Math.abs(teamAStats.physical - teamBStats.physical) +
+      Math.abs(teamAStats.pace - teamBStats.pace) * 0.7;
+    const pairPenalty = sameTeamPairPenalty(teamA, pairHistory) + sameTeamPairPenalty(teamB, pairHistory);
+    const exactPenalty = (teamHistory.get(keyA) || 0) * 12 + (teamHistory.get(keyB) || 0) * 12;
+    const historyPenalty = Math.round(pairPenalty + exactPenalty);
+    const formPenalty = getFormBalancePenalty(teamA, teamB);
+    const score = diffTotal * 3 + squadDiff * 1.7 + attrDiff * 0.45 + historyPenalty + formPenalty;
 
-      for (const split of benchSplits) {
-        const divisionKey = [keyA, keyB].sort().join("|") + `|benchA:${keyForIds(split.benchA)}|benchB:${keyForIds(split.benchB)}`;
-        if (seen.has(divisionKey)) continue;
-        seen.add(divisionKey);
-
-        const ratingOptions = { ratingFor: getPlayerRatingForBalance };
-        const teamAStats = getTeamStats(teamA, ratingOptions);
-        const teamBStats = getTeamStats(teamB, ratingOptions);
-        const squadAStats = getTeamStats([...teamA, ...split.benchA], ratingOptions);
-        const squadBStats = getTeamStats([...teamB, ...split.benchB], ratingOptions);
-        const diffTotal = Math.abs(teamAStats.total - teamBStats.total);
-        const squadDiff = Math.abs(squadAStats.average - squadBStats.average);
-        const attrDiff =
-          Math.abs(teamAStats.attack - teamBStats.attack) +
-          Math.abs(teamAStats.defense - teamBStats.defense) * 1.25 +
-          Math.abs(teamAStats.physical - teamBStats.physical) +
-          Math.abs(teamAStats.pace - teamBStats.pace) * 0.7;
-        const pairPenalty = sameTeamPairPenalty([...teamA, ...split.benchA], pairHistory) + sameTeamPairPenalty([...teamB, ...split.benchB], pairHistory);
-        const exactPenalty = (teamHistory.get(keyA) || 0) * 12 + (teamHistory.get(keyB) || 0) * 12;
-        const benchPenalty = bench.reduce((total, p) => total + (benchHistory.get(p.id) || 0) * 4 + p.overall / 60, 0);
-        const unevenBenchPenalty = Math.abs(split.benchA.length - split.benchB.length) * 2;
-        const historyPenalty = Math.round(pairPenalty + exactPenalty + benchPenalty + unevenBenchPenalty);
-        const formPenalty = getFormBalancePenalty([...teamA, ...split.benchA], [...teamB, ...split.benchB]);
-        const score = diffTotal * 4 + squadDiff * 1.25 + attrDiff * 0.45 + historyPenalty + formPenalty;
-
-        suggestions.push({
-          teamA,
-          teamB,
-          benchA: split.benchA,
-          benchB: split.benchB,
-          teamAStats,
-          teamBStats,
-          squadAStats,
-          squadBStats,
-          diffTotal,
-          squadDiff,
-          historyPenalty,
-          formPenalty: Number(formPenalty.toFixed(2)),
-          score: Number(score.toFixed(2)),
-        });
-      }
-    }
+    suggestions.push({
+      teamA,
+      teamB,
+      benchA: [],
+      benchB: [],
+      teamAStats,
+      teamBStats,
+      squadAStats: teamAStats,
+      squadBStats: teamBStats,
+      diffTotal,
+      squadDiff,
+      historyPenalty,
+      formPenalty: Number(formPenalty.toFixed(2)),
+      score: Number(score.toFixed(2)),
+    });
   }
 
   return suggestions.sort((a, b) => a.score - b.score || a.diffTotal - b.diffTotal || a.squadDiff - b.squadDiff);
@@ -4213,6 +4193,9 @@ async function saveCurrentScore() {
   if (game.status === "finished" && !wasFinished) {
     game.scoreSavedAt = new Date().toISOString();
   }
+  if (game.status === "finished") {
+    completeOriginEventForGame(game);
+  }
   if (game.status !== "finished") {
     game.scoreSavedAt = null;
   }
@@ -4226,6 +4209,24 @@ async function saveCurrentScore() {
     }
   }
   render();
+}
+
+function completeOriginEventForGame(game) {
+  const originEvent = findOriginEventForGame(game);
+  if (!originEvent || originEvent.status === "completed") return;
+  originEvent.status = "completed";
+}
+
+function findOriginEventForGame(game) {
+  const gameDate = new Date(game.date).getTime();
+  const gamePlayerIds = new Set(getGamePlayerIds(game));
+  return (state.events || []).find((eventData) => {
+    if (eventData.status !== "open") return false;
+    const eventDate = new Date(eventData.startsAt).getTime();
+    if (Math.abs(eventDate - gameDate) > 60 * 1000) return false;
+    const goingIds = getEventResponses(eventData.id, "going").map((response) => response.playerId);
+    return goingIds.length ? goingIds.every((playerId) => gamePlayerIds.has(playerId)) : true;
+  }) || null;
 }
 
 async function handlePhotoSelection(event) {
@@ -4446,8 +4447,8 @@ function renderGamesList() {
   }
 
   els.gamesList.innerHTML = state.games.map((game) => {
-    const teamA = hydrate(game.teamA);
-    const teamB = hydrate(game.teamB);
+    const teamA = hydrate([...(game.teamA || []), ...(getBenchA(game) || [])]);
+    const teamB = hydrate([...(game.teamB || []), ...(getBenchB(game) || [])]);
     const result = game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
     return `
       <article class="game-card">
@@ -5127,6 +5128,7 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
   const compact = Boolean(options.compact);
   const statsA = getTeamRadarStats(teamA);
   const statsB = getTeamRadarStats(teamB);
+  const odds = getTeamWinProbabilities(statsA, statsB);
   const centerX = 110;
   const centerY = compact ? 88 : 98;
   const radius = compact ? 44 : 56;
@@ -5164,6 +5166,10 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
         <span class="team-a">Equipa A ${aAverage}</span>
         <span class="team-b">Equipa B ${bAverage}</span>
       </div>
+      <div class="team-radar-odds">
+        <span class="team-a">Prob. A ${odds.teamA}%</span>
+        <span class="team-b">Prob. B ${odds.teamB}%</span>
+      </div>
       <svg viewBox="0 0 220 ${compact ? 176 : 204}" role="img" aria-label="Comparacao PAC SHO PAS DRI DEF PHY">
         <g class="team-radar-grid">
           ${rings}
@@ -5175,6 +5181,14 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
       </svg>
     </div>
   `;
+}
+
+function getTeamWinProbabilities(statsA, statsB) {
+  const averageA = statsA.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length;
+  const averageB = statsB.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length;
+  const diff = averageA - averageB;
+  const teamA = clamp(Math.round(50 + diff * 3), 8, 92);
+  return { teamA, teamB: 100 - teamA };
 }
 
 function getTeamStats(players, options = {}) {

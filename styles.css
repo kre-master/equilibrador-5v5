@@ -886,6 +886,46 @@ h3 {
   gap: 6px;
 }
 
+.team-radar-odds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.suggestion-card .team-radar-odds,
+.game-card .team-radar-odds {
+  justify-content: flex-start;
+}
+
+.team-radar-odds span {
+  border: 1px solid rgba(255,255,255,.48);
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(255,255,255,.16);
+}
+
+.suggestion-card .team-radar-odds span,
+.game-card .team-radar-odds span {
+  border-color: rgba(190, 205, 198, .52);
+  background: rgba(255,255,255,.66);
+}
+
+.team-radar-odds .team-a {
+  color: #ffe36f;
+}
+
+.team-radar-odds .team-b {
+  color: #c86422;
+}
+
+.suggestion-card .team-radar-odds .team-a,
+.game-card .team-radar-odds .team-a {
+  color: #b98400;
+}
+
 .team-radar-legend span::before {
   content: "";
   width: 10px;
