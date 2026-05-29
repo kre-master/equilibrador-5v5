@@ -1546,7 +1546,16 @@ function renderPlayerProfile() {
   });
   els.playerProfile.querySelectorAll("[data-profile-open-game]").forEach((button) => {
     button.addEventListener("click", () => {
-      currentGameId = button.dataset.profileOpenGame;
+      const game = state.games.find((item) => item.id === button.dataset.profileOpenGame);
+      if (isFinishedGame(game)) {
+        currentHistoryGameId = game.id;
+        currentGameId = null;
+        showView("history-game");
+        renderHistoryGameDetail();
+        return;
+      }
+      currentGameId = game?.id || button.dataset.profileOpenGame;
+      currentHistoryGameId = null;
       showView("today");
       renderCurrentGame();
     });
@@ -3075,7 +3084,7 @@ async function saveEventFromForm(event) {
   const title = els.eventTitle.value.trim();
   const startsAt = fromDateTimeLocalInput(els.eventDate.value);
   const location = els.eventLocation.value.trim();
-  const maxPlayers = clamp(Number(els.eventMaxPlayers.value || 12), 10, 12);
+  const maxPlayers = clampNumber(Number(els.eventMaxPlayers.value || 12), 10, 12);
   if (!title || !startsAt) return;
 
   const eventData = normalizeEventRecord({
@@ -5187,7 +5196,7 @@ function getTeamWinProbabilities(statsA, statsB) {
   const averageA = statsA.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length;
   const averageB = statsB.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length;
   const diff = averageA - averageB;
-  const teamA = clamp(Math.round(50 + diff * 3), 8, 92);
+  const teamA = clampNumber(Math.round(50 + diff * 3), 8, 92);
   return { teamA, teamB: 100 - teamA };
 }
 
