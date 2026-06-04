@@ -153,6 +153,9 @@ Regra corrigida:
 - O historico individual mostra o resultado da perspectiva do jogador: jogador da Equipa B num 11-12 ve `12 - 11 Vitoria`.
 - A coluna `ULT. 5` da lista de jogadores usa os ultimos jogos em que o jogador participou, nao os ultimos jogos globais da equipa.
 - Os pontos `ULT. 5` sao mostrados em ordem cronologica visual, com o jogo mais recente a direita.
+- No historico de jogos, cada cartao mostra o nome do jogo/convocatoria quando a app consegue associar o jogo ao evento.
+- No detalhe do jogo historico, o botao `Voltar` do topo foi removido e o nome do jogo aparece antes do campo.
+- No historico, as probabilidades do radar aparecem inline ao lado de `Equipa A` e `Equipa B`; o layout do radar no jogo atual mantém-se separado.
 
 Ficheiros alterados:
 
@@ -166,4 +169,4 @@ Validacoes:
 - `node --check app.js` passou.
 - `npm.cmd run build:web` passou.
 - `node --check www\app.js` passou.
-- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-season3`.
+- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-history1`.

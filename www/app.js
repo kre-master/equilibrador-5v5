@@ -3996,7 +3996,7 @@ function renderField(game, options = {}) {
   const squadB = [...teamB, ...benchB];
   const result = game.scoreA == null || game.scoreB == null ? "vs" : `${game.scoreA} - ${game.scoreB}`;
   const date = formatDate(game.date);
-  const radar = renderTeamRadarChart(squadA, squadB);
+  const radar = renderTeamRadarChart(squadA, squadB, { inlineOdds: Boolean(options.radarInlineOdds) });
   const radarPosition = options.radarPosition || "top";
 
   return `
@@ -4286,16 +4286,33 @@ function completeOriginEventForGame(game) {
   originEvent.status = "completed";
 }
 
-function findOriginEventForGame(game) {
+function getGameTitle(game) {
+  const title = String(game?.title || game?.name || "").trim();
+  if (title) return title;
+  const eventData = findEventForGame(game);
+  if (eventData?.title) return eventData.title;
+  return `Jogo de ${formatDate(game?.date || new Date().toISOString())}`;
+}
+
+function findEventForGame(game, options = {}) {
+  if (!game) return null;
+  const statuses = options.statuses ? new Set(options.statuses) : null;
+  const directEvent = game.eventId ? (state.events || []).find((eventData) => eventData.id === game.eventId) : null;
+  if (directEvent && (!statuses || statuses.has(directEvent.status))) return directEvent;
+
   const gameDate = new Date(game.date).getTime();
   const gamePlayerIds = new Set(getGamePlayerIds(game));
   return (state.events || []).find((eventData) => {
-    if (eventData.status !== "open") return false;
+    if (statuses && !statuses.has(eventData.status)) return false;
     const eventDate = new Date(eventData.startsAt).getTime();
     if (Math.abs(eventDate - gameDate) > 60 * 1000) return false;
     const goingIds = getEventResponses(eventData.id, "going").map((response) => response.playerId);
     return goingIds.length ? goingIds.every((playerId) => gamePlayerIds.has(playerId)) : true;
   }) || null;
+}
+
+function findOriginEventForGame(game) {
+  return findEventForGame(game, { statuses: ["open"] });
 }
 
 async function handlePhotoSelection(event) {
@@ -4519,12 +4536,14 @@ function renderGamesList() {
     const teamA = hydrate([...(game.teamA || []), ...(getBenchA(game) || [])]);
     const teamB = hydrate([...(game.teamB || []), ...(getBenchB(game) || [])]);
     const result = game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
+    const gameTitle = getGameTitle(game);
     return `
       <article class="game-card">
         <div>
+          <p class="eyebrow">${escapeHtml(gameTitle)}</p>
           <strong>${formatDate(game.date)} - ${result}</strong>
           <span>A ${getTeamStats(teamA).total} vs B ${getTeamStats(teamB).total} - ${game.status === "finished" ? "finalizado" : "em aberto"}</span>
-          ${renderTeamRadarChart(teamA, teamB, { compact: true })}
+          ${renderTeamRadarChart(teamA, teamB, { compact: true, inlineOdds: true })}
         </div>
         <div class="game-actions">
           <button class="primary-btn" data-open-game="${game.id}">Abrir</button>
@@ -4562,18 +4581,16 @@ function renderHistoryGameDetail() {
     els.historyGameDetail.innerHTML = `<div class="empty-state">Escolhe um jogo finalizado no historico.</div>`;
     return;
   }
+  const gameTitle = getGameTitle(game);
   els.historyGameDetail.innerHTML = `
-    <div class="history-detail-actions">
-      <button class="ghost-btn" data-back-to-games>Voltar</button>
+    <div class="history-game-title">
+      <p class="eyebrow">Historico de jogo</p>
+      <h3>${escapeHtml(gameTitle)}</h3>
     </div>
     <div class="field-card history-field-card">
-      ${renderField(game, { radarPosition: "bottom", clickablePlayers: true })}
+      ${renderField(game, { radarPosition: "bottom", clickablePlayers: true, radarInlineOdds: true })}
     </div>
   `;
-  els.historyGameDetail.querySelector("[data-back-to-games]")?.addEventListener("click", () => {
-    currentHistoryGameId = null;
-    showView("games");
-  });
   els.historyGameDetail.querySelectorAll("[data-open-field-player]").forEach((card) => {
     card.addEventListener("click", () => openPlayerProfile(card.dataset.openFieldPlayer));
     card.addEventListener("keydown", (event) => {
@@ -5195,6 +5212,7 @@ function radarPolygonPoints(values, centerX, centerY, radius, maxValue) {
 
 function renderTeamRadarChart(teamA, teamB, options = {}) {
   const compact = Boolean(options.compact);
+  const inlineOdds = Boolean(options.inlineOdds);
   const statsA = getTeamRadarStats(teamA);
   const statsB = getTeamRadarStats(teamB);
   const odds = getTeamWinProbabilities(statsA, statsB);
@@ -5230,15 +5248,15 @@ function renderTeamRadarChart(teamA, teamB, options = {}) {
   const bAverage = Math.round(statsB.reduce((sum, item) => sum + item.value, 0) / TEAM_RADAR_STATS.length);
 
   return `
-    <div class="team-radar ${compact ? "team-radar-compact" : ""}" aria-label="Radar das equipas">
+    <div class="team-radar ${compact ? "team-radar-compact" : ""} ${inlineOdds ? "team-radar-inline-odds" : ""}" aria-label="Radar das equipas">
       <div class="team-radar-legend">
-        <span class="team-a">Equipa A ${aAverage}</span>
-        <span class="team-b">Equipa B ${bAverage}</span>
+        <span class="team-a">Equipa A ${aAverage}${inlineOdds ? ` <em>Prob. A ${odds.teamA}%</em>` : ""}</span>
+        <span class="team-b">Equipa B ${bAverage}${inlineOdds ? ` <em>Prob. B ${odds.teamB}%</em>` : ""}</span>
       </div>
-      <div class="team-radar-odds">
+      ${inlineOdds ? "" : `<div class="team-radar-odds">
         <span class="team-a">Prob. A ${odds.teamA}%</span>
         <span class="team-b">Prob. B ${odds.teamB}%</span>
-      </div>
+      </div>`}
       <svg viewBox="0 0 220 ${compact ? 176 : 204}" role="img" aria-label="Comparacao PAC SHO PAS DRI DEF PHY">
         <g class="team-radar-grid">
           ${rings}

@@ -113,7 +113,10 @@ Correcao:
 - Adicionados `getGameResultText` e `getPlayerResultText` para alinhar historico individual com a perspectiva do jogador.
 - `renderPlayersTable` passou a usar `form.recentRecord` em vez de `getPlayerTeamRecentRecord`.
 - `renderRecordDots` ganhou opcao cronologica para mostrar o jogo mais recente a direita.
-- Cache-buster actualizado para `20260604-season3`.
+- `renderGamesList` e `renderHistoryGameDetail` passaram a mostrar `getGameTitle(game)`.
+- `findEventForGame` associa jogo e convocatoria por data e jogadores confirmados para obter o titulo.
+- `renderTeamRadarChart` ganhou opcao `inlineOdds` para o historico.
+- Cache-buster actualizado para `20260604-history1`.
 
 Validacao:
 

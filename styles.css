@@ -886,6 +886,21 @@ h3 {
   gap: 6px;
 }
 
+.team-radar-legend em {
+  border: 1px solid rgba(255,255,255,.48);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(255,255,255,.16);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.game-card .team-radar-legend em,
+.history-field-card .team-radar-legend em {
+  border-color: rgba(190, 205, 198, .52);
+  background: rgba(255,255,255,.66);
+}
+
 .team-radar-odds {
   display: flex;
   flex-wrap: wrap;
@@ -1863,14 +1878,14 @@ th.stat-col {
   gap: 14px;
 }
 
-.history-detail-actions {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 0;
+.history-game-title {
+  display: grid;
+  gap: 2px;
+  padding: 4px 2px 0;
 }
 
-.history-detail-actions .ghost-btn {
-  width: min(100%, 520px);
+.history-game-title h3 {
+  font-size: 18px;
 }
 
 .history-field-card .team-radar {
@@ -2483,6 +2498,10 @@ th.stat-col {
 
 .game-card strong {
   display: block;
+}
+
+.game-card .eyebrow {
+  margin-bottom: 4px;
 }
 
 .game-card span {
