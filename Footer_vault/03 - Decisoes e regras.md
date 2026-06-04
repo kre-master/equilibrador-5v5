@@ -80,6 +80,8 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - A carta sazonal nao deve ficar ativa indefinidamente no perfil/listas.
 - Cartas de campeao de estacao nao entram na montra permanente de premios.
 - No historico individual, o resultado deve ser mostrado da perspectiva da equipa do jogador.
+- Na lista de jogadores, `ULT. 5` deve representar jogos em que o jogador participou.
+- Os pontos `ULT. 5` devem aparecer do mais antigo para o mais recente, deixando o jogo mais recente a direita.
 
 ## Testes preferidos
 

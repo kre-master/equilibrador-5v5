@@ -151,6 +151,8 @@ Regra corrigida:
 - A carta sazonal ativa aparece apenas no primeiro jogo do campeao depois do fim da estacao.
 - Cartas de campeao de estacao sao temporarias de campo e nao entram na montra permanente de premios.
 - O historico individual mostra o resultado da perspectiva do jogador: jogador da Equipa B num 11-12 ve `12 - 11 Vitoria`.
+- A coluna `ULT. 5` da lista de jogadores usa os ultimos jogos em que o jogador participou, nao os ultimos jogos globais da equipa.
+- Os pontos `ULT. 5` sao mostrados em ordem cronologica visual, com o jogo mais recente a direita.
 
 Ficheiros alterados:
 
@@ -164,4 +166,4 @@ Validacoes:
 - `node --check app.js` passou.
 - `npm.cmd run build:web` passou.
 - `node --check www\app.js` passou.
-- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-season2`.
+- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-season3`.

@@ -111,7 +111,9 @@ Correcao:
 - Adicionados `getSeasonChampionCardKeyForGame` e `isFirstPlayerGameAfterSeason`.
 - Adicionado `FIELD_ONLY_CARD_KEYS` para retirar campeoes de estacao da montra permanente.
 - Adicionados `getGameResultText` e `getPlayerResultText` para alinhar historico individual com a perspectiva do jogador.
-- Cache-buster actualizado para `20260604-season2`.
+- `renderPlayersTable` passou a usar `form.recentRecord` em vez de `getPlayerTeamRecentRecord`.
+- `renderRecordDots` ganhou opcao cronologica para mostrar o jogo mais recente a direita.
+- Cache-buster actualizado para `20260604-season3`.
 
 Validacao:
 
