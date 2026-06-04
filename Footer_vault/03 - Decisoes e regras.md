@@ -95,7 +95,7 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
   - melhor win rate nesse mes.
 - Se continuar empatado apos os tres criterios, a carta pode ser atribuida aos jogadores empatados.
 - A carta de MVP do mes e temporaria de campo e aparece apenas no primeiro jogo elegivel do mes seguinte em que o jogador participe.
-- MVP do mes nao entra na montra permanente de premios.
+- MVP do mes entra na montra permanente de premios quando conquistado.
 
 ## Testes preferidos
 

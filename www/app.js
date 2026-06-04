@@ -46,7 +46,7 @@ const CARD_AWARD_PRIORITY = [
   "form_5w_5", "form_4w_5", "form_3w_5",
   "ironman_month", "rising", "hot", "regular", "return", "recovery", "rookie", "base",
 ];
-const FIELD_ONLY_CARD_KEYS = new Set(["mvp_month", "champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
+const FIELD_ONLY_CARD_KEYS = new Set(["champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
@@ -1738,6 +1738,10 @@ function countPlayerMvpAwards(playerId, counts) {
       }
     });
 
+  const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
+  months.forEach((monthId) => {
+    if (getOfficialMvpWinnersByMonth(monthId).includes(playerId)) addAwardCount(counts, "mvp_month");
+  });
 }
 
 function countPlayerSeasonAwards(playerId, counts) {

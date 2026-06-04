@@ -156,7 +156,7 @@ Regra corrigida:
 - No historico de jogos, cada cartao mostra o nome do jogo/convocatoria quando a app consegue associar o jogo ao evento.
 - No detalhe do jogo historico, o botao `Voltar` do topo foi removido e o nome do jogo aparece antes do campo.
 - No historico, as probabilidades do radar aparecem inline ao lado de `Equipa A` e `Equipa B`; o layout do radar no jogo atual mantém-se separado.
-- MVP do mes deixou de ser carta permanente/montra e passou a ser carta temporaria de campo.
+- MVP do mes fica registado na montra permanente de premios.
 - Desempate de MVP do mes: mais MVPs oficiais no mes, depois mais vitorias no mes, depois melhor win rate no mes; se continuar empatado, os jogadores empatados recebem a carta.
 - MVP do mes so e atribuido depois do mes estar fechado e aparece apenas no primeiro jogo elegivel do mes seguinte em que o jogador participe.
 
@@ -172,4 +172,4 @@ Validacoes:
 - `node --check app.js` passou.
 - `npm.cmd run build:web` passou.
 - `node --check www\app.js` passou.
-- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-mvpmonth1`.
+- Smoke test local em `http://127.0.0.1:5173/` devolveu `STATUS=200` e `CACHE_BUSTER=ok` com cache-buster `20260604-mvpmonth2`.
