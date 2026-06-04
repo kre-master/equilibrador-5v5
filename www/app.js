@@ -46,6 +46,7 @@ const CARD_AWARD_PRIORITY = [
   "form_5w_5", "form_4w_5", "form_3w_5",
   "ironman_month", "rising", "hot", "regular", "return", "recovery", "rookie", "base",
 ];
+const FIELD_ONLY_CARD_KEYS = new Set(["champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
@@ -56,6 +57,12 @@ const TEAM_RADAR_AGGREGATION = "power";
 const TEAM_RADAR_POWER = 1.35;
 const MVP_MIN_VOTES = 5;
 const MVP_LOCK_HOURS = 24;
+const SEASON_DEFINITIONS = {
+  spring: { label: "primavera", startMonth: 2, startDay: 20, endMonth: 5, endDay: 21 },
+  summer: { label: "verao", startMonth: 5, startDay: 21, endMonth: 8, endDay: 22 },
+  autumn: { label: "outono", startMonth: 8, startDay: 22, endMonth: 11, endDay: 21 },
+  winter: { label: "inverno", startMonth: 11, startDay: 21, endMonth: 2, endDay: 20 },
+};
 const TEAM_RADAR_STATS = [
   { key: "pace", label: "PAC" },
   { key: "shooting", label: "SHO" },
@@ -1625,7 +1632,7 @@ function renderAwardShowcaseCard(playerData, award) {
 }
 
 function getTotalAwardCardTypes() {
-  return Object.keys(PLAYER_CARD_VARIANTS).length;
+  return Object.keys(PLAYER_CARD_VARIANTS).filter(isShowcaseAwardKey).length;
 }
 
 function showAwardDetail(playerData, award, count = 1) {
@@ -1664,8 +1671,12 @@ function showAwardDetail(playerData, award, count = 1) {
 }
 
 function addAwardCount(counts, key, amount = 1) {
-  if (!PLAYER_CARD_VARIANTS[key]) return;
+  if (!isShowcaseAwardKey(key)) return;
   counts.set(key, (counts.get(key) || 0) + amount);
+}
+
+function isShowcaseAwardKey(key) {
+  return Boolean(PLAYER_CARD_VARIANTS[key] && !FIELD_ONLY_CARD_KEYS.has(key));
 }
 
 function getPlayerAwardShowcase(playerData) {
@@ -1695,7 +1706,6 @@ function getPlayerAwardShowcase(playerData) {
   });
 
   countPlayerMvpAwards(playerData.id, counts);
-  countPlayerSeasonAwards(playerData.id, counts);
   countPlayerAttendanceAwards(playerData.id, counts);
 
   const form = getPlayerForm(playerData);
@@ -1799,13 +1809,15 @@ function getCardTextColor(variant) {
 function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), game = null) {
   if (!playerData) return "base";
   if (game) {
+    const seasonChampionCard = getSeasonChampionCardKeyForGame(playerData.id, game);
+    if (seasonChampionCard) return seasonChampionCard;
+
     const nextGameMvpIds = getNextGameMvpIds(game);
     if (nextGameMvpIds.has(playerData.id)) {
       return getMvpStreakCardKey(playerData.id, getPreviousFinishedGameFor(game));
     }
   }
 
-  if (isLatestCompletedSeasonChampion(playerData.id)) return getSeasonChampionCardKey(getLatestCompletedSeasonDate());
   if (isLatestCompletedMonthMvpLeader(playerData.id)) return "mvp_month";
   if (form.winStreak >= 5) return "win_5x";
   if (form.winStreak >= 4) return "win_4x";
@@ -1905,12 +1917,17 @@ function getMonthId(value) {
 
 function getSeasonInfo(value) {
   const date = new Date(value);
-  const month = date.getMonth();
-  const year = month < 2 ? date.getFullYear() - 1 : date.getFullYear();
-  if (month >= 2 && month <= 4) return { key: "spring", year, label: "primavera" };
-  if (month >= 5 && month <= 7) return { key: "summer", year, label: "verao" };
-  if (month >= 8 && month <= 10) return { key: "autumn", year, label: "outono" };
-  return { key: "winter", year, label: "inverno" };
+  const year = date.getFullYear();
+  const springStart = getSeasonStart("spring", year);
+  const summerStart = getSeasonStart("summer", year);
+  const autumnStart = getSeasonStart("autumn", year);
+  const winterStart = getSeasonStart("winter", year);
+
+  if (date >= winterStart) return buildSeasonInfo("winter", year);
+  if (date >= autumnStart) return buildSeasonInfo("autumn", year);
+  if (date >= summerStart) return buildSeasonInfo("summer", year);
+  if (date >= springStart) return buildSeasonInfo("spring", year);
+  return buildSeasonInfo("winter", year - 1);
 }
 
 function getSeasonId(value) {
@@ -1922,6 +1939,21 @@ function getSeasonChampionCardKey(value) {
   return `champion_${getSeasonInfo(value).key}`;
 }
 
+function buildSeasonInfo(key, year) {
+  return { key, year, label: SEASON_DEFINITIONS[key]?.label || key };
+}
+
+function getSeasonStart(key, year) {
+  const definition = SEASON_DEFINITIONS[key] || SEASON_DEFINITIONS.spring;
+  return new Date(year, definition.startMonth, definition.startDay, 0, 0, 0, 0);
+}
+
+function getSeasonEndFromInfo(season) {
+  const definition = SEASON_DEFINITIONS[season.key] || SEASON_DEFINITIONS.spring;
+  const endYear = season.key === "winter" ? season.year + 1 : season.year;
+  return new Date(endYear, definition.endMonth, definition.endDay, 0, 0, 0, 0);
+}
+
 function getMonthEnd(value) {
   const date = new Date(value);
   return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -1929,11 +1961,7 @@ function getMonthEnd(value) {
 
 function getSeasonEnd(value) {
   const season = getSeasonInfo(value);
-  const year = season.year;
-  if (season.key === "spring") return new Date(year, 4, 31, 23, 59, 59, 999);
-  if (season.key === "summer") return new Date(year, 7, 31, 23, 59, 59, 999);
-  if (season.key === "autumn") return new Date(year, 10, 30, 23, 59, 59, 999);
-  return new Date(year + 1, 2, 0, 23, 59, 59, 999);
+  return getSeasonEndFromInfo(season);
 }
 
 function isMonthComplete(monthId) {
@@ -1947,7 +1975,7 @@ function isSeasonComplete(seasonId) {
   const games = state.games.filter((game) => getSeasonId(game.date) === seasonId);
   if (!games.some(isFinishedGame)) return false;
   if (games.some((game) => !isFinishedGame(game))) return false;
-  return getSeasonEnd(games[0].date).getTime() < Date.now() || games.every((game) => new Date(game.date).getTime() < Date.now());
+  return getSeasonEnd(seasonIdToDate(seasonId)).getTime() <= Date.now();
 }
 
 function getCompletedMonthIds() {
@@ -1975,8 +2003,7 @@ function getLatestCompletedSeasonId() {
 function seasonIdToDate(seasonId) {
   const [key, yearText] = seasonId.split("-");
   const year = Number(yearText) || new Date().getFullYear();
-  const monthBySeason = { spring: 2, summer: 5, autumn: 8, winter: 11 };
-  return new Date(year, monthBySeason[key] ?? 0, 1, 12);
+  return getSeasonStart(key, year);
 }
 
 function getLatestCompletedSeasonDate() {
@@ -2028,9 +2055,32 @@ function getSeasonChampionIds(seasonId) {
     (findPlayer(a.playerId)?.name || "").localeCompare(findPlayer(b.playerId)?.name || "")
   );
   const best = rows[0];
-  return rows
-    .filter((row) => row.wins === best.wins && row.wins / row.games === best.wins / best.games && row.games === best.games)
-    .map((row) => row.playerId);
+  return best ? [best.playerId] : [];
+}
+
+function getSeasonChampionCardKeyForGame(playerId, game) {
+  if (!game || !getPlayerParticipation(game, playerId)) return null;
+  const gameTime = new Date(game.date).getTime();
+  const seasonId = getCompletedSeasonIds()
+    .filter((id) => getSeasonEnd(seasonIdToDate(id)).getTime() <= gameTime)
+    .reverse()
+    .find((id) => {
+      const championId = getSeasonChampionIds(id)[0];
+      return championId === playerId && isFirstPlayerGameAfterSeason(id, playerId, game);
+    });
+  return seasonId ? `champion_${seasonId.split("-")[0]}` : null;
+}
+
+function isFirstPlayerGameAfterSeason(seasonId, playerId, game) {
+  const seasonEndTime = getSeasonEnd(seasonIdToDate(seasonId)).getTime();
+  const gameTime = new Date(game.date).getTime();
+  if (gameTime < seasonEndTime || !getPlayerParticipation(game, playerId)) return false;
+
+  return !state.games.some((candidate) => {
+    if (candidate.id === game.id || !getPlayerParticipation(candidate, playerId)) return false;
+    const candidateTime = new Date(candidate.date).getTime();
+    return candidateTime >= seasonEndTime && candidateTime < gameTime;
+  });
 }
 
 function isCurrentSeasonChampion(playerId) {
@@ -2088,7 +2138,7 @@ function renderRecordDots(record) {
 }
 
 function renderTeamRecentGameRow(item) {
-  const resultText = item.game.scoreA == null || item.game.scoreB == null ? "Resultado em aberto" : `${item.game.scoreA} - ${item.game.scoreB}`;
+  const resultText = item.participation ? getPlayerResultText(item.game, item.participation.side) : getGameResultText(item.game);
   const outcomeLabel = {
     win: "Vitoria",
     draw: "Empate",
@@ -2111,7 +2161,7 @@ function renderTeamRecentGameRow(item) {
 }
 
 function renderPlayerGameRow(item) {
-  const resultText = item.game.scoreA == null || item.game.scoreB == null ? "Resultado em aberto" : `${item.game.scoreA} - ${item.game.scoreB}`;
+  const resultText = getPlayerResultText(item.game, item.side);
   const outcomeLabel = {
     win: "Vitoria",
     draw: "Empate",
@@ -3980,6 +4030,15 @@ function renderDot(playerData, teamClass, pos, game = null, options = {}) {
       ${renderPlayerCard(playerData, { mode: "field", form, variant })}
     </div>
   `;
+}
+
+function getGameResultText(game) {
+  return game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
+}
+
+function getPlayerResultText(game, side) {
+  if (game.scoreA == null || game.scoreB == null) return "Resultado em aberto";
+  return side === "B" ? `${game.scoreB} - ${game.scoreA}` : `${game.scoreA} - ${game.scoreB}`;
 }
 
 function renderPlayerCard(playerData, options = {}) {
