@@ -116,7 +116,11 @@ Correcao:
 - `renderGamesList` e `renderHistoryGameDetail` passaram a mostrar `getGameTitle(game)`.
 - `findEventForGame` associa jogo e convocatoria por data e jogadores confirmados para obter o titulo.
 - `renderTeamRadarChart` ganhou opcao `inlineOdds` para o historico.
-- Cache-buster actualizado para `20260604-history1`.
+- `mvp_month` foi adicionado a `FIELD_ONLY_CARD_KEYS`.
+- `getMonthlyMvpRows` calcula desempates por MVPs oficiais, vitorias e win rate.
+- `getMonthMvpCardKeyForGame` e `isFirstPlayerGameAfterMonth` limitam a carta ao primeiro jogo elegivel do mes seguinte.
+- `isMonthComplete` passou a depender do fim real do mes, alem de jogos finalizados.
+- Cache-buster actualizado para `20260604-mvpmonth1`.
 
 Validacao:
 

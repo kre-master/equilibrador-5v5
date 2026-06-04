@@ -86,6 +86,17 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - O detalhe de jogo historico nao deve ter botao `Voltar` no topo.
 - Probabilidades do radar ficam inline junto ao nome de cada equipa no historico, mas continuam separadas no jogo atual.
 
+## MVP do mes
+
+- MVP do mes so pode ser atribuido apos o mes estar fechado e todos os jogos registados desse mes estarem finalizados.
+- Desempates:
+  - mais MVPs oficiais no mes;
+  - mais vitorias nos jogos em que participou nesse mes;
+  - melhor win rate nesse mes.
+- Se continuar empatado apos os tres criterios, a carta pode ser atribuida aos jogadores empatados.
+- A carta de MVP do mes e temporaria de campo e aparece apenas no primeiro jogo elegivel do mes seguinte em que o jogador participe.
+- MVP do mes nao entra na montra permanente de premios.
+
 ## Testes preferidos
 
 O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir testes por terminal quando possivel:

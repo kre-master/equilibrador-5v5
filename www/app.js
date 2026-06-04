@@ -27,7 +27,7 @@ const PLAYER_CARD_VARIANTS = {
   mvp: { key: "mvp", asset: "assets/new cards template/card_mvp.png", label: "MVP", description: "Jogador foi MVP oficial do jogo anterior e joga o jogo seguinte." },
   mvp_2x: { key: "mvp_2x", asset: "assets/new cards template/card_mvp_2x.png", label: "MVP 2x", description: "Jogador foi MVP oficial em dois jogos consecutivos." },
   mvp_3x: { key: "mvp_3x", asset: "assets/new cards template/card_mvp_3x.png", label: "MVP 3x", description: "Jogador foi MVP oficial em tres ou mais jogos consecutivos." },
-  mvp_month: { key: "mvp_month", asset: "assets/new cards template/card_mvp_month.png", label: "MVP do mes", description: "Jogador lidera os MVPs oficiais do mes." },
+  mvp_month: { key: "mvp_month", asset: "assets/new cards template/card_mvp_month.png", label: "MVP do mes", description: "Jogador foi MVP do mes anterior e joga o primeiro jogo elegivel do mes seguinte." },
   champion_spring: { key: "champion_spring", asset: "assets/new cards template/card_champion_spring.png", label: "Campeao primavera", description: "Jogador foi campeao da primavera por vitorias, com win rate como desempate." },
   champion_summer: { key: "champion_summer", asset: "assets/new cards template/card_champion_summer.png", label: "Campeao verao", description: "Jogador foi campeao do verao por vitorias, com win rate como desempate." },
   champion_autumn: { key: "champion_autumn", asset: "assets/new cards template/card_champion_autumn.png", label: "Campeao outono", description: "Jogador foi campeao do outono por vitorias, com win rate como desempate." },
@@ -46,7 +46,7 @@ const CARD_AWARD_PRIORITY = [
   "form_5w_5", "form_4w_5", "form_3w_5",
   "ironman_month", "rising", "hot", "regular", "return", "recovery", "rookie", "base",
 ];
-const FIELD_ONLY_CARD_KEYS = new Set(["champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
+const FIELD_ONLY_CARD_KEYS = new Set(["mvp_month", "champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
 
 const FORM_LOOKBACK_GAMES = 5;
 const FORM_RATING_CAP = 7;
@@ -1738,10 +1738,6 @@ function countPlayerMvpAwards(playerId, counts) {
       }
     });
 
-  const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
-  months.forEach((monthId) => {
-    if (getOfficialMvpWinnersByMonth(monthId).includes(playerId)) addAwardCount(counts, "mvp_month");
-  });
 }
 
 function countPlayerSeasonAwards(playerId, counts) {
@@ -1812,13 +1808,15 @@ function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), 
     const seasonChampionCard = getSeasonChampionCardKeyForGame(playerData.id, game);
     if (seasonChampionCard) return seasonChampionCard;
 
+    const monthMvpCard = getMonthMvpCardKeyForGame(playerData.id, game);
+    if (monthMvpCard) return monthMvpCard;
+
     const nextGameMvpIds = getNextGameMvpIds(game);
     if (nextGameMvpIds.has(playerData.id)) {
       return getMvpStreakCardKey(playerData.id, getPreviousFinishedGameFor(game));
     }
   }
 
-  if (isLatestCompletedMonthMvpLeader(playerData.id)) return "mvp_month";
   if (form.winStreak >= 5) return "win_5x";
   if (form.winStreak >= 4) return "win_4x";
   if (form.winStreak >= 3) return "win_3x";
@@ -1968,7 +1966,7 @@ function isMonthComplete(monthId) {
   const games = state.games.filter((game) => monthKey(game.date) === monthId);
   if (!games.some(isFinishedGame)) return false;
   if (games.some((game) => !isFinishedGame(game))) return false;
-  return getMonthEnd(games[0].date).getTime() < Date.now() || games.every((game) => new Date(game.date).getTime() < Date.now());
+  return getMonthEnd(monthIdToDate(monthId)).getTime() <= Date.now();
 }
 
 function isSeasonComplete(seasonId) {
@@ -1987,6 +1985,19 @@ function getCompletedMonthIds() {
 function getLatestCompletedMonthId() {
   const months = getCompletedMonthIds();
   return months[months.length - 1] || null;
+}
+
+function monthIdToDate(monthId) {
+  const [yearText, monthText] = String(monthId).split("-");
+  const year = Number(yearText) || new Date().getFullYear();
+  const month = Math.max(1, Math.min(12, Number(monthText) || 1));
+  return new Date(year, month - 1, 1, 12);
+}
+
+function getNextMonthId(monthId) {
+  const date = monthIdToDate(monthId);
+  date.setMonth(date.getMonth() + 1);
+  return getMonthId(date);
 }
 
 function getCompletedSeasonIds() {
@@ -2012,14 +2023,47 @@ function getLatestCompletedSeasonDate() {
 }
 
 function getOfficialMvpWinnersByMonth(monthId) {
-  const counts = new Map();
-  state.games
-    .filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId)
-    .forEach((game) => {
-      getOfficialMvpIdsForGame(game).forEach((playerId) => counts.set(playerId, (counts.get(playerId) || 0) + 1));
+  const rows = getMonthlyMvpRows(monthId);
+  if (!rows.length) return [];
+  const best = rows[0];
+  return rows
+    .filter((row) =>
+      row.mvpCount === best.mvpCount &&
+      row.wins === best.wins &&
+      row.winRate === best.winRate
+    )
+    .map((row) => row.playerId);
+}
+
+function getMonthlyMvpRows(monthId) {
+  const stats = new Map();
+  const monthGames = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
+
+  monthGames.forEach((game) => {
+    getGamePlayerIds(game).forEach((playerId) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return;
+      const row = stats.get(playerId) || { playerId, mvpCount: 0, games: 0, wins: 0, winRate: 0 };
+      row.games += 1;
+      if (getPlayerOutcome(game, participation.side) === "win") row.wins += 1;
+      stats.set(playerId, row);
     });
-  const max = Math.max(0, ...counts.values());
-  return max ? [...counts.entries()].filter(([, count]) => count === max).map(([playerId]) => playerId) : [];
+
+    getOfficialMvpIdsForGame(game).forEach((playerId) => {
+      const row = stats.get(playerId) || { playerId, mvpCount: 0, games: 0, wins: 0, winRate: 0 };
+      row.mvpCount += 1;
+      stats.set(playerId, row);
+    });
+  });
+
+  return [...stats.values()]
+    .filter((row) => row.mvpCount > 0)
+    .map((row) => ({ ...row, winRate: row.games ? row.wins / row.games : 0 }))
+    .sort((a, b) =>
+      b.mvpCount - a.mvpCount ||
+      b.wins - a.wins ||
+      b.winRate - a.winRate
+    );
 }
 
 function isCurrentMonthMvpLeader(playerId) {
@@ -2029,6 +2073,31 @@ function isCurrentMonthMvpLeader(playerId) {
 function isLatestCompletedMonthMvpLeader(playerId) {
   const monthId = getLatestCompletedMonthId();
   return Boolean(monthId && getOfficialMvpWinnersByMonth(monthId).includes(playerId));
+}
+
+function getMonthMvpCardKeyForGame(playerId, game) {
+  if (!game || !getPlayerParticipation(game, playerId)) return null;
+  const gameMonthId = getMonthId(game.date);
+  const monthId = getCompletedMonthIds()
+    .filter((id) => getNextMonthId(id) === gameMonthId)
+    .reverse()
+    .find((id) => {
+      if (!getOfficialMvpWinnersByMonth(id).includes(playerId)) return false;
+      return isFirstPlayerGameAfterMonth(id, playerId, game);
+    });
+  return monthId ? "mvp_month" : null;
+}
+
+function isFirstPlayerGameAfterMonth(monthId, playerId, game) {
+  const monthEndTime = getMonthEnd(monthIdToDate(monthId)).getTime();
+  const gameTime = new Date(game.date).getTime();
+  if (gameTime < monthEndTime || getMonthId(game.date) !== getNextMonthId(monthId) || !getPlayerParticipation(game, playerId)) return false;
+
+  return !state.games.some((candidate) => {
+    if (candidate.id === game.id || !getPlayerParticipation(candidate, playerId)) return false;
+    const candidateTime = new Date(candidate.date).getTime();
+    return candidateTime >= monthEndTime && candidateTime < gameTime && getMonthId(candidate.date) === getNextMonthId(monthId);
+  });
 }
 
 function getSeasonChampionIds(seasonId) {
