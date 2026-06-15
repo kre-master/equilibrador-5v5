@@ -3078,6 +3078,9 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-delete]").forEach((button) => {
     button.addEventListener("click", () => deleteEvent(button.dataset.eventDelete));
   });
+  els.eventsList.querySelectorAll("[data-save-event-date]").forEach((button) => {
+    button.addEventListener("click", () => saveEventDateFromList(button.dataset.saveEventDate));
+  });
   els.eventsList.querySelectorAll("[data-event-share]").forEach((button) => {
     button.addEventListener("click", () => shareEventOnWhatsApp(button.dataset.eventShare));
   });
@@ -3117,6 +3120,13 @@ function renderEventCard(eventData) {
         <span class="metric">Nao vou ${notGoing.length}</span>
         ${isFull ? `<span class="metric warn-pill">Cheio</span>` : ""}
         <span class="metric ${missing ? "warn-pill" : "good-pill"}">${missing ? `Faltam ${missing}` : "Pronto"}</span>
+      </div>
+      <div class="event-date-edit admin-actions">
+        <label class="game-date-control">
+          <span>Data/hora</span>
+          <input type="datetime-local" data-event-date-edit="${eventData.id}" value="${toDateTimeLocalInput(eventData.startsAt)}">
+        </label>
+        <button class="ghost-btn" data-save-event-date="${eventData.id}">Guardar data</button>
       </div>
       ${renderResponseActions(eventData, myResponse)}
       <div class="event-roster">
@@ -3236,6 +3246,45 @@ async function saveEventFromForm(event) {
   els.eventForm.reset();
   els.eventDate.value = toDateTimeLocalInput(defaultEventDate());
   render();
+}
+
+async function saveEventDateFromList(eventId) {
+  if (!requireAdmin()) return;
+  const input = [...(els.eventsList?.querySelectorAll("[data-event-date-edit]") || [])]
+    .find((item) => item.dataset.eventDateEdit === eventId);
+  const startsAt = fromDateTimeLocalInput(input?.value);
+  if (!startsAt) {
+    alert("Escolhe uma data e hora valida.");
+    return;
+  }
+  await updateEventDate(eventId, startsAt);
+}
+
+async function updateEventDate(eventId, startsAt) {
+  const eventData = (state.events || []).find((item) => item.id === eventId);
+  if (!eventData) return false;
+  const linkedGame = findGameForEventData(eventData);
+  const previousEventDate = eventData.startsAt;
+  const previousGameDate = linkedGame?.date || null;
+
+  eventData.startsAt = startsAt;
+  if (linkedGame) {
+    linkedGame.date = startsAt;
+    currentGenerationDateIso = startsAt;
+    currentPaymentsMonth = monthKey(startsAt);
+  }
+
+  try {
+    await persistState();
+  } catch (error) {
+    eventData.startsAt = previousEventDate;
+    if (linkedGame) linkedGame.date = previousGameDate;
+    saveState();
+    alert(`Nao consegui guardar a nova data: ${error.message}`);
+    return false;
+  }
+  render();
+  return true;
 }
 
 async function saveEventResponse(eventId, status) {
@@ -3837,11 +3886,18 @@ function syncGenerationDateFromInput() {
   return currentGenerationDateIso;
 }
 
-function updatePreviewGameDate() {
-  syncGenerationDateFromInput();
-  if (!previewGame) return;
-  previewGame.date = currentGenerationDateIso;
-  renderCurrentGame();
+async function updatePreviewGameDate(event) {
+  const iso = syncGenerationDateFromInput();
+  const game = getCurrentGame();
+  if (!game || !iso) return;
+  if (previewGame || game.status === "preview") {
+    game.date = iso;
+    if (previewGame) previewGame.date = iso;
+    renderCurrentGame();
+    return;
+  }
+  if (event?.type === "input") return;
+  await updateGameDate(game.id, iso);
 }
 
 async function confirmPreviewGame() {
@@ -3872,6 +3928,9 @@ function renderCurrentGame() {
   if (els.confirmGame) els.confirmGame.disabled = !hasGame || game.status !== "preview";
   if (!game) return;
 
+  if (game.date && document.activeElement !== els.gameDate) {
+    setGameDateInput(game.date);
+  }
   els.scoreA.value = game.scoreA ?? "";
   els.scoreB.value = game.scoreB ?? "";
   els.fieldCard.innerHTML = renderField(game);
@@ -4384,6 +4443,46 @@ function findEventForGame(game, options = {}) {
   }) || null;
 }
 
+function findGameForEventData(eventData) {
+  if (!eventData) return null;
+  const eventDate = new Date(eventData.startsAt).getTime();
+  if (Number.isNaN(eventDate)) return null;
+  const goingIds = getEventResponses(eventData.id, "going").map((response) => response.playerId);
+  return state.games.find((game) => {
+    const gameDate = new Date(game.date).getTime();
+    if (Number.isNaN(gameDate) || Math.abs(gameDate - eventDate) > 60 * 1000) return false;
+    if (game.eventId && game.eventId === eventData.id) return true;
+    const gamePlayerIds = new Set(getGamePlayerIds(game));
+    return goingIds.length ? goingIds.every((playerId) => gamePlayerIds.has(playerId)) : true;
+  }) || null;
+}
+
+async function updateGameDate(gameId, date) {
+  if (!requireAdmin()) return false;
+  const game = state.games.find((item) => item.id === gameId);
+  if (!game) return false;
+  const originEvent = findEventForGame(game);
+  const previousGameDate = game.date;
+  const previousEventDate = originEvent?.startsAt || null;
+
+  game.date = date;
+  currentGenerationDateIso = date;
+  currentPaymentsMonth = monthKey(date);
+  if (originEvent) originEvent.startsAt = date;
+
+  try {
+    await persistState();
+  } catch (error) {
+    game.date = previousGameDate;
+    if (originEvent) originEvent.startsAt = previousEventDate;
+    saveState();
+    alert(`Nao consegui guardar a nova data: ${error.message}`);
+    return false;
+  }
+  render();
+  return true;
+}
+
 function findOriginEventForGame(game) {
   return findEventForGame(game, { statuses: ["open"] });
 }
@@ -4659,11 +4758,29 @@ function renderHistoryGameDetail() {
     <div class="history-game-title">
       <p class="eyebrow">Historico de jogo</p>
       <h3>${escapeHtml(gameTitle)}</h3>
+      <div class="history-game-date-edit admin-actions">
+        <label class="game-date-control">
+          <span>Data/hora</span>
+          <input type="datetime-local" data-history-game-date="${game.id}" value="${toDateTimeLocalInput(game.date)}">
+        </label>
+        <button class="ghost-btn" data-save-history-game-date="${game.id}">Guardar data</button>
+      </div>
     </div>
     <div class="field-card history-field-card">
       ${renderField(game, { radarPosition: "bottom", clickablePlayers: true, radarInlineOdds: true })}
     </div>
   `;
+  els.historyGameDetail.querySelector("[data-save-history-game-date]")?.addEventListener("click", async (buttonEvent) => {
+    const gameId = buttonEvent.currentTarget.dataset.saveHistoryGameDate;
+    const input = [...els.historyGameDetail.querySelectorAll("[data-history-game-date]")]
+      .find((item) => item.dataset.historyGameDate === gameId);
+    const date = fromDateTimeLocalInput(input?.value);
+    if (!date) {
+      alert("Escolhe uma data e hora valida.");
+      return;
+    }
+    await updateGameDate(gameId, date);
+  });
   els.historyGameDetail.querySelectorAll("[data-open-field-player]").forEach((card) => {
     card.addEventListener("click", () => openPlayerProfile(card.dataset.openFieldPlayer));
     card.addEventListener("keydown", (event) => {

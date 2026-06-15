@@ -135,6 +135,32 @@ Nota Git:
 - Aparece como `?? Footer_vault/` porque ainda nao foi adicionado ao Git.
 - Para versionar o vault, adicionar explicitamente so a pasta do vault, sem usar `git add .`.
 
+## Alteracao de data/hora de jogos
+
+Regra:
+
+- A data/hora pode ser alterada por admin na convocatoria depois de lancada.
+- A data/hora pode ser alterada por admin no jogo confirmado e no detalhe do historico.
+- Quando uma convocatoria ja tem jogo associado, a alteracao sincroniza `event.startsAt` e `game.date`.
+- Quando um jogo tem convocatoria associada, a alteracao sincroniza `game.date` e `event.startsAt`.
+- Pagamentos seguem automaticamente o mes de `game.date`; overrides de presenca e ajustes financeiros continuam ligados ao `game.id`.
+
+Implementacao:
+
+- `saveEventDateFromList` le o input da convocatoria.
+- `updateEventDate` actualiza a convocatoria e, se existir, o jogo associado.
+- `updateGameDate` actualiza o jogo e, se existir, a convocatoria associada.
+- `findGameForEventData` associa convocatoria e jogo pela data antiga e jogadores confirmados.
+- `updatePreviewGameDate` continua a actualizar previews, mas tambem grava a data de jogos ja confirmados quando o input dispara `change`.
+- Cache-buster actualizado para `20260615-game-date1`.
+
+Validacao:
+
+- `node --check app.js` passou.
+- `npm.cmd run build:web` passou.
+- `node --check www\app.js` passou.
+- Smoke test local devolveu `STATUS=200` e `CACHE_BUSTER=ok`.
+
 ## Comandos uteis
 
 Ver estado:

@@ -29,6 +29,8 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Ao atingir o limite, nao deve permitir mais respostas `Vou`.
 - `Gerar com confirmados` deve passar directamente para sugestoes/preview.
 - A data do jogo confirmado deve vir da convocatoria.
+- Admin pode alterar a data/hora de uma convocatoria depois de lancada.
+- Se a convocatoria ja tiver originado um jogo, alterar a data/hora da convocatoria deve sincronizar tambem a data/hora desse jogo.
 - Admin pode cancelar/apagar convocatorias quando necessario.
 
 ## Equipas
@@ -58,6 +60,14 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Clicar num jogo finalizado dentro do perfil deve abrir `history-game`.
 - O historico nao deve redireccionar indevidamente para `today/Gerar`.
 - Cartas no campo do historico devem poder abrir a pagina do jogador.
+- Admin pode alterar a data/hora de um jogo confirmado ou historico.
+- Se o jogo tiver convocatoria associada, alterar a data/hora do jogo deve sincronizar tambem a convocatoria.
+
+## Pagamentos
+
+- Relatorios mensais de pagamentos seguem sempre `game.date`.
+- Se a data/hora de um jogo mudar para outro mes, o jogo deve passar automaticamente para o relatorio desse novo mes.
+- Presencas manuais e ajustes financeiros ficam ligados ao `game.id`; mudar a data nao deve perder esses overrides.
 
 ## Cartas e premios
 

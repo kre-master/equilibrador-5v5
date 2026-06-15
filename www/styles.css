@@ -277,6 +277,15 @@ h3 {
   width: 190px;
 }
 
+.event-date-edit,
+.history-game-date-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
 .event-import {
   padding: 12px 18px 0;
 }
@@ -293,6 +302,8 @@ h3 {
 .event-form input,
 .event-admin-adds input,
 .event-admin-adds select,
+.event-date-edit input,
+.history-game-date-edit input,
 .add-to-game select {
   min-height: 40px;
   width: 100%;
@@ -312,6 +323,8 @@ h3 {
 .event-form input:focus,
 .event-admin-adds input:focus,
 .event-admin-adds select:focus,
+.event-date-edit input:focus,
+.history-game-date-edit input:focus,
 .add-to-game select:focus {
   border-color: rgba(31, 122, 77, .58);
   box-shadow: inset 0 1px rgba(255,255,255,.9), 0 0 0 4px rgba(31, 122, 77, .12);
