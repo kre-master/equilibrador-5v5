@@ -66,6 +66,7 @@ Para producao:
 - Votos MVP sao confidenciais: a app usa contagens agregadas e nao deve expor quem votou em quem.
 - O primeiro utilizador autenticado criado depois de aplicar o schema fica como admin inicial.
 - O botao `Entrar` faz login com email/password do Supabase.
+- Se uma conta existir em `Authentication > Users` mas nao aparecer em `Pedidos/Contas`, pede ao utilizador para entrar novamente depois de aplicares o schema mais recente; a app cria/repara a linha em `profiles` no login.
 
 ## Atualizar schema depois de novas funcionalidades
 

@@ -77,6 +77,9 @@ as $$
   select exists (select 1 from public.profiles);
 $$;
 
+revoke all on function public.has_any_profile() from public;
+grant execute on function public.has_any_profile() to authenticated;
+
 create or replace function public.email_for_login(login_value text)
 returns text
 language sql

@@ -828,7 +828,7 @@ async function loadAccountState() {
   knownProfiles = profileRows;
   currentProfile = profileRows.find((profile) => profile.id === user.id) || null;
   if (!currentProfile) {
-    const role = profileRows.length === 0 ? "admin" : "player";
+    const role = await hasAnyRemoteProfile(profileRows) ? "player" : "admin";
     const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Jogador";
     const username = normalizeUsername(user.user_metadata?.username || displayName);
     const { data: createdProfile, error } = await supabaseClient
@@ -852,6 +852,16 @@ async function loadAccountState() {
 
   isAdmin = currentProfile?.role === "admin";
   await loadPlayerClaims();
+}
+
+async function hasAnyRemoteProfile(visibleProfiles = []) {
+  if (!supabaseClient || !currentSession?.user) return visibleProfiles.length > 0;
+  const { data, error } = await supabaseClient.rpc("has_any_profile");
+  if (error) {
+    console.warn("Profile bootstrap check failed", error);
+    return true;
+  }
+  return Boolean(data);
 }
 
 async function loadPlayerClaims() {

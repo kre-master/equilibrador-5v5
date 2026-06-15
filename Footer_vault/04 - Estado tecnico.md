@@ -209,6 +209,25 @@ Acao manual necessaria:
 - Confirmar no dashboard: `Authentication > Providers > Email > Confirm email` ligado.
 - Mais tarde, rever `Authentication > Rate Limits`/captcha se a app sair do uso local entre amigos.
 
+## Conta criada sem aparecer em Pedidos/Contas
+
+Sintoma:
+
+- Utilizador consegue criar conta no Supabase Auth, mas o admin nao a ve em `Pedidos`/lista de contas.
+
+Causa provavel:
+
+- `loadAccountState` usava o numero de profiles visiveis para decidir se a conta era o primeiro admin.
+- Como um jogador normal so ve o proprio profile por RLS, uma conta nova sem profile via `profiles.length === 0` e tentava criar role `admin`.
+- A policy `profiles insert self` bloqueia esse segundo admin, logo a conta ficava no Auth sem linha em `profiles`.
+
+Correcao:
+
+- A app passa a chamar `has_any_profile()` para saber se ja existe algum profile real.
+- Se ja existir algum profile, a nova conta cria role `player`.
+- `has_any_profile()` precisa de `grant execute ... to authenticated`.
+- Depois de aplicar o schema mais recente, pedir ao utilizador afetado para entrar novamente para a app criar/reparar o profile.
+
 ## Comandos uteis
 
 Ver estado:
