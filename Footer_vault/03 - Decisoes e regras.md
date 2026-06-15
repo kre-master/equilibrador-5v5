@@ -51,8 +51,16 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Voto deve ser confidencial.
 - Jogador nao pode alterar voto depois de votar.
 - Admin pode ver contagem de votos sem ver quem votou em quem.
+- A app nao deve ler votos MVP crus de outros utilizadores; deve usar contagens agregadas.
 - Pode haver empate.
 - MVP vale apenas para o jogo seguinte se o jogador participar.
+
+## Seguranca e contas
+
+- Login e recuperacao de password devem usar email, nao username.
+- Username serve para identificacao dentro da app, mas nao deve permitir descobrir o email associado.
+- Em producao, confirmacao de email deve ficar ligada no dashboard Supabase.
+- Rate limiting/captcha para criacao de conta e acoes repetiveis fica como melhoria futura enquanto a app estiver limitada ao grupo local de amigos.
 
 ## Historico
 

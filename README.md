@@ -43,20 +43,27 @@ Opcao simples para comecar:
    - `Password`: password/token SMTP indicado pelo provider.
 7. Guarda e testa criar uma conta nova.
 
-Enquanto a app ainda esta em testes, tambem podes desligar temporariamente a confirmacao por email em `Authentication > Providers > Email > Confirm email`. Para uso real com jogadores, e melhor manter a confirmacao ligada e usar SMTP.
+Enquanto a app ainda esta em testes, tambem podes desligar temporariamente a confirmacao por email em `Authentication > Providers > Email > Confirm email`. Para uso real com jogadores, manter a confirmacao ligada e usar SMTP.
+
+Para producao:
+
+- `Authentication > Providers > Email > Confirm email` deve ficar ligado.
+- `Authentication > Rate Limits` deve ser revisto antes de abrir a app fora do grupo de amigos.
+- O login deve ser feito por email. Username existe para identificacao dentro da app, mas nao deve ser usado para descobrir emails.
 
 ## Como funciona online
 
 - Visitantes podem ver a app e criar conta.
 - Jogadores criam conta por email/password, escolhem username e depois reclamam o perfil de jogador que ja existe.
-- O login aceita email ou username.
+- O login aceita email/password.
 - No separador `Conta`, os utilizadores podem definir username, mudar password e pedir recuperacao de password por email.
 - Admin aprova pedidos de associacao entre conta e perfil.
 - Admin lanca convocatorias com data, hora, local e limite de jogadores.
 - Jogadores com perfil associado respondem `Vou`, `Talvez` ou `Nao vou`.
 - Admin pode carregar os confirmados da convocatoria para o gerador de equipas.
 - Admin pode editar jogadores/fotos, confirmar jogos, editar resultados e historico.
-- Admin pode gerir pagamentos mensais no separador `Pagamentos`: idas ajustaveis, pagamentos manuais e export WhatsApp.
+- Admin pode gerir pagamentos mensais no separador `Pagamentos`: idas ajustaveis, pagamentos manuais, dividas de ajuste e export WhatsApp.
+- Votos MVP sao confidenciais: a app usa contagens agregadas e nao deve expor quem votou em quem.
 - O primeiro utilizador autenticado criado depois de aplicar o schema fica como admin inicial.
 - O botao `Entrar` faz login com email/password do Supabase.
 

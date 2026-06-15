@@ -186,6 +186,29 @@ Validacao:
 - `node --check www\app.js` passou.
 - Smoke test local devolveu `STATUS=200` e `CACHE_BUSTER=ok`.
 
+## Auditoria de seguranca 2026-06-15
+
+Pontos revistos:
+
+- Chave exposta no frontend e `sb_publishable`, esperada para Supabase frontend.
+- Nao foi encontrada `service_role` nem chave secreta de API no frontend.
+- `npm audit --audit-level=moderate` passou com `0 vulnerabilities`.
+
+Alteracoes decididas:
+
+- Votos MVP devem deixar de ser lidos crus por todos os utilizadores autenticados.
+- `game_mvp_votes` passa a permitir select apenas do voto do proprio jogador.
+- `mvp_vote_counts()` devolve apenas contagens agregadas por jogo/candidato.
+- Voto MVP passa a usar `insert`, nao `upsert`, para nao permitir alteracao posterior.
+- Login/recuperacao passam a usar email; username deixa de servir para lookup de email.
+- `email_for_login` fica sem grant para `anon`/`authenticated`.
+
+Acao manual necessaria:
+
+- Reexecutar `supabase/schema.sql` no SQL Editor do Supabase para aplicar policies/funcoes.
+- Confirmar no dashboard: `Authentication > Providers > Email > Confirm email` ligado.
+- Mais tarde, rever `Authentication > Rate Limits`/captcha se a app sair do uso local entre amigos.
+
 ## Comandos uteis
 
 Ver estado:

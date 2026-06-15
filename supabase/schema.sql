@@ -94,6 +94,9 @@ as $$
   end;
 $$;
 
+revoke all on function public.email_for_login(text) from public;
+revoke execute on function public.email_for_login(text) from anon, authenticated;
+
 create table if not exists public.games (
   id text primary key,
   date timestamptz not null,
@@ -248,6 +251,27 @@ create table if not exists public.game_mvp_votes (
 create unique index if not exists game_mvp_votes_one_per_voter
 on public.game_mvp_votes (game_id, voter_player_id);
 
+create or replace function public.mvp_vote_counts()
+returns table (
+  game_id text,
+  candidate_player_id text,
+  vote_count bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    game_mvp_votes.game_id,
+    game_mvp_votes.candidate_player_id,
+    count(*)::bigint as vote_count
+  from public.game_mvp_votes
+  group by game_mvp_votes.game_id, game_mvp_votes.candidate_player_id;
+$$;
+
+revoke all on function public.mvp_vote_counts() from public;
+grant execute on function public.mvp_vote_counts() to authenticated;
+
 create table if not exists public.player_form_snapshots (
   id uuid primary key default gen_random_uuid(),
   player_id text not null references public.players(id) on delete cascade,
@@ -277,7 +301,7 @@ grant update (photo_data_url, updated_at) on public.players to authenticated;
 grant select on public.games to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.player_claims to authenticated;
-grant execute on function public.email_for_login(text) to anon, authenticated;
+revoke execute on function public.email_for_login(text) from anon, authenticated;
 grant select on public.events to authenticated;
 grant select on public.event_responses to authenticated;
 grant insert, update, delete on public.events to authenticated;
@@ -475,18 +499,24 @@ to authenticated
 using (public.is_admin());
 
 drop policy if exists "mvp votes read authenticated" on public.game_mvp_votes;
-create policy "mvp votes read authenticated"
+drop policy if exists "mvp votes read own" on public.game_mvp_votes;
+create policy "mvp votes read own"
 on public.game_mvp_votes for select
 to authenticated
-using (true);
+using (
+  exists (
+    select 1 from public.players
+    where players.id = voter_player_id
+    and players.linked_user_id = auth.uid()
+  )
+);
 
 drop policy if exists "mvp votes insert linked player" on public.game_mvp_votes;
 create policy "mvp votes insert linked player"
 on public.game_mvp_votes for insert
 to authenticated
 with check (
-  public.is_admin()
-  or exists (
+  exists (
     select 1 from public.players
     where players.id = voter_player_id
     and players.linked_user_id = auth.uid()
@@ -494,25 +524,6 @@ with check (
 );
 
 drop policy if exists "mvp votes update linked player" on public.game_mvp_votes;
-create policy "mvp votes update linked player"
-on public.game_mvp_votes for update
-to authenticated
-using (
-  public.is_admin()
-  or exists (
-    select 1 from public.players
-    where players.id = voter_player_id
-    and players.linked_user_id = auth.uid()
-  )
-)
-with check (
-  public.is_admin()
-  or exists (
-    select 1 from public.players
-    where players.id = voter_player_id
-    and players.linked_user_id = auth.uid()
-  )
-);
 
 drop policy if exists "mvp votes delete admin" on public.game_mvp_votes;
 create policy "mvp votes delete admin"

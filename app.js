@@ -110,6 +110,7 @@ let knownProfiles = [];
 let playerClaims = [];
 let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
+let mvpVoteCounts = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
 let gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -455,6 +456,14 @@ function mvpVoteToRow(vote) {
   };
 }
 
+function mvpVoteCountFromRow(row) {
+  return {
+    gameId: String(row.game_id),
+    candidatePlayerId: String(row.candidate_player_id),
+    voteCount: Number(row.vote_count || 0),
+  };
+}
+
 function normalizePaymentRecord(record) {
   if (!record || typeof record !== "object") return null;
   const amount = Number(record.amount);
@@ -634,7 +643,7 @@ async function persistState() {
 async function persistMvpVote(vote) {
   saveState();
   if (remoteEnabled && supabaseClient && currentSession?.user) {
-    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteToRow(vote));
+    const { error } = await supabaseClient.from("game_mvp_votes").insert(mvpVoteToRow(vote));
     if (error) throw error;
   }
   updateAccessUi();
@@ -645,7 +654,6 @@ async function saveRemoteState() {
   const players = state.players.map(playerToRow);
   const games = state.games.map(gameToRow);
   const events = (state.events || []).map(eventToRow);
-  const mvpVoteRows = gameMvpVotes.map(mvpVoteToRow);
   const paymentRows = payments.map(paymentToRow);
   const attendanceOverrideRows = attendanceOverrides.map(attendanceOverrideToRow);
   const gameFinanceOverrideRows = gameFinanceOverrides.map(gameFinanceOverrideToRow);
@@ -663,11 +671,6 @@ async function saveRemoteState() {
 
   if (events.length) {
     const { error } = await supabaseClient.from("events").upsert(events);
-    if (error) throw error;
-  }
-
-  if (mvpVoteRows.length) {
-    const { error } = await supabaseClient.from("game_mvp_votes").upsert(mvpVoteRows);
     if (error) throw error;
   }
 
@@ -875,6 +878,7 @@ async function loadRemoteState() {
   if (!currentSession?.user) {
     eventResponses = [];
     gameMvpVotes = [];
+    mvpVoteCounts = [];
     updateAccessUi();
     return;
   }
@@ -885,12 +889,14 @@ async function loadRemoteState() {
     { data: events, error: eventError },
     { data: responses, error: responseError },
     { data: mvpRows, error: mvpError },
+    { data: mvpCountRows, error: mvpCountError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
     supabaseClient.from("events").select("*").order("starts_at", { ascending: true }),
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
     supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
+    supabaseClient.rpc("mvp_vote_counts"),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -900,6 +906,7 @@ async function loadRemoteState() {
     return;
   }
   if (mvpError) console.warn("MVP vote load failed. Run supabase/schema.sql again.", mvpError);
+  if (mvpCountError) console.warn("MVP vote count load failed. Run supabase/schema.sql again.", mvpCountError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -954,6 +961,7 @@ async function loadRemoteState() {
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   gameMvpVotes = state.gameMvpVotes || [];
+  mvpVoteCounts = (mvpCountRows || []).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
   gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -1016,16 +1024,14 @@ async function adminLogin() {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
-  const login = prompt("Email ou username:");
-  if (!login) return;
-  const email = await resolveLoginEmail(login);
+  const email = prompt("Email:");
   if (!email) {
-    alert("Nao encontrei esse email/username.");
+    alert("Escreve o email da conta.");
     return;
   }
   const password = prompt("Password:");
   if (!password) return;
-  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
   if (error) {
     alert(`Login falhou: ${error.message}`);
     return;
@@ -1047,11 +1053,6 @@ async function createAccount() {
   const username = normalizeUsername(prompt("Username:", email.split("@")[0]) || "");
   if (!username) {
     alert("Escolhe um username valido.");
-    return;
-  }
-  const existingEmail = await resolveLoginEmail(username);
-  if (existingEmail) {
-    alert("Esse username ja esta em uso.");
     return;
   }
   const password = prompt("Password:");
@@ -1084,36 +1085,22 @@ async function createAccount() {
   render();
 }
 
-async function resolveLoginEmail(login) {
-  const clean = String(login || "").trim();
-  if (!clean) return "";
-  if (clean.includes("@") || !remoteEnabled || !supabaseClient) return clean.toLowerCase();
-  const { data, error } = await supabaseClient.rpc("email_for_login", { login_value: clean });
-  if (error) {
-    console.warn("Login lookup failed", error);
-    return "";
-  }
-  return data || "";
-}
-
 async function requestPasswordReset() {
   if (!remoteEnabled || !supabaseClient) {
     alert("Configura primeiro o Supabase.");
     return;
   }
   if (authActionBusy) return;
-  const login = prompt("Email ou username para recuperar password:");
-  if (!login) return;
-  const email = await resolveLoginEmail(login);
+  const email = prompt("Email para recuperar password:");
   if (!email) {
-    alert("Nao encontrei esse email/username.");
+    alert("Escreve o email da conta.");
     return;
   }
   const redirectTo = window.location.href.split("#")[0].split("?")[0];
   setAuthActionBusy(true);
   let error;
   try {
-    ({ error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo }));
+    ({ error } = await supabaseClient.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo }));
   } finally {
     setAuthActionBusy(false);
   }
@@ -1177,11 +1164,6 @@ async function setCurrentUsername() {
     alert("Escolhe um username valido.");
     return;
   }
-  const existingEmail = await resolveLoginEmail(username);
-  if (existingEmail && existingEmail !== currentSession.user.email) {
-    alert("Esse username ja esta em uso.");
-    return;
-  }
   const { data, error } = await supabaseClient
     .from("profiles")
     .update({ username, updated_at: new Date().toISOString() })
@@ -1189,7 +1171,10 @@ async function setCurrentUsername() {
     .select()
     .single();
   if (error) {
-    alert(`Nao consegui guardar username: ${error.message}`);
+    const message = String(error.message || "").toLowerCase().includes("duplicate")
+      ? "Esse username ja esta em uso."
+      : `Nao consegui guardar username: ${error.message}`;
+    alert(message);
     return;
   }
   currentProfile = data;
@@ -1846,8 +1831,7 @@ function getLatestOfficialMvpIds() {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   for (const game of finishedGames) {
-    const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
-    const winners = getOfficialMvpWinners(countMvpVotes(votes));
+    const winners = getOfficialMvpWinners(getMvpVoteCountsForGame(game.id));
     if (winners.length) return new Set(winners.map((playerData) => playerData.id));
   }
 
@@ -1865,7 +1849,7 @@ function getPreviousFinishedGameFor(game) {
 
 function getOfficialMvpIdsForGame(game) {
   if (!isMvpVotingClosed(game)) return new Set();
-  const counts = countMvpVotes(gameMvpVotes.filter((vote) => vote.gameId === game?.id));
+  const counts = getMvpVoteCountsForGame(game?.id);
   return new Set(getOfficialMvpWinners(counts).map((playerData) => playerData.id));
 }
 
@@ -3974,23 +3958,23 @@ function renderMvpPanel(game) {
   const participants = hydrate(getGamePlayerIds(game));
   const linkedPlayer = getLinkedPlayer();
   const canVote = linkedPlayer && participants.some((p) => p.id === linkedPlayer.id);
-  const votes = gameMvpVotes.filter((vote) => vote.gameId === game.id);
-  const counts = countMvpVotes(votes);
+  const counts = getMvpVoteCountsForGame(game.id);
+  const totalVotes = getMvpTotalVotes(game.id);
   const votingClosed = isMvpVotingClosed(game);
   const winners = votingClosed ? getOfficialMvpWinners(counts) : [];
-  const myVote = linkedPlayer ? votes.find((vote) => vote.voterPlayerId === linkedPlayer.id) : null;
+  const myVote = linkedPlayer ? getMvpVoteForPlayer(game.id, linkedPlayer.id) : null;
   const lockAt = getMvpLockAt(game);
   const statusText = votingClosed
     ? "Votacao fechada"
-    : votes.length < MVP_MIN_VOTES
-      ? `${votes.length} votos (min. ${MVP_MIN_VOTES})`
-      : lockAt ? `Fecha ${formatDate(lockAt.toISOString())}` : `${votes.length} votos`;
+    : totalVotes < MVP_MIN_VOTES
+      ? `${totalVotes} votos (min. ${MVP_MIN_VOTES})`
+      : lockAt ? `Fecha ${formatDate(lockAt.toISOString())}` : `${totalVotes} votos`;
   return `
     <section class="mvp-panel">
       <div>
         <p class="eyebrow">MVP interno</p>
         <strong>${winners.length ? winners.map((p) => escapeHtml(p.name)).join(", ") : statusText}</strong>
-        ${renderMvpAdminVoteBreakdown(game, votes)}
+        ${renderMvpAdminVoteBreakdown(game, counts)}
       </div>
       ${canVote && myVote ? `
         <span class="metric good-pill">Voto registado</span>
@@ -4018,7 +4002,7 @@ function getPendingMvpVoteRequirement() {
   if (!game) return null;
   const participants = hydrate(getGamePlayerIds(game));
   if (!participants.some((playerData) => playerData.id === linkedPlayer.id)) return null;
-  if (gameMvpVotes.some((vote) => vote.gameId === game.id && vote.voterPlayerId === linkedPlayer.id)) return null;
+  if (getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
   const candidates = participants.filter((playerData) => playerData.id !== linkedPlayer.id);
   if (!candidates.length) return null;
   return { game, linkedPlayer, candidates };
@@ -4065,6 +4049,35 @@ function countMvpVotes(votes) {
   return counts;
 }
 
+function getMvpVoteCountsForGame(gameId) {
+  if (!gameId) return new Map();
+  if (remoteEnabled && currentSession?.user) {
+    const counts = new Map();
+    mvpVoteCounts
+      .filter((row) => row.gameId === gameId)
+      .forEach((row) => counts.set(row.candidatePlayerId, row.voteCount));
+    return counts;
+  }
+  return countMvpVotes(gameMvpVotes.filter((vote) => vote.gameId === gameId));
+}
+
+function getMvpTotalVotes(gameId) {
+  return [...getMvpVoteCountsForGame(gameId).values()].reduce((sum, count) => sum + count, 0);
+}
+
+function getMvpVoteForPlayer(gameId, playerId) {
+  return gameMvpVotes.find((vote) => vote.gameId === gameId && vote.voterPlayerId === playerId) || null;
+}
+
+function incrementMvpVoteCount(gameId, candidatePlayerId) {
+  const index = mvpVoteCounts.findIndex((row) => row.gameId === gameId && row.candidatePlayerId === candidatePlayerId);
+  if (index >= 0) {
+    mvpVoteCounts[index] = { ...mvpVoteCounts[index], voteCount: mvpVoteCounts[index].voteCount + 1 };
+  } else {
+    mvpVoteCounts.push({ gameId, candidatePlayerId, voteCount: 1 });
+  }
+}
+
 function getOfficialMvpWinners(counts) {
   const entries = [...counts.entries()];
   const totalVotes = entries.reduce((sum, [, count]) => sum + count, 0);
@@ -4082,7 +4095,7 @@ function getMvpLockAt(game) {
 }
 
 function hasMinimumMvpVotes(game) {
-  return gameMvpVotes.filter((vote) => vote.gameId === game?.id).length >= MVP_MIN_VOTES;
+  return getMvpTotalVotes(game?.id) >= MVP_MIN_VOTES;
 }
 
 function isMvpVotingClosed(game) {
@@ -4090,9 +4103,8 @@ function isMvpVotingClosed(game) {
   return Boolean(lockAt && hasMinimumMvpVotes(game) && Date.now() >= lockAt.getTime());
 }
 
-function renderMvpAdminVoteBreakdown(game, votes) {
-  if (!isAdmin || !votes.length) return "";
-  const counts = countMvpVotes(votes);
+function renderMvpAdminVoteBreakdown(game, counts) {
+  if (!isAdmin || !counts.size) return "";
   const rows = [...counts.entries()]
     .map(([playerId, count]) => ({ playerData: findPlayer(playerId), count }))
     .filter((item) => item.playerData)
@@ -4124,7 +4136,7 @@ async function saveMvpVote(game, linkedPlayer, candidateId) {
   if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId) return false;
   if (!participants.has(linkedPlayer.id) || !participants.has(candidateId)) return false;
 
-  let vote = gameMvpVotes.find((item) => item.gameId === game.id && item.voterPlayerId === linkedPlayer.id);
+  let vote = getMvpVoteForPlayer(game.id, linkedPlayer.id);
   if (vote) {
     alert("O teu voto MVP ja foi registado e nao pode ser alterado.");
     return false;
@@ -4138,13 +4150,17 @@ async function saveMvpVote(game, linkedPlayer, candidateId) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    const previousVotes = [...gameMvpVotes];
     gameMvpVotes.push(vote);
-  }
-  try {
-    await persistMvpVote(vote);
-  } catch (error) {
-    alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
-    return false;
+    try {
+      await persistMvpVote(vote);
+      incrementMvpVoteCount(game.id, candidateId);
+    } catch (error) {
+      gameMvpVotes = previousVotes;
+      saveState();
+      alert(`Nao consegui guardar voto MVP. Confirma se executaste o schema.sql no Supabase. Detalhe: ${error.message}`);
+      return false;
+    }
   }
   return true;
 }
