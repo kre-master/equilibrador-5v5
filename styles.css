@@ -2320,6 +2320,12 @@ th.stat-col {
   flex: 1 1 220px;
 }
 
+.payments-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .finance-summary {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

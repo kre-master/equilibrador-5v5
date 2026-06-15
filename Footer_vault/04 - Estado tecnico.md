@@ -161,6 +161,31 @@ Validacao:
 - `node --check www\app.js` passou.
 - Smoke test local devolveu `STATUS=200` e `CACHE_BUSTER=ok`.
 
+## Dividas de ajuste em pagamentos
+
+Regra:
+
+- Admin pode registar pagamentos e tambem adicionar dividas manuais a jogadores.
+- A divida aumenta o saldo actual do jogador, sem alterar presencas nem jogos.
+- A divida nao deve contar como caixa recebida nem reduzir a diferenca de caixa do mes.
+
+Implementacao:
+
+- `DEBT_NOTE_PREFIX` marca movimentos de divida com `[DIVIDA]` na nota.
+- `isDebtAdjustment` identifica esses movimentos.
+- `getPaymentSignedAmount` faz pagamentos contarem positivo e dividas contarem negativo no saldo do jogador.
+- `renderPaymentsPanel` tem botoes separados para `Registar pagamento` e `Adicionar divida`.
+- `renderPaymentsHistory` mostra cada movimento como `Pagamento` ou `Divida`.
+- `buildMonthlyPaymentReport` usa o valor assinado para saldos, mas `totalPaidMonth` conta apenas pagamentos reais para a caixa.
+- Cache-buster actualizado para `20260615-payment-debt1`.
+
+Validacao:
+
+- `node --check app.js` passou.
+- `npm.cmd run build:web` passou.
+- `node --check www\app.js` passou.
+- Smoke test local devolveu `STATUS=200` e `CACHE_BUSTER=ok`.
+
 ## Comandos uteis
 
 Ver estado:

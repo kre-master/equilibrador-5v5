@@ -68,6 +68,9 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Relatorios mensais de pagamentos seguem sempre `game.date`.
 - Se a data/hora de um jogo mudar para outro mes, o jogo deve passar automaticamente para o relatorio desse novo mes.
 - Presencas manuais e ajustes financeiros ficam ligados ao `game.id`; mudar a data nao deve perder esses overrides.
+- Para ajustes, admin pode adicionar uma divida a um jogador alem de registar pagamentos.
+- Dividas aumentam o saldo a pagar do jogador, mas nao contam como caixa recebida.
+- Por compatibilidade com Supabase, dividas sao guardadas como movimentos positivos marcados internamente com `[DIVIDA]`; os calculos tratam esses movimentos como ajuste negativo.
 
 ## Cartas e premios
 

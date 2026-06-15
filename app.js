@@ -4,6 +4,7 @@ const PAYMENT_RULES = {
   monthlyCap: 15,
   fieldCostPerGame: 38,
 };
+const DEBT_NOTE_PREFIX = "[DIVIDA]";
 
 const FORM_LEVELS = {
   hot: { label: "Em grande forma", className: "form-hot" },
@@ -2516,17 +2517,20 @@ function renderPaymentsPanel() {
 
     <section class="payments-form primary-payment-form">
       <div class="payments-form-title">
-        <strong>Registar pagamento</strong>
-        <span>O saldo atual aparece no dropdown para escolheres mais rapido.</span>
+        <strong>Registar pagamento ou ajuste</strong>
+        <span>Usa divida para aumentar o saldo a pagar sem mexer nas presencas.</span>
       </div>
       <select data-payment-player>
         <option value="">Jogador</option>
         ${paymentOptions}
       </select>
-      <input data-payment-amount type="number" min="0" step="0.5" placeholder="Valor pago">
+      <input data-payment-amount type="number" min="0" step="0.5" placeholder="Valor">
       <input data-payment-date type="date" value="${escapeHtml(todayInputDate())}">
       <input data-payment-note placeholder="Nota">
-      <button class="primary-btn" data-add-payment>Registar</button>
+      <div class="payments-form-actions">
+        <button class="primary-btn" data-add-payment>Registar pagamento</button>
+        <button class="ghost-btn" data-add-debt>Adicionar divida</button>
+      </div>
     </section>
 
     <section class="payments-toolbar payments-cashbar">
@@ -2541,7 +2545,7 @@ function renderPaymentsPanel() {
       ${renderSummaryCard("Jogos", report.games.length)}
       ${renderSummaryCard("Campo pago", euro(report.fieldCost))}
       ${renderSummaryCard("A cobrar", euro(report.totalDue))}
-      ${renderSummaryCard("Pago", euro(report.totalPaidMonth))}
+      ${renderSummaryCard("Recebido", euro(report.totalPaidMonth))}
       ${renderSummaryCard("Dif. caixa mes", euro(report.cashMonthDelta))}
       ${renderSummaryCard("Caixa", euro(financeSettings.cashBalance))}
     </div>
@@ -2565,7 +2569,7 @@ function renderPaymentsPanel() {
             ${report.games.map((game) => `<th>${dayOfMonth(game.date)}</th>`).join("")}
             <th>Idas</th>
             <th>A pagar</th>
-            <th>Pago</th>
+            <th>Pag./aj.</th>
             <th>Saldo anterior</th>
             <th>Saldo atual</th>
           </tr>
@@ -2588,7 +2592,8 @@ function renderPaymentsPanel() {
   });
   els.paymentsPanel.querySelector("[data-save-finance-settings]")?.addEventListener("click", saveFinanceSettingsFromPanel);
   els.paymentsPanel.querySelector("[data-payments-whatsapp]")?.addEventListener("click", sharePaymentsOnWhatsApp);
-  els.paymentsPanel.querySelector("[data-add-payment]")?.addEventListener("click", addManualPayment);
+  els.paymentsPanel.querySelector("[data-add-payment]")?.addEventListener("click", () => addManualPayment("payment"));
+  els.paymentsPanel.querySelector("[data-add-debt]")?.addEventListener("click", () => addManualPayment("debt"));
   els.paymentsPanel.querySelectorAll("[data-open-payment-player]").forEach((button) => {
     button.addEventListener("click", () => openPlayerProfile(button.dataset.openPaymentPlayer));
   });
@@ -2671,16 +2676,18 @@ function renderGameFinanceControls(report) {
 }
 
 function renderPaymentsHistory(monthPayments) {
-  if (!monthPayments.length) return `<div class="empty-state">Ainda nao ha pagamentos registados neste mes.</div>`;
+  if (!monthPayments.length) return `<div class="empty-state">Ainda nao ha movimentos registados neste mes.</div>`;
   return `
     <div class="profile-games">
       ${monthPayments.map((payment) => {
         const playerData = findPlayer(payment.playerId);
+        const isDebt = isDebtAdjustment(payment);
+        const visibleNote = getVisiblePaymentNote(payment);
         return `
           <article class="profile-game-row">
             <div>
-              <strong>${escapeHtml(playerData?.name || "Jogador removido")} - ${euro(payment.amount)}</strong>
-              <span>${formatDate(payment.paidAt)}${payment.note ? ` - ${escapeHtml(payment.note)}` : ""}</span>
+              <strong>${escapeHtml(playerData?.name || "Jogador removido")} - ${isDebt ? "Divida" : "Pagamento"} ${euro(payment.amount)}</strong>
+              <span>${formatDate(payment.paidAt)}${visibleNote ? ` - ${escapeHtml(visibleNote)}` : ""}</span>
             </div>
             <button class="mini-btn" data-edit-payment="${payment.id}" type="button">Editar</button>
           </article>
@@ -2690,22 +2697,42 @@ function renderPaymentsHistory(monthPayments) {
   `;
 }
 
-async function addManualPayment() {
+function isDebtAdjustment(payment) {
+  return String(payment?.note || "").startsWith(DEBT_NOTE_PREFIX);
+}
+
+function getPaymentSignedAmount(payment) {
+  return isDebtAdjustment(payment) ? -Math.abs(Number(payment.amount) || 0) : Number(payment.amount) || 0;
+}
+
+function getVisiblePaymentNote(payment) {
+  const note = String(payment?.note || "");
+  if (!note.startsWith(DEBT_NOTE_PREFIX)) return note;
+  return note.slice(DEBT_NOTE_PREFIX.length).trim();
+}
+
+function makePaymentNote(note, type) {
+  const clean = String(note || "").trim();
+  if (type !== "debt") return clean;
+  return clean ? `${DEBT_NOTE_PREFIX} ${clean}` : DEBT_NOTE_PREFIX;
+}
+
+async function addManualPayment(type = "payment") {
   if (!requireAdmin()) return;
   const playerId = els.paymentsPanel.querySelector("[data-payment-player]")?.value;
   const amount = Number(els.paymentsPanel.querySelector("[data-payment-amount]")?.value);
   const paidAtValue = els.paymentsPanel.querySelector("[data-payment-date]")?.value;
   const note = els.paymentsPanel.querySelector("[data-payment-note]")?.value.trim() || "";
   if (!playerId || Number.isNaN(amount) || amount <= 0 || !paidAtValue) {
-    alert("Escolhe jogador, valor e data do pagamento.");
+    alert("Escolhe jogador, valor e data do movimento.");
     return;
   }
   const payment = {
-    id: `pay-${Date.now()}-${slug(playerId)}`,
+    id: `${type === "debt" ? "debt" : "pay"}-${Date.now()}-${slug(playerId)}`,
     playerId,
     amount,
     paidAt: new Date(`${paidAtValue}T12:00:00`).toISOString(),
-    note,
+    note: makePaymentNote(note, type),
     createdBy: currentSession?.user?.id || null,
     createdAt: new Date().toISOString(),
   };
@@ -2726,10 +2753,11 @@ async function editPayment(paymentId) {
   if (!requireAdmin()) return;
   const payment = payments.find((item) => item.id === paymentId);
   if (!payment) return;
-  const amountText = prompt("Novo valor pago:", String(payment.amount));
+  const isDebt = isDebtAdjustment(payment);
+  const amountText = prompt(isDebt ? "Novo valor da divida:" : "Novo valor pago:", String(payment.amount));
   if (amountText === null) return;
   const nextAmount = Number(amountText);
-  if (Number.isNaN(nextAmount) || nextAmount < 0) {
+  if (Number.isNaN(nextAmount) || nextAmount <= 0) {
     alert("Valor invalido.");
     return;
   }
@@ -2741,12 +2769,12 @@ async function editPayment(paymentId) {
     alert("Data invalida.");
     return;
   }
-  const nextNote = prompt("Nota do pagamento:", payment.note || "") ?? "";
+  const nextNote = prompt(isDebt ? "Nota da divida:" : "Nota do pagamento:", getVisiblePaymentNote(payment)) ?? "";
   const editNote = prompt("Nota da edicao:", "Corrigido pelo admin") ?? "";
   const previousPayments = payments.map((item) => ({ ...item }));
   payment.amount = nextAmount;
   payment.paidAt = parsedDate.toISOString();
-  payment.note = appendPaymentEditNote(nextNote.trim(), editNote.trim());
+  payment.note = appendPaymentEditNote(makePaymentNote(nextNote.trim(), isDebt ? "debt" : "payment"), editNote.trim());
   try {
     await persistState();
   } catch (error) {
@@ -2876,7 +2904,7 @@ function buildMonthlyPaymentReport(month) {
     });
     const attendanceCount = [...attendanceByGame.values()].filter(Boolean).length;
     const due = Math.min(attendanceCount * PAYMENT_RULES.playerFeePerGame, PAYMENT_RULES.monthlyCap);
-    const paidMonth = getPlayerPaymentsInMonth(playerData.id, month).reduce((sum, payment) => sum + payment.amount, 0);
+    const paidMonth = getPlayerPaymentsInMonth(playerData.id, month).reduce((sum, payment) => sum + getPaymentSignedAmount(payment), 0);
     const previousBalance = getPlayerBalanceBeforeMonth(playerData.id, month);
     const currentBalance = previousBalance + due - paidMonth;
     return {
@@ -2894,7 +2922,9 @@ function buildMonthlyPaymentReport(month) {
     .sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
   const fieldPaidGames = games.filter((game) => getGameFinanceSettings(game).fieldPaid);
   const fieldCost = fieldPaidGames.reduce((sum, game) => sum + getGameFinanceSettings(game).fieldCost, 0);
-  const totalPaidMonth = rows.reduce((sum, row) => sum + row.paidMonth, 0);
+  const totalPaidMonth = monthPayments
+    .filter((payment) => !isDebtAdjustment(payment))
+    .reduce((sum, payment) => sum + payment.amount, 0);
   return {
     month,
     games,
@@ -2952,7 +2982,7 @@ function getPlayerBalanceBeforeMonth(playerId, month) {
     const games = getGamesInMonth(key);
     const attendanceCount = games.filter((game) => shouldChargePlayerForGame(game, playerId)).length;
     const due = Math.min(attendanceCount * PAYMENT_RULES.playerFeePerGame, PAYMENT_RULES.monthlyCap);
-    const paid = getPlayerPaymentsInMonth(playerId, key).reduce((sum, payment) => sum + payment.amount, 0);
+    const paid = getPlayerPaymentsInMonth(playerId, key).reduce((sum, payment) => sum + getPaymentSignedAmount(payment), 0);
     return balance + due - paid;
   }, initial);
 }
