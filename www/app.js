@@ -1034,18 +1034,19 @@ async function adminLogin() {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
-  const email = prompt("Email:");
-  if (!email) {
-    alert("Escreve o email da conta.");
+  const login = prompt("Email ou username:");
+  if (!login) {
+    alert("Escreve o email ou username da conta.");
     return;
   }
-  if (!email.includes("@")) {
-    alert("O login por username foi removido por seguranca. Entra com o email da conta.");
+  const email = await resolveLoginEmail(login);
+  if (!email) {
+    alert("Nao encontrei esse email/username.");
     return;
   }
   const password = prompt("Password:");
   if (!password) return;
-  const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) {
     alert(`Login falhou: ${formatAuthError(error)}`);
     return;
@@ -1099,22 +1100,39 @@ async function createAccount() {
   render();
 }
 
+async function resolveLoginEmail(login) {
+  const clean = String(login || "").trim();
+  if (!clean) return "";
+  if (clean.includes("@") || !remoteEnabled || !supabaseClient) return clean.toLowerCase();
+  const { data, error } = await supabaseClient.rpc("email_for_login", { login_value: clean });
+  if (error) {
+    console.warn("Login lookup failed", error);
+    return "";
+  }
+  return data || "";
+}
+
 async function requestPasswordReset() {
   if (!remoteEnabled || !supabaseClient) {
     alert("Configura primeiro o Supabase.");
     return;
   }
   if (authActionBusy) return;
-  const email = prompt("Email para recuperar password:");
+  const login = prompt("Email ou username para recuperar password:");
+  if (!login) {
+    alert("Escreve o email ou username da conta.");
+    return;
+  }
+  const email = await resolveLoginEmail(login);
   if (!email) {
-    alert("Escreve o email da conta.");
+    alert("Nao encontrei esse email/username.");
     return;
   }
   const redirectTo = window.location.href.split("#")[0].split("?")[0];
   setAuthActionBusy(true);
   let error;
   try {
-    ({ error } = await supabaseClient.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo }));
+    ({ error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo }));
   } finally {
     setAuthActionBusy(false);
   }
@@ -1145,7 +1163,7 @@ function formatAuthError(error) {
     return "confirma se a password tem pelo menos 6 caracteres.";
   }
   if (message.includes("invalid login credentials")) {
-    return "email ou password incorretos. Se estavas a usar username, usa o email da conta.";
+    return "email/username ou password incorretos.";
   }
   if (message.includes("email not confirmed") || message.includes("not confirmed")) {
     return "este email ainda nao foi confirmado. Confirma o email recebido ou verifica no Supabase se a confirmacao esta ativa.";

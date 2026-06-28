@@ -57,8 +57,8 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 
 ## Seguranca e contas
 
-- Login e recuperacao de password devem usar email, nao username.
-- Username serve para identificacao dentro da app, mas nao deve permitir descobrir o email associado.
+- Login e recuperacao de password podem usar email ou username enquanto a app estiver limitada ao grupo fechado de amigos.
+- Username login usa lookup username -> email no Supabase; se a app crescer para fora do grupo, rever com rate limit/captcha ou remover.
 - Em producao, confirmacao de email deve ficar ligada no dashboard Supabase.
 - Rate limiting/captcha para criacao de conta e acoes repetiveis fica como melhoria futura enquanto a app estiver limitada ao grupo local de amigos.
 

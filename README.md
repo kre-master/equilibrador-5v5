@@ -49,14 +49,13 @@ Para producao:
 
 - `Authentication > Providers > Email > Confirm email` deve ficar ligado.
 - `Authentication > Rate Limits` deve ser revisto antes de abrir a app fora do grupo de amigos.
-- O login deve ser feito por email. Username existe para identificacao dentro da app, mas nao deve ser usado para descobrir emails.
+- O login pode ser feito por email ou username. Isto usa uma funcao Supabase de lookup username -> email e deve ser protegido com rate limits/captcha se a app sair do grupo fechado de amigos.
 
 ## Como funciona online
 
 - Visitantes podem ver a app e criar conta.
 - Jogadores criam conta por email/password, escolhem username e depois reclamam o perfil de jogador que ja existe.
-- O login aceita email/password.
-- Se o login falhar com username, usar o email da conta; username deixou de servir para entrar por motivos de privacidade.
+- O login aceita email ou username com password.
 - No separador `Conta`, os utilizadores podem definir username, mudar password e pedir recuperacao de password por email.
 - Admin aprova pedidos de associacao entre conta e perfil.
 - Admin lanca convocatorias com data, hora, local e limite de jogadores.

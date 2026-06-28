@@ -98,7 +98,7 @@ as $$
 $$;
 
 revoke all on function public.email_for_login(text) from public;
-revoke execute on function public.email_for_login(text) from anon, authenticated;
+grant execute on function public.email_for_login(text) to anon, authenticated;
 
 create table if not exists public.games (
   id text primary key,
@@ -304,7 +304,7 @@ grant update (photo_data_url, updated_at) on public.players to authenticated;
 grant select on public.games to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.player_claims to authenticated;
-revoke execute on function public.email_for_login(text) from anon, authenticated;
+grant execute on function public.email_for_login(text) to anon, authenticated;
 grant select on public.events to authenticated;
 grant select on public.event_responses to authenticated;
 grant insert, update, delete on public.events to authenticated;

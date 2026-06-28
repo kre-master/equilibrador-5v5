@@ -201,7 +201,7 @@ Alteracoes decididas:
 - `mvp_vote_counts()` devolve apenas contagens agregadas por jogo/candidato.
 - Voto MVP passa a usar `insert`, nao `upsert`, para nao permitir alteracao posterior.
 - Login/recuperacao passam a usar email; username deixa de servir para lookup de email.
-- `email_for_login` fica sem grant para `anon`/`authenticated`.
+- `email_for_login` voltou a ter grant para `anon`/`authenticated` por decisao posterior de aceitar login por username no grupo fechado.
 
 Acao manual necessaria:
 
@@ -230,9 +230,9 @@ Correcao:
 
 Nota de login:
 
-- Desde a correcao de privacidade, login e recuperacao usam email/password.
-- Username nao pode ser usado para entrar porque implicaria lookup username -> email no frontend.
-- A app deve avisar explicitamente se o utilizador tentar entrar com username.
+- Por decisao de produto para o grupo fechado, login e recuperacao voltam a aceitar email ou username.
+- Username login chama `email_for_login(username)` para resolver o email antes de usar Supabase Auth.
+- `email_for_login` tem `grant execute` para `anon` e `authenticated`; rever rate limit/captcha se a app sair do uso local.
 
 ## Comandos uteis
 
