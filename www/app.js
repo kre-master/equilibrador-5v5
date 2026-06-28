@@ -1039,11 +1039,15 @@ async function adminLogin() {
     alert("Escreve o email da conta.");
     return;
   }
+  if (!email.includes("@")) {
+    alert("O login por username foi removido por seguranca. Entra com o email da conta.");
+    return;
+  }
   const password = prompt("Password:");
   if (!password) return;
   const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
   if (error) {
-    alert(`Login falhou: ${error.message}`);
+    alert(`Login falhou: ${formatAuthError(error)}`);
     return;
   }
   await loadAccountState();
@@ -1139,6 +1143,12 @@ function formatAuthError(error) {
   }
   if (message.includes("password")) {
     return "confirma se a password tem pelo menos 6 caracteres.";
+  }
+  if (message.includes("invalid login credentials")) {
+    return "email ou password incorretos. Se estavas a usar username, usa o email da conta.";
+  }
+  if (message.includes("email not confirmed") || message.includes("not confirmed")) {
+    return "este email ainda nao foi confirmado. Confirma o email recebido ou verifica no Supabase se a confirmacao esta ativa.";
   }
   if (message.includes("invalid email")) {
     return "confirma se o email esta bem escrito.";

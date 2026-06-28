@@ -228,6 +228,12 @@ Correcao:
 - `has_any_profile()` precisa de `grant execute ... to authenticated`.
 - Depois de aplicar o schema mais recente, pedir ao utilizador afetado para entrar novamente para a app criar/reparar o profile.
 
+Nota de login:
+
+- Desde a correcao de privacidade, login e recuperacao usam email/password.
+- Username nao pode ser usado para entrar porque implicaria lookup username -> email no frontend.
+- A app deve avisar explicitamente se o utilizador tentar entrar com username.
+
 ## Comandos uteis
 
 Ver estado:

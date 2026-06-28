@@ -56,6 +56,7 @@ Para producao:
 - Visitantes podem ver a app e criar conta.
 - Jogadores criam conta por email/password, escolhem username e depois reclamam o perfil de jogador que ja existe.
 - O login aceita email/password.
+- Se o login falhar com username, usar o email da conta; username deixou de servir para entrar por motivos de privacidade.
 - No separador `Conta`, os utilizadores podem definir username, mudar password e pedir recuperacao de password por email.
 - Admin aprova pedidos de associacao entre conta e perfil.
 - Admin lanca convocatorias com data, hora, local e limite de jogadores.
