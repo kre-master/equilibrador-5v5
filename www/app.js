@@ -17,11 +17,11 @@ const FORM_LEVELS = {
 const PLAYER_CARD_VARIANTS = {
   rookie: { key: "rookie", asset: "assets/new cards template/card_rookie.png", label: "Rookie", description: "Jogador ainda sem jogos registados pela equipa." },
   base: { key: "base", asset: "assets/new cards template/card_base.png", label: "Base", description: "Carta normal quando nao existe outro destaque ativo." },
-  win_1x: { key: "win_1x", asset: "assets/new cards template/card_win_1x.png", label: "1 vitoria seguida", description: "Jogador venceu o ultimo jogo em que participou." },
-  win_2x: { key: "win_2x", asset: "assets/new cards template/card_win_2x.png", label: "2 vitorias seguidas", description: "Jogador venceu dois jogos seguidos em que participou." },
-  win_3x: { key: "win_3x", asset: "assets/new cards template/card_win_3x.png", label: "3 vitorias seguidas", description: "Jogador venceu tres jogos seguidos em que participou." },
-  win_4x: { key: "win_4x", asset: "assets/new cards template/card_win_4x.png", label: "4 vitorias seguidas", description: "Jogador venceu quatro jogos seguidos em que participou." },
-  win_5x: { key: "win_5x", asset: "assets/new cards template/card_win_5x.png", label: "5+ vitorias seguidas", description: "Jogador venceu cinco ou mais jogos seguidos em que participou." },
+  win_1x: { key: "win_1x", asset: "assets/new cards template/card_win_1x.png", label: "1 vitoria seguida", description: "Jogador venceu o ultimo jogo da equipa em que participou, sem ausencia pelo meio." },
+  win_2x: { key: "win_2x", asset: "assets/new cards template/card_win_2x.png", label: "2 vitorias seguidas", description: "Jogador venceu dois jogos consecutivos da equipa, sem ausencia pelo meio." },
+  win_3x: { key: "win_3x", asset: "assets/new cards template/card_win_3x.png", label: "3 vitorias seguidas", description: "Jogador venceu tres jogos consecutivos da equipa, sem ausencia pelo meio." },
+  win_4x: { key: "win_4x", asset: "assets/new cards template/card_win_4x.png", label: "4 vitorias seguidas", description: "Jogador venceu quatro jogos consecutivos da equipa, sem ausencia pelo meio." },
+  win_5x: { key: "win_5x", asset: "assets/new cards template/card_win_5x.png", label: "5+ vitorias seguidas", description: "Jogador venceu cinco ou mais jogos consecutivos da equipa, sem ausencia pelo meio." },
   form_3w_5: { key: "form_3w_5", asset: "assets/new cards template/card_form_3w_5.png", label: "3 em 5", description: "Jogador venceu 3 dos ultimos 5 jogos em que participou." },
   form_4w_5: { key: "form_4w_5", asset: "assets/new cards template/card_form_4w_5.png", label: "4 em 5", description: "Jogador venceu 4 dos ultimos 5 jogos em que participou." },
   form_5w_5: { key: "form_5w_5", asset: "assets/new cards template/card_form_5w_5.png", label: "5 em 5", description: "Jogador venceu os ultimos 5 jogos em que participou." },
@@ -1706,20 +1706,24 @@ function isShowcaseAwardKey(key) {
 function getPlayerAwardShowcase(playerData) {
   const counts = new Map();
   const appearances = getPlayerFinishedAppearances(playerData.id, state.games, "asc");
+  const finishedGamesAsc = [...state.games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (!appearances.length) {
     addAwardCount(counts, "rookie");
   }
 
   let winStreak = 0;
-  appearances.forEach((item, index) => {
-    if (item.outcome === "win") {
-      winStreak += 1;
-      addAwardCount(counts, `win_${Math.min(winStreak, 5)}x`);
-    } else if (item.outcome === "loss") {
+  finishedGamesAsc.forEach((game) => {
+    const participation = getPlayerParticipation(game, playerData.id);
+    if (!participation || getPlayerOutcome(game, participation.side) !== "win") {
       winStreak = 0;
+      return;
     }
+    winStreak += 1;
+    addAwardCount(counts, `win_${Math.min(winStreak, 5)}x`);
+  });
 
+  appearances.forEach((item, index) => {
     const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
     if (windowItems.length === FORM_LOOKBACK_GAMES) {
       const wins = windowItems.filter((entry) => entry.outcome === "win").length;
@@ -5477,8 +5481,8 @@ function getPlayerForm(playerData, games = state.games) {
   const wins = recent.filter((item) => item.outcome === "win").length;
   const losses = recent.filter((item) => item.outcome === "loss").length;
   const draws = recent.filter((item) => item.outcome === "draw").length;
-  const winStreak = countCurrentStreak(finishedAppearances, "win");
-  const lossStreak = countCurrentStreak(finishedAppearances, "loss");
+  const winStreak = countConsecutiveTeamOutcomeStreak(playerData.id, games, "win");
+  const lossStreak = countConsecutiveTeamOutcomeStreak(playerData.id, games, "loss");
   const absenceCount = countRecentAbsences(playerData.id, games);
 
   let adjustment = 0;
@@ -5510,10 +5514,16 @@ function getPlayerForm(playerData, games = state.games) {
   };
 }
 
-function countCurrentStreak(items, outcome) {
+function countConsecutiveTeamOutcomeStreak(playerId, games, outcome) {
   let streak = 0;
-  for (const item of items) {
-    if (item.outcome !== outcome) break;
+  const finishedGames = [...games]
+    .filter(isFinishedGame)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  for (const game of finishedGames) {
+    const participation = getPlayerParticipation(game, playerId);
+    if (!participation) break;
+    if (getPlayerOutcome(game, participation.side) !== outcome) break;
     streak += 1;
   }
   return streak;

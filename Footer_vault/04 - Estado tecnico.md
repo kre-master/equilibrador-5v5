@@ -251,6 +251,21 @@ Implementacao:
 - `mutateHistoryGame` aplica rollback se `persistState()` falhar.
 - Cache-buster actualizado para `20260706-history-edit1`.
 
+## Regras de cartas de forma/vitorias
+
+Regra:
+
+- `4 em 5` e `5 em 5` usam apenas os ultimos jogos em que o jogador participou.
+- Uma ausencia entre jogos da equipa nao invalida `4 em 5`/`5 em 5`, desde que o jogador tenha vencido 4 ou 5 das ultimas 5 participacoes.
+- `vitorias seguidas` exige jogos consecutivos da equipa sem ausencia pelo meio.
+- Se o jogador falhar um jogo da equipa, a sequencia de `vitorias seguidas` fica quebrada.
+
+Implementacao:
+
+- `getPlayerForm` calcula `winStreak` com `countConsecutiveTeamOutcomeStreak`.
+- `getPlayerAwardShowcase` conta `win_*x` percorrendo todos os jogos finalizados da equipa, resetando em ausencia ou nao-vitoria.
+- As cartas `form_4w_5` e `form_5w_5` continuam baseadas em janelas das participacoes do jogador.
+
 ## Comandos uteis
 
 Ver estado:

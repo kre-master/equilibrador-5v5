@@ -90,6 +90,8 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Templates novos vivem em `assets/new cards template`.
 - Cartas podem variar por contexto: base, forma, vitorias, MVP, premios e outros.
 - Montra de premios deve mostrar progresso desbloqueadas x/y.
+- Cartas `4 em 5` e `5 em 5` contam os ultimos jogos em que o jogador participou; ausencias entre esses jogos nao invalidam a carta.
+- Cartas de `vitorias seguidas` exigem jogos consecutivos da equipa sem ausencia do jogador pelo meio.
 
 ## Campeoes de estacao
 
