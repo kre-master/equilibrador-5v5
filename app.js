@@ -251,6 +251,23 @@ function loadState() {
   });
 }
 
+function getSeenAwardReveals() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AWARD_REVEAL_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenAwardReveals(keys) {
+  localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...keys]));
+}
+
+function getAwardRevealKey(playerId, gameId, awardKey) {
+  return `${playerId}:${gameId}:${awardKey}`;
+}
+
 function migrateState(saved) {
   saved.players = saved.players
     .map((p, index) => normalizePlayerRecord(p, index))
@@ -1727,6 +1744,40 @@ function addAwardCount(counts, key, amount = 1) {
 
 function isShowcaseAwardKey(key) {
   return Boolean(PLAYER_CARD_VARIANTS[key] && !FIELD_ONLY_CARD_KEYS.has(key));
+}
+
+function getAwardsUnlockedByGame(playerId, game) {
+  if (!isFinishedGame(game) || !getPlayerParticipation(game, playerId)) return [];
+  const gameTime = new Date(game.date).getTime();
+  const gamesUntilBefore = state.games.filter((item) => new Date(item.date).getTime() < gameTime);
+  const gamesUntilThis = state.games.filter((item) => new Date(item.date).getTime() <= gameTime);
+  const before = new Set(getAwardKeysForGames(playerId, gamesUntilBefore));
+  return getAwardKeysForGames(playerId, gamesUntilThis)
+    .filter((key) => !before.has(key))
+    .filter(isShowcaseAwardKey)
+    .map((key) => PLAYER_CARD_VARIANTS[key])
+    .filter(Boolean);
+}
+
+function getAwardKeysForGames(playerId, games) {
+  const counts = new Map();
+  const audit = getPlayerWinAwardAudit(playerId, games);
+  for (let streak = 1; streak <= Math.min(audit.bestWinStreak, 5); streak += 1) {
+    addAwardCount(counts, `win_${streak}x`);
+  }
+
+  const appearances = getPlayerAppearanceRecord(playerId, Number.MAX_SAFE_INTEGER, games).reverse();
+  appearances.forEach((item, index) => {
+    const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
+    if (windowItems.length === FORM_LOOKBACK_GAMES) {
+      const wins = windowItems.filter((entry) => entry.outcome === "win").length;
+      if (wins >= 5) addAwardCount(counts, "form_5w_5");
+      else if (wins >= 4) addAwardCount(counts, "form_4w_5");
+      else if (wins >= 3) addAwardCount(counts, "form_3w_5");
+    }
+  });
+
+  return [...counts.keys()];
 }
 
 function getFinishedGamesAsc(games = state.games) {
@@ -4151,6 +4202,7 @@ function renderMvpVoteGate() {
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
     els.mvpGate.innerHTML = "";
+    renderAwardRevealGate();
     return;
   }
 
@@ -4176,6 +4228,46 @@ function renderMvpVoteGate() {
     if (!linkedPlayer || !candidateId) return;
     const ok = await saveMvpVote(game, linkedPlayer, candidateId);
     if (ok) render();
+  });
+}
+
+function getPendingAwardRevealRequirement() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) return null;
+  const seen = getSeenAwardReveals();
+  const finishedGames = getFinishedGamesDesc(state.games);
+  for (const game of finishedGames) {
+    if (!getPlayerParticipation(game, linkedPlayer.id)) continue;
+    if (!getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
+    const awards = getAwardsUnlockedByGame(linkedPlayer.id, game)
+      .filter((award) => !seen.has(getAwardRevealKey(linkedPlayer.id, game.id, award.key)));
+    if (awards.length) return { playerData: linkedPlayer, game, awards, seen };
+  }
+  return null;
+}
+
+function renderAwardRevealGate() {
+  if (!els.mvpGate) return;
+  const requirement = getPendingAwardRevealRequirement();
+  if (!requirement) return;
+  document.body.classList.add("mvp-gate-open");
+  els.mvpGate.classList.remove("hidden");
+  const { playerData, game, awards, seen } = requirement;
+  els.mvpGate.innerHTML = `
+    <div class="award-reveal-card">
+      <p class="eyebrow">Carta desbloqueada</p>
+      <h2>${awards.length > 1 ? "Novas cartas desbloqueadas" : "Nova carta desbloqueada"}</h2>
+      <p>${formatDate(game.date)}</p>
+      <div class="award-reveal-grid">
+        ${awards.map((award) => renderPlayerCard(playerData, { mode: "award", variant: award })).join("")}
+      </div>
+      <button class="primary-btn" data-dismiss-award-reveal>Continuar</button>
+    </div>
+  `;
+  els.mvpGate.querySelector("[data-dismiss-award-reveal]")?.addEventListener("click", () => {
+    awards.forEach((award) => seen.add(getAwardRevealKey(playerData.id, game.id, award.key)));
+    saveSeenAwardReveals(seen);
+    render();
   });
 }
 

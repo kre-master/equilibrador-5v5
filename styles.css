@@ -1130,6 +1130,54 @@ body.mvp-gate-open {
   width: 100%;
 }
 
+.award-reveal-card {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 760px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 28px;
+  padding: 24px;
+  background: var(--surface-strong);
+  box-shadow: 0 30px 76px rgba(18, 32, 28, .3);
+  animation: award-reveal-pop .26s ease-out both;
+}
+
+.award-reveal-card h2,
+.award-reveal-card p {
+  margin: 0;
+}
+
+.award-reveal-card button {
+  width: min(100%, 340px);
+  justify-self: center;
+}
+
+.award-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  align-items: center;
+  justify-items: center;
+}
+
+.award-reveal-grid .player-card-award {
+  width: min(210px, 58vw);
+}
+
+@keyframes award-reveal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .account-panel,
 .claims-list,
 .accounts-list {
