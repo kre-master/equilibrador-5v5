@@ -304,6 +304,7 @@ h3 {
 .event-admin-adds select,
 .event-date-edit input,
 .history-game-date-edit input,
+.history-roster-tools select,
 .add-to-game select {
   min-height: 40px;
   width: 100%;
@@ -325,6 +326,7 @@ h3 {
 .event-admin-adds select:focus,
 .event-date-edit input:focus,
 .history-game-date-edit input:focus,
+.history-roster-tools select:focus,
 .add-to-game select:focus {
   border-color: rgba(31, 122, 77, .58);
   box-shadow: inset 0 1px rgba(255,255,255,.9), 0 0 0 4px rgba(31, 122, 77, .12);
@@ -1791,6 +1793,22 @@ body.mvp-gate-open {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+}
+
+.history-roster-section {
+  margin-top: 16px;
+}
+
+.history-roster-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.history-roster-tools select {
+  flex: 1 1 240px;
 }
 
 .mini-btn {

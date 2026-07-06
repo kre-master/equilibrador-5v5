@@ -4853,6 +4853,7 @@ function renderHistoryGameDetail() {
     <div class="field-card history-field-card">
       ${renderField(game, { radarPosition: "bottom", clickablePlayers: true, radarInlineOdds: true })}
     </div>
+    ${renderHistoryRosterEditor(game)}
   `;
   els.historyGameDetail.querySelector("[data-save-history-game-date]")?.addEventListener("click", async (buttonEvent) => {
     const gameId = buttonEvent.currentTarget.dataset.saveHistoryGameDate;
@@ -4874,7 +4875,155 @@ function renderHistoryGameDetail() {
       }
     });
   });
+  bindHistoryRosterEditorActions(game);
   bindMvpPanelActions(game, els.historyGameDetail);
+}
+
+function renderHistoryRosterEditor(game) {
+  if (!isAdmin) return "";
+  const groups = [
+    ["teamA", "Equipa A"],
+    ["teamB", "Equipa B"],
+    ["benchA", "Supl. A"],
+    ["benchB", "Supl. B"],
+  ];
+  const inGame = new Set(getGamePlayerIds(game));
+  const availablePlayers = state.players
+    .filter((playerData) => !inGame.has(playerData.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return `
+    <section class="profile-section history-roster-section admin-actions">
+      <div class="finance-settings-head">
+        <div>
+          <h3>Editar equipas do jogo</h3>
+          <p>Alterar a equipa corrige historico, forma e cartas. Pagamentos seguem os participantes atuais se nao houver override manual.</p>
+        </div>
+      </div>
+      <div class="roster-editor history-roster-editor">
+        ${groups.map(([key, label]) => {
+          const players = hydrate(game[key] || []);
+          return `
+            <div class="roster-column">
+              <h4>${label} (${players.length})</h4>
+              ${players.map((playerData) => renderHistoryRosterRow(game.id, playerData, key)).join("") || `<p class="eyebrow">Vazio</p>`}
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="history-roster-tools">
+        <select data-history-add-player="${game.id}">
+          <option value="">Adicionar jogador ao jogo</option>
+          ${availablePlayers.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)} - ${playerData.overall}</option>`).join("")}
+        </select>
+        <button class="ghost-btn" data-history-add-to-team="${game.id}" data-to-group="teamA" ${availablePlayers.length ? "" : "disabled"}>Adicionar A</button>
+        <button class="ghost-btn" data-history-add-to-team="${game.id}" data-to-group="teamB" ${availablePlayers.length ? "" : "disabled"}>Adicionar B</button>
+        <button class="ghost-btn" data-reset-attendance-overrides="${game.id}">Recalcular presencas/pagamentos</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderHistoryRosterRow(gameId, playerData, currentGroup) {
+  const actions = [
+    ["teamA", "A"],
+    ["teamB", "B"],
+    ["benchA", "Supl. A"],
+    ["benchB", "Supl. B"],
+  ].filter(([key]) => key !== currentGroup);
+
+  return `
+    <div class="roster-row">
+      <strong>${renderAvatar(playerData)} ${escapeHtml(playerData.name)} - ${playerData.overall}</strong>
+      <div class="roster-actions">
+        ${actions.map(([key, label]) => `<button class="mini-btn" data-history-move-player="${playerData.id}" data-game-id="${gameId}" data-to-group="${key}">${label}</button>`).join("")}
+        <button class="mini-btn" data-history-remove-player="${playerData.id}" data-game-id="${gameId}">Remover</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindHistoryRosterEditorActions(game) {
+  if (!isAdmin || !els.historyGameDetail) return;
+  els.historyGameDetail.querySelectorAll("[data-history-move-player]").forEach((button) => {
+    button.addEventListener("click", () => movePlayerInHistoryGame(button.dataset.gameId, button.dataset.historyMovePlayer, button.dataset.toGroup));
+  });
+  els.historyGameDetail.querySelectorAll("[data-history-remove-player]").forEach((button) => {
+    button.addEventListener("click", () => removePlayerFromHistoryGame(button.dataset.gameId, button.dataset.historyRemovePlayer));
+  });
+  els.historyGameDetail.querySelectorAll("[data-history-add-to-team]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const select = els.historyGameDetail.querySelector(`[data-history-add-player="${button.dataset.historyAddToTeam}"]`);
+      addPlayerToHistoryGame(button.dataset.historyAddToTeam, select?.value, button.dataset.toGroup);
+    });
+  });
+  els.historyGameDetail.querySelector("[data-reset-attendance-overrides]")?.addEventListener("click", () => {
+    resetAttendanceOverridesForGame(game.id);
+  });
+}
+
+async function mutateHistoryGame(gameId, mutation) {
+  if (!requireAdmin()) return false;
+  const game = state.games.find((item) => item.id === gameId);
+  if (!game) return false;
+  ensureGameShape(game);
+  const previousGame = {
+    ...game,
+    teamA: [...(game.teamA || [])],
+    teamB: [...(game.teamB || [])],
+    benchA: [...(game.benchA || [])],
+    benchB: [...(game.benchB || [])],
+  };
+  const previousOverrides = attendanceOverrides.map((item) => ({ ...item }));
+  mutation(game);
+  currentPaymentsMonth = monthKey(game.date);
+  try {
+    await persistState();
+  } catch (error) {
+    Object.assign(game, previousGame);
+    attendanceOverrides = previousOverrides;
+    saveState();
+    alert(`Nao consegui guardar alteracao do jogo: ${error.message}`);
+    return false;
+  }
+  render();
+  return true;
+}
+
+async function movePlayerInHistoryGame(gameId, playerId, toGroup) {
+  if (!["teamA", "teamB", "benchA", "benchB"].includes(toGroup)) return;
+  await mutateHistoryGame(gameId, (game) => {
+    ["teamA", "teamB", "benchA", "benchB"].forEach((group) => {
+      game[group] = (game[group] || []).filter((id) => id !== playerId);
+    });
+    game[toGroup].push(playerId);
+  });
+}
+
+async function removePlayerFromHistoryGame(gameId, playerId) {
+  if (!confirm("Remover este jogador deste jogo? Isto pode alterar pagamentos se nao houver override manual.")) return;
+  await mutateHistoryGame(gameId, (game) => {
+    ["teamA", "teamB", "benchA", "benchB"].forEach((group) => {
+      game[group] = (game[group] || []).filter((id) => id !== playerId);
+    });
+  });
+}
+
+async function addPlayerToHistoryGame(gameId, playerId, toGroup) {
+  if (!playerId || !["teamA", "teamB"].includes(toGroup)) return;
+  await mutateHistoryGame(gameId, (game) => {
+    ["teamA", "teamB", "benchA", "benchB"].forEach((group) => {
+      game[group] = (game[group] || []).filter((id) => id !== playerId);
+    });
+    game[toGroup].push(playerId);
+  });
+}
+
+async function resetAttendanceOverridesForGame(gameId) {
+  if (!confirm("Recalcular presencas deste jogo a partir das equipas atuais? Overrides manuais deste jogo serao removidos.")) return;
+  await mutateHistoryGame(gameId, () => {
+    attendanceOverrides = attendanceOverrides.filter((item) => item.gameId !== gameId);
+  });
 }
 
 async function deleteGame(gameId) {

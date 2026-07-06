@@ -70,6 +70,10 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Cartas no campo do historico devem poder abrir a pagina do jogador.
 - Admin pode alterar a data/hora de um jogo confirmado ou historico.
 - Se o jogo tiver convocatoria associada, alterar a data/hora do jogo deve sincronizar tambem a convocatoria.
+- Admin pode editar equipas de um jogo historico/finalizado para corrigir jogadores trocados.
+- Alterar equipas de um jogo finalizado deve recalcular historico individual, forma e cartas derivadas.
+- Pagamentos seguem os participantes atuais do jogo, salvo overrides manuais de presenca.
+- Deve existir acao para limpar overrides de presenca de um jogo e recalcular pagamentos a partir das equipas atuais.
 
 ## Pagamentos
 

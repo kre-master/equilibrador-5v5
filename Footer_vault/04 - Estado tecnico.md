@@ -234,6 +234,23 @@ Nota de login:
 - Username login chama `email_for_login(username)` para resolver o email antes de usar Supabase Auth.
 - `email_for_login` tem `grant execute` para `anon` e `authenticated`; rever rate limit/captcha se a app sair do uso local.
 
+## Edicao de equipas em jogo historico
+
+Regra:
+
+- Admin pode corrigir equipas de um jogo finalizado no detalhe do historico.
+- Mover jogador entre Equipa A/B altera automaticamente historico individual, forma e cartas, porque esses dados sao derivados de `game.teamA/teamB`.
+- Pagamentos continuam a usar participantes de `getGamePlayerIds(game)`.
+- Se houver overrides manuais de presenca, existe botao para limpar overrides desse jogo e recalcular pagamentos a partir das equipas atuais.
+
+Implementacao:
+
+- `renderHistoryRosterEditor(game)` desenha o editor admin no detalhe historico.
+- `movePlayerInHistoryGame`, `addPlayerToHistoryGame` e `removePlayerFromHistoryGame` alteram `teamA/teamB/benchA/benchB`.
+- `resetAttendanceOverridesForGame(gameId)` remove overrides de presenca apenas desse jogo.
+- `mutateHistoryGame` aplica rollback se `persistState()` falhar.
+- Cache-buster actualizado para `20260706-history-edit1`.
+
 ## Comandos uteis
 
 Ver estado:
