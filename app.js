@@ -1781,22 +1781,16 @@ function getPlayerWinAwardAudit(playerId, games = state.games) {
 function getPlayerAwardShowcase(playerData) {
   const counts = new Map();
   const appearances = getPlayerFinishedAppearances(playerData.id, state.games, "asc");
-  const finishedGamesAsc = [...state.games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (!appearances.length) {
     addAwardCount(counts, "rookie");
   }
 
-  let winStreak = 0;
-  finishedGamesAsc.forEach((game) => {
-    const participation = getPlayerParticipation(game, playerData.id);
-    if (!participation || getPlayerOutcome(game, participation.side) !== "win") {
-      winStreak = 0;
-      return;
-    }
-    winStreak += 1;
-    addAwardCount(counts, `win_${Math.min(winStreak, 5)}x`);
-  });
+  const awardAudit = getPlayerWinAwardAudit(playerData.id);
+  const cappedBestWinStreak = Math.min(awardAudit.bestWinStreak, 5);
+  for (let streak = 1; streak <= cappedBestWinStreak; streak += 1) {
+    addAwardCount(counts, `win_${streak}x`);
+  }
 
   appearances.forEach((item, index) => {
     const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
