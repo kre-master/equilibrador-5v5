@@ -4202,10 +4202,10 @@ function getLatestFinishedGame() {
 function getPendingMvpVoteRequirement() {
   const linkedPlayer = getLinkedPlayer();
   if (!linkedPlayer) return null;
-  const game = getLatestFinishedGame();
+  const game = getFinishedGamesDesc(state.games)
+    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
   if (!game) return null;
   const participants = hydrate(getGamePlayerIds(game));
-  if (!participants.some((playerData) => playerData.id === linkedPlayer.id)) return null;
   if (getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
   const candidates = participants.filter((playerData) => playerData.id !== linkedPlayer.id);
   if (!candidates.length) return null;
