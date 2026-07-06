@@ -9,6 +9,7 @@ Este vault e a memoria organizada do projecto Footer. Deve ser lido antes de tra
 - [[03 - Decisoes e regras]] - decisoes de produto, regras de negocio e regras de trabalho.
 - [[04 - Estado tecnico]] - ficheiros principais, commits recentes, builds e cuidados tecnicos.
 - [[05 - Backlog e proximos passos]] - ideias pendentes e proximas linhas de trabalho.
+- [[06 - Spec - Historico alargado e revelacao de cartas]] - desenho aprovado para auditar cartas de vitorias, mostrar historico de 20 jogos e revelar cartas novas apos jogo.
 
 ## Regra de uso
 

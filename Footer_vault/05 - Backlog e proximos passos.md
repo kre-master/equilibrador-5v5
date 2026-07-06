@@ -19,6 +19,7 @@ Continuar a desenvolver primeiro a versao web/base. Preparar Android/iOS apenas 
 - Confirmar que a pagina de jogador comeca pela carta.
 - Melhorar/validar montra de premios com desbloqueadas x/y.
 - Validar no proximo jogo apos 21 de junho se a carta de campeao de primavera aparece apenas para o campeao e apenas nesse jogo.
+- Implementar [[06 - Spec - Historico alargado e revelacao de cartas]] para auditar vitorias seguidas, mostrar ultimos 20 jogos e revelar cartas novas apos jogo.
 
 ### Historico
 
