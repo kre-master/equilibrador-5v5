@@ -261,7 +261,13 @@ function getSeenAwardReveals() {
 }
 
 function saveSeenAwardReveals(keys) {
-  localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...keys]));
+  try {
+    localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...keys]));
+    return true;
+  } catch (error) {
+    console.warn("Could not save seen award reveals", error);
+    return false;
+  }
 }
 
 function getAwardRevealKey(playerId, gameId, awardKey) {
@@ -1748,9 +1754,11 @@ function isShowcaseAwardKey(key) {
 
 function getAwardsUnlockedByGame(playerId, game) {
   if (!isFinishedGame(game) || !getPlayerParticipation(game, playerId)) return [];
-  const gameTime = new Date(game.date).getTime();
-  const gamesUntilBefore = state.games.filter((item) => new Date(item.date).getTime() < gameTime);
-  const gamesUntilThis = state.games.filter((item) => new Date(item.date).getTime() <= gameTime);
+  const orderedGames = getFinishedGamesAsc(state.games);
+  const targetIndex = orderedGames.findIndex((item) => item.id === game.id);
+  if (targetIndex < 0) return [];
+  const gamesUntilBefore = orderedGames.slice(0, targetIndex);
+  const gamesUntilThis = orderedGames.slice(0, targetIndex + 1);
   const before = new Set(getAwardKeysForGames(playerId, gamesUntilBefore));
   return getAwardKeysForGames(playerId, gamesUntilThis)
     .filter((key) => !before.has(key))
