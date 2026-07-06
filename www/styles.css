@@ -659,6 +659,23 @@ h3 {
   background: rgba(255,255,255,.74);
 }
 
+.record-dots {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+  line-height: 1;
+}
+
+.record-dots-wrap {
+  flex-wrap: wrap;
+}
+
+.record-dots .record-dot {
+  margin-right: 0;
+  flex: 0 0 auto;
+}
+
 .record-dot.win { color: #1f7a4d; }
 .record-dot.draw { color: #66736d; }
 .record-dot.loss { color: #c86422; }
@@ -1111,6 +1128,54 @@ body.mvp-gate-open {
 .mvp-gate-card select,
 .mvp-gate-card button {
   width: 100%;
+}
+
+.award-reveal-card {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 760px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 28px;
+  padding: 24px;
+  background: var(--surface-strong);
+  box-shadow: 0 30px 76px rgba(18, 32, 28, .3);
+  animation: award-reveal-pop .26s ease-out both;
+}
+
+.award-reveal-card h2,
+.award-reveal-card p {
+  margin: 0;
+}
+
+.award-reveal-card button {
+  width: min(100%, 340px);
+  justify-self: center;
+}
+
+.award-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  align-items: center;
+  justify-items: center;
+}
+
+.award-reveal-grid .player-card-award {
+  width: min(210px, 58vw);
+}
+
+@keyframes award-reveal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .account-panel,
@@ -2088,6 +2153,39 @@ th.stat-col {
   font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.award-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.award-audit-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(247,250,249,.72);
+}
+
+.award-audit-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.award-audit-card strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.award-audit-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .profile-games {

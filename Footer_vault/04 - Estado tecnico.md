@@ -266,6 +266,16 @@ Implementacao:
 - `getPlayerAwardShowcase` conta `win_*x` percorrendo todos os jogos finalizados da equipa, resetando em ausencia ou nao-vitoria.
 - As cartas `form_4w_5` e `form_5w_5` continuam baseadas em janelas das participacoes do jogador.
 
+## 2026-07-06 - Historico alargado e revelacao de cartas
+
+- Perfil do jogador passa a mostrar `Ult. 20 equipa` e `Ult. 20 jogador`.
+- Adicionada auditoria de cartas com sequencia atual, melhor sequencia valida sem faltas e melhor janela de 5 participacoes.
+- Montra de premios para `vitorias seguidas` passa a depender da melhor sequencia historica valida, sem ausencia entre jogos da equipa.
+- `4 em 5` e `5 em 5` continuam a contar apenas jogos em que o jogador participou.
+- Adicionada revelacao local de cartas desbloqueadas apos o voto MVP do ultimo jogo finalizado em que o jogador participou.
+- Revelacoes ficam marcadas por `playerId:gameId:awardKey` no dispositivo; ha fallback em memoria se `localStorage` falhar.
+- Cache-buster actualizado para `20260706-awardreveal1`.
+
 ## Comandos uteis
 
 Ver estado:

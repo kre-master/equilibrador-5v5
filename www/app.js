@@ -50,6 +50,8 @@ const CARD_AWARD_PRIORITY = [
 const FIELD_ONLY_CARD_KEYS = new Set(["champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
 
 const FORM_LOOKBACK_GAMES = 5;
+const PROFILE_HISTORY_LIMIT = 20;
+const AWARD_REVEAL_STORAGE_KEY = "footer-award-reveals-v1";
 const FORM_RATING_CAP = 7;
 const TEAM_RADAR_MIN = 55;
 const TEAM_RADAR_MAX = 75;
@@ -127,6 +129,7 @@ let authActionBusy = false;
 let currentPlayerProfileId = null;
 let currentViewName = "events";
 let navigationHistoryReady = false;
+let awardRevealSessionSeenKeys = new Set();
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
@@ -247,6 +250,31 @@ function loadState() {
     gameFinanceOverrides: [],
     financeSettings: { ...defaultFinanceSettings, playerBalances: { ...defaultFinanceSettings.playerBalances } },
   });
+}
+
+function getSeenAwardReveals() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AWARD_REVEAL_STORAGE_KEY) || "[]");
+    const storedKeys = Array.isArray(parsed) ? parsed.map(String) : [];
+    return new Set([...storedKeys, ...awardRevealSessionSeenKeys]);
+  } catch {
+    return new Set(awardRevealSessionSeenKeys);
+  }
+}
+
+function saveSeenAwardReveals(keys) {
+  awardRevealSessionSeenKeys = new Set([...keys].map(String));
+  try {
+    localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...awardRevealSessionSeenKeys]));
+    return true;
+  } catch (error) {
+    console.warn("Could not save seen award reveals", error);
+    return false;
+  }
+}
+
+function getAwardRevealKey(playerId, gameId, awardKey) {
+  return `${playerId}:${gameId}:${awardKey}`;
 }
 
 function migrateState(saved) {
@@ -1503,8 +1531,11 @@ function renderPlayerProfile() {
   const form = getPlayerForm(playerData);
   const synergies = getPlayerSynergies(playerData.id);
   const variant = getPlayerCardVariant(playerData, form);
-  const teamRecentItems = getPlayerTeamRecentItems(playerData.id);
+  const teamRecentItems = getPlayerTeamRecord(playerData.id, PROFILE_HISTORY_LIMIT);
   const teamRecentRecord = teamRecentItems.map((item) => item.outcome);
+  const playerRecentItems = getPlayerAppearanceRecord(playerData.id, PROFILE_HISTORY_LIMIT);
+  const playerRecentRecord = playerRecentItems.map((item) => item.outcome);
+  const awardAudit = getPlayerWinAwardAudit(playerData.id);
   const awards = getPlayerAwardShowcase(playerData);
 
   els.playerProfile.innerHTML = `
@@ -1518,8 +1549,29 @@ function renderPlayerProfile() {
       <h3>Historico</h3>
       ${renderHistorySummaryCard(summary, winRate)}
       <div class="recent-summary-grid">
-        ${renderSummaryCard("Ult. 5 equipa", renderRecordDots(teamRecentRecord, { chronological: true }))}
-        ${renderSummaryCard("Ult. 5 jogador", renderRecordDots(form.recentRecord, { chronological: true }))}
+        ${renderSummaryCard("Ult. 20 equipa", renderRecordDots(teamRecentRecord, { chronological: true, wrap: true }))}
+        ${renderSummaryCard("Ult. 20 jogador", renderRecordDots(playerRecentRecord, { chronological: true, wrap: true }))}
+      </div>
+    </section>
+
+    <section class="profile-section">
+      <h3>Auditoria de cartas</h3>
+      <div class="award-audit-grid">
+        <article class="award-audit-card">
+          <span>Sequencia atual</span>
+          <strong>${awardAudit.currentWinStreak} vitorias</strong>
+          <small>Jogos consecutivos da equipa com presenca e vitoria.</small>
+        </article>
+        <article class="award-audit-card">
+          <span>Melhor sequencia valida</span>
+          <strong>${awardAudit.bestWinStreak} vitorias</strong>
+          <small>Melhor serie historica sem faltas pelo meio.</small>
+        </article>
+        <article class="award-audit-card">
+          <span>Forma por participacoes</span>
+          <strong>${awardAudit.bestWinsInFive}/5</strong>
+          <small>Melhor janela de 5 jogos em que participou.</small>
+        </article>
       </div>
     </section>
 
@@ -1545,7 +1597,7 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Ultimos 5 da equipa</h3>
+      <h3>Ultimos 20 da equipa</h3>
       ${teamRecentItems.length ? `
         <div class="profile-games">
           ${teamRecentItems.map((item) => renderTeamRecentGameRow(item)).join("")}
@@ -1554,10 +1606,10 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Ultimos jogos do jogador</h3>
-      ${summary.games.length ? `
+      <h3>Ultimos 20 jogos do jogador</h3>
+      ${playerRecentItems.length ? `
         <div class="profile-games">
-          ${summary.games.slice(0, FORM_LOOKBACK_GAMES).map((item) => renderPlayerGameRow(item)).join("")}
+          ${playerRecentItems.map((item) => renderPlayerGameRow(item)).join("")}
         </div>
       ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
     </section>
@@ -1703,25 +1755,134 @@ function isShowcaseAwardKey(key) {
   return Boolean(PLAYER_CARD_VARIANTS[key] && !FIELD_ONLY_CARD_KEYS.has(key));
 }
 
+function getAwardsUnlockedByGame(playerId, game) {
+  if (!isFinishedGame(game) || !getPlayerParticipation(game, playerId)) return [];
+  const orderedGames = getFinishedGamesAsc(state.games);
+  const targetIndex = orderedGames.findIndex((item) => item.id === game.id);
+  if (targetIndex < 0) return [];
+  const gamesUntilBefore = orderedGames.slice(0, targetIndex);
+  const gamesUntilThis = orderedGames.slice(0, targetIndex + 1);
+  const before = new Set(getAwardKeysForGames(playerId, gamesUntilBefore));
+  return getAwardKeysForGames(playerId, gamesUntilThis)
+    .filter((key) => !before.has(key))
+    .filter(isShowcaseAwardKey)
+    .map((key) => PLAYER_CARD_VARIANTS[key])
+    .filter(Boolean);
+}
+
+function getAwardKeysForGames(playerId, games) {
+  const counts = new Map();
+  const audit = getPlayerWinAwardAudit(playerId, games);
+  for (let streak = 1; streak <= Math.min(audit.bestWinStreak, 5); streak += 1) {
+    addAwardCount(counts, `win_${streak}x`);
+  }
+
+  const appearances = getPlayerAppearanceRecord(playerId, Number.MAX_SAFE_INTEGER, games).reverse();
+  appearances.forEach((item, index) => {
+    const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
+    if (windowItems.length === FORM_LOOKBACK_GAMES) {
+      const wins = windowItems.filter((entry) => entry.outcome === "win").length;
+      if (wins >= 5) addAwardCount(counts, "form_5w_5");
+      else if (wins >= 4) addAwardCount(counts, "form_4w_5");
+      else if (wins >= 3) addAwardCount(counts, "form_3w_5");
+    }
+  });
+
+  return [...counts.keys()];
+}
+
+function getFinishedGamesAsc(games = state.games) {
+  return [...games].filter(isFinishedGame).sort((a, b) => {
+    const timeDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    return timeDiff || String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function getFinishedGamesDesc(games = state.games) {
+  return [...games].filter(isFinishedGame).sort((a, b) => {
+    const timeDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+    return timeDiff || String(b.id).localeCompare(String(a.id));
+  });
+}
+
+function getPlayerTeamRecord(playerId, limit = PROFILE_HISTORY_LIMIT, games = state.games) {
+  return getFinishedGamesDesc(games)
+    .slice(0, limit)
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      return {
+        game,
+        participation,
+        outcome: participation ? getPlayerOutcome(game, participation.side) : "absent",
+      };
+    });
+}
+
+function getPlayerAppearanceRecord(playerId, limit = PROFILE_HISTORY_LIMIT, games = state.games) {
+  return getFinishedGamesDesc(games)
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return null;
+      return {
+        game,
+        participation,
+        side: participation.side,
+        teamLabel: participation.teamLabel,
+        wasBench: participation.wasBench,
+        outcome: getPlayerOutcome(game, participation.side),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function getPlayerWinAwardAudit(playerId, games = state.games) {
+  let currentWinStreak = 0;
+  let bestWinStreak = 0;
+  let runningWinStreak = 0;
+  const finishedAsc = getFinishedGamesAsc(games);
+
+  finishedAsc.forEach((game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    if (!participation || getPlayerOutcome(game, participation.side) !== "win") {
+      runningWinStreak = 0;
+      return;
+    }
+    runningWinStreak += 1;
+    bestWinStreak = Math.max(bestWinStreak, runningWinStreak);
+  });
+
+  for (const game of getFinishedGamesDesc(games)) {
+    const participation = getPlayerParticipation(game, playerId);
+    if (!participation || getPlayerOutcome(game, participation.side) !== "win") break;
+    currentWinStreak += 1;
+  }
+
+  const appearancesAsc = getPlayerAppearanceRecord(playerId, Number.MAX_SAFE_INTEGER, games).reverse();
+  let bestWinsInFive = 0;
+  appearancesAsc.forEach((item, index) => {
+    const windowItems = appearancesAsc.slice(Math.max(0, index - 4), index + 1);
+    if (windowItems.length === FORM_LOOKBACK_GAMES) {
+      bestWinsInFive = Math.max(bestWinsInFive, windowItems.filter((entry) => entry.outcome === "win").length);
+    }
+  });
+
+  return { currentWinStreak, bestWinStreak, bestWinsInFive };
+}
+
 function getPlayerAwardShowcase(playerData) {
   const counts = new Map();
   const appearances = getPlayerFinishedAppearances(playerData.id, state.games, "asc");
-  const finishedGamesAsc = [...state.games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (!appearances.length) {
     addAwardCount(counts, "rookie");
   }
 
-  let winStreak = 0;
-  finishedGamesAsc.forEach((game) => {
-    const participation = getPlayerParticipation(game, playerData.id);
-    if (!participation || getPlayerOutcome(game, participation.side) !== "win") {
-      winStreak = 0;
-      return;
-    }
-    winStreak += 1;
-    addAwardCount(counts, `win_${Math.min(winStreak, 5)}x`);
-  });
+  const awardAudit = getPlayerWinAwardAudit(playerData.id);
+  const cappedBestWinStreak = Math.min(awardAudit.bestWinStreak, 5);
+  for (let streak = 1; streak <= cappedBestWinStreak; streak += 1) {
+    addAwardCount(counts, `win_${streak}x`);
+  }
 
   appearances.forEach((item, index) => {
     const windowItems = appearances.slice(Math.max(0, index - 4), index + 1);
@@ -2235,7 +2396,8 @@ function renderRecordDots(record, options = {}) {
   const labels = { win: "V", draw: "E", loss: "D", absent: "-" };
   const titles = { win: "Vitoria", draw: "Empate", loss: "Derrota", absent: "Nao jogou" };
   const visibleRecord = options.chronological ? [...record].reverse() : record;
-  return visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("");
+  const wrapClass = options.wrap ? " record-dots-wrap" : "";
+  return `<span class="record-dots${wrapClass}">${visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("")}</span>`;
 }
 
 function renderTeamRecentGameRow(item) {
@@ -4057,6 +4219,7 @@ function renderMvpVoteGate() {
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
     els.mvpGate.innerHTML = "";
+    renderAwardRevealGate();
     return;
   }
 
@@ -4082,6 +4245,43 @@ function renderMvpVoteGate() {
     if (!linkedPlayer || !candidateId) return;
     const ok = await saveMvpVote(game, linkedPlayer, candidateId);
     if (ok) render();
+  });
+}
+
+function getPendingAwardRevealRequirement() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) return null;
+  const seen = getSeenAwardReveals();
+  const game = getFinishedGamesDesc(state.games)
+    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
+  if (!game || !getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
+  const awards = getAwardsUnlockedByGame(linkedPlayer.id, game)
+    .filter((award) => !seen.has(getAwardRevealKey(linkedPlayer.id, game.id, award.key)));
+  return awards.length ? { playerData: linkedPlayer, game, awards, seen } : null;
+}
+
+function renderAwardRevealGate() {
+  if (!els.mvpGate) return;
+  const requirement = getPendingAwardRevealRequirement();
+  if (!requirement) return;
+  document.body.classList.add("mvp-gate-open");
+  els.mvpGate.classList.remove("hidden");
+  const { playerData, game, awards, seen } = requirement;
+  els.mvpGate.innerHTML = `
+    <div class="award-reveal-card">
+      <p class="eyebrow">Carta desbloqueada</p>
+      <h2>${awards.length > 1 ? "Novas cartas desbloqueadas" : "Nova carta desbloqueada"}</h2>
+      <p>${formatDate(game.date)}</p>
+      <div class="award-reveal-grid">
+        ${awards.map((award) => renderPlayerCard(playerData, { mode: "award", variant: award })).join("")}
+      </div>
+      <button class="primary-btn" data-dismiss-award-reveal>Continuar</button>
+    </div>
+  `;
+  els.mvpGate.querySelector("[data-dismiss-award-reveal]")?.addEventListener("click", () => {
+    awards.forEach((award) => seen.add(getAwardRevealKey(playerData.id, game.id, award.key)));
+    saveSeenAwardReveals(seen);
+    render();
   });
 }
 
