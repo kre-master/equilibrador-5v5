@@ -4235,15 +4235,12 @@ function getPendingAwardRevealRequirement() {
   const linkedPlayer = getLinkedPlayer();
   if (!linkedPlayer) return null;
   const seen = getSeenAwardReveals();
-  const finishedGames = getFinishedGamesDesc(state.games);
-  for (const game of finishedGames) {
-    if (!getPlayerParticipation(game, linkedPlayer.id)) continue;
-    if (!getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
-    const awards = getAwardsUnlockedByGame(linkedPlayer.id, game)
-      .filter((award) => !seen.has(getAwardRevealKey(linkedPlayer.id, game.id, award.key)));
-    if (awards.length) return { playerData: linkedPlayer, game, awards, seen };
-  }
-  return null;
+  const game = getFinishedGamesDesc(state.games)
+    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
+  if (!game || !getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
+  const awards = getAwardsUnlockedByGame(linkedPlayer.id, game)
+    .filter((award) => !seen.has(getAwardRevealKey(linkedPlayer.id, game.id, award.key)));
+  return awards.length ? { playerData: linkedPlayer, game, awards, seen } : null;
 }
 
 function renderAwardRevealGate() {
