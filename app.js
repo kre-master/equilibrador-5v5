@@ -50,6 +50,8 @@ const CARD_AWARD_PRIORITY = [
 const FIELD_ONLY_CARD_KEYS = new Set(["champion_spring", "champion_summer", "champion_autumn", "champion_winter"]);
 
 const FORM_LOOKBACK_GAMES = 5;
+const PROFILE_HISTORY_LIMIT = 20;
+const AWARD_REVEAL_STORAGE_KEY = "footer-award-reveals-v1";
 const FORM_RATING_CAP = 7;
 const TEAM_RADAR_MIN = 55;
 const TEAM_RADAR_MAX = 75;
@@ -1701,6 +1703,79 @@ function addAwardCount(counts, key, amount = 1) {
 
 function isShowcaseAwardKey(key) {
   return Boolean(PLAYER_CARD_VARIANTS[key] && !FIELD_ONLY_CARD_KEYS.has(key));
+}
+
+function getFinishedGamesAsc(games = state.games) {
+  return [...games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function getFinishedGamesDesc(games = state.games) {
+  return [...games].filter(isFinishedGame).sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function getPlayerTeamRecord(playerId, limit = PROFILE_HISTORY_LIMIT, games = state.games) {
+  return getFinishedGamesDesc(games)
+    .slice(0, limit)
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      return {
+        game,
+        participation,
+        outcome: participation ? getPlayerOutcome(game, participation.side) : "absent",
+      };
+    });
+}
+
+function getPlayerAppearanceRecord(playerId, limit = PROFILE_HISTORY_LIMIT, games = state.games) {
+  return getFinishedGamesDesc(games)
+    .map((game) => {
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return null;
+      return {
+        game,
+        participation,
+        side: participation.side,
+        teamLabel: participation.teamLabel,
+        wasBench: participation.wasBench,
+        outcome: getPlayerOutcome(game, participation.side),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function getPlayerWinAwardAudit(playerId, games = state.games) {
+  let currentWinStreak = 0;
+  let bestWinStreak = 0;
+  let runningWinStreak = 0;
+  const finishedAsc = getFinishedGamesAsc(games);
+
+  finishedAsc.forEach((game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    if (!participation || getPlayerOutcome(game, participation.side) !== "win") {
+      runningWinStreak = 0;
+      return;
+    }
+    runningWinStreak += 1;
+    bestWinStreak = Math.max(bestWinStreak, runningWinStreak);
+  });
+
+  for (const game of getFinishedGamesDesc(games)) {
+    const participation = getPlayerParticipation(game, playerId);
+    if (!participation || getPlayerOutcome(game, participation.side) !== "win") break;
+    currentWinStreak += 1;
+  }
+
+  const appearancesAsc = getPlayerAppearanceRecord(playerId, Number.MAX_SAFE_INTEGER, games).reverse();
+  let bestWinsInFive = 0;
+  appearancesAsc.forEach((item, index) => {
+    const windowItems = appearancesAsc.slice(Math.max(0, index - 4), index + 1);
+    if (windowItems.length === FORM_LOOKBACK_GAMES) {
+      bestWinsInFive = Math.max(bestWinsInFive, windowItems.filter((entry) => entry.outcome === "win").length);
+    }
+  });
+
+  return { currentWinStreak, bestWinStreak, bestWinsInFive };
 }
 
 function getPlayerAwardShowcase(playerData) {
