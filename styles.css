@@ -661,10 +661,14 @@ h3 {
 
 .record-dots {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
   line-height: 1;
+}
+
+.record-dots-wrap {
+  flex-wrap: wrap;
 }
 
 .record-dots .record-dot {

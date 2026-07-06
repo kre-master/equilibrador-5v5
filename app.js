@@ -1523,8 +1523,8 @@ function renderPlayerProfile() {
       <h3>Historico</h3>
       ${renderHistorySummaryCard(summary, winRate)}
       <div class="recent-summary-grid">
-        ${renderSummaryCard("Ult. 20 equipa", renderRecordDots(teamRecentRecord, { chronological: true }))}
-        ${renderSummaryCard("Ult. 20 jogador", renderRecordDots(playerRecentRecord, { chronological: true }))}
+        ${renderSummaryCard("Ult. 20 equipa", renderRecordDots(teamRecentRecord, { chronological: true, wrap: true }))}
+        ${renderSummaryCard("Ult. 20 jogador", renderRecordDots(playerRecentRecord, { chronological: true, wrap: true }))}
       </div>
     </section>
 
@@ -2328,7 +2328,8 @@ function renderRecordDots(record, options = {}) {
   const labels = { win: "V", draw: "E", loss: "D", absent: "-" };
   const titles = { win: "Vitoria", draw: "Empate", loss: "Derrota", absent: "Nao jogou" };
   const visibleRecord = options.chronological ? [...record].reverse() : record;
-  return `<span class="record-dots">${visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("")}</span>`;
+  const wrapClass = options.wrap ? " record-dots-wrap" : "";
+  return `<span class="record-dots${wrapClass}">${visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("")}</span>`;
 }
 
 function renderTeamRecentGameRow(item) {
