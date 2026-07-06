@@ -1505,8 +1505,11 @@ function renderPlayerProfile() {
   const form = getPlayerForm(playerData);
   const synergies = getPlayerSynergies(playerData.id);
   const variant = getPlayerCardVariant(playerData, form);
-  const teamRecentItems = getPlayerTeamRecentItems(playerData.id);
+  const teamRecentItems = getPlayerTeamRecord(playerData.id, PROFILE_HISTORY_LIMIT);
   const teamRecentRecord = teamRecentItems.map((item) => item.outcome);
+  const playerRecentItems = getPlayerAppearanceRecord(playerData.id, PROFILE_HISTORY_LIMIT);
+  const playerRecentRecord = playerRecentItems.map((item) => item.outcome);
+  const awardAudit = getPlayerWinAwardAudit(playerData.id);
   const awards = getPlayerAwardShowcase(playerData);
 
   els.playerProfile.innerHTML = `
@@ -1520,8 +1523,29 @@ function renderPlayerProfile() {
       <h3>Historico</h3>
       ${renderHistorySummaryCard(summary, winRate)}
       <div class="recent-summary-grid">
-        ${renderSummaryCard("Ult. 5 equipa", renderRecordDots(teamRecentRecord, { chronological: true }))}
-        ${renderSummaryCard("Ult. 5 jogador", renderRecordDots(form.recentRecord, { chronological: true }))}
+        ${renderSummaryCard("Ult. 20 equipa", renderRecordDots(teamRecentRecord, { chronological: true }))}
+        ${renderSummaryCard("Ult. 20 jogador", renderRecordDots(playerRecentRecord, { chronological: true }))}
+      </div>
+    </section>
+
+    <section class="profile-section">
+      <h3>Auditoria de cartas</h3>
+      <div class="award-audit-grid">
+        <article class="award-audit-card">
+          <span>Sequencia atual</span>
+          <strong>${awardAudit.currentWinStreak} vitorias</strong>
+          <small>Jogos consecutivos da equipa com presenca e vitoria.</small>
+        </article>
+        <article class="award-audit-card">
+          <span>Melhor sequencia valida</span>
+          <strong>${awardAudit.bestWinStreak} vitorias</strong>
+          <small>Melhor serie historica sem faltas pelo meio.</small>
+        </article>
+        <article class="award-audit-card">
+          <span>Forma por participacoes</span>
+          <strong>${awardAudit.bestWinsInFive}/5</strong>
+          <small>Melhor janela de 5 jogos em que participou.</small>
+        </article>
       </div>
     </section>
 
@@ -1547,7 +1571,7 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Ultimos 5 da equipa</h3>
+      <h3>Ultimos 20 da equipa</h3>
       ${teamRecentItems.length ? `
         <div class="profile-games">
           ${teamRecentItems.map((item) => renderTeamRecentGameRow(item)).join("")}
@@ -1556,10 +1580,10 @@ function renderPlayerProfile() {
     </section>
 
     <section class="profile-section">
-      <h3>Ultimos jogos do jogador</h3>
-      ${summary.games.length ? `
+      <h3>Ultimos 20 jogos do jogador</h3>
+      ${playerRecentItems.length ? `
         <div class="profile-games">
-          ${summary.games.slice(0, FORM_LOOKBACK_GAMES).map((item) => renderPlayerGameRow(item)).join("")}
+          ${playerRecentItems.map((item) => renderPlayerGameRow(item)).join("")}
         </div>
       ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
     </section>
@@ -2304,7 +2328,7 @@ function renderRecordDots(record, options = {}) {
   const labels = { win: "V", draw: "E", loss: "D", absent: "-" };
   const titles = { win: "Vitoria", draw: "Empate", loss: "Derrota", absent: "Nao jogou" };
   const visibleRecord = options.chronological ? [...record].reverse() : record;
-  return visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("");
+  return `<span class="record-dots">${visibleRecord.map((outcome) => `<span class="record-dot ${outcome}" title="${titles[outcome] || ""}">${labels[outcome] || "-"}</span>`).join("")}</span>`;
 }
 
 function renderTeamRecentGameRow(item) {

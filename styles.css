@@ -659,6 +659,19 @@ h3 {
   background: rgba(255,255,255,.74);
 }
 
+.record-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  line-height: 1;
+}
+
+.record-dots .record-dot {
+  margin-right: 0;
+  flex: 0 0 auto;
+}
+
 .record-dot.win { color: #1f7a4d; }
 .record-dot.draw { color: #66736d; }
 .record-dot.loss { color: #c86422; }
@@ -2088,6 +2101,39 @@ th.stat-col {
   font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.award-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.award-audit-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(190, 205, 198, 0.52);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(247,250,249,.72);
+}
+
+.award-audit-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.award-audit-card strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.award-audit-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .profile-games {
