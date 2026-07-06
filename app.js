@@ -129,6 +129,7 @@ let authActionBusy = false;
 let currentPlayerProfileId = null;
 let currentViewName = "events";
 let navigationHistoryReady = false;
+let awardRevealSessionSeenKeys = new Set();
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
@@ -254,15 +255,17 @@ function loadState() {
 function getSeenAwardReveals() {
   try {
     const parsed = JSON.parse(localStorage.getItem(AWARD_REVEAL_STORAGE_KEY) || "[]");
-    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
+    const storedKeys = Array.isArray(parsed) ? parsed.map(String) : [];
+    return new Set([...storedKeys, ...awardRevealSessionSeenKeys]);
   } catch {
-    return new Set();
+    return new Set(awardRevealSessionSeenKeys);
   }
 }
 
 function saveSeenAwardReveals(keys) {
+  awardRevealSessionSeenKeys = new Set([...keys].map(String));
   try {
-    localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...keys]));
+    localStorage.setItem(AWARD_REVEAL_STORAGE_KEY, JSON.stringify([...awardRevealSessionSeenKeys]));
     return true;
   } catch (error) {
     console.warn("Could not save seen award reveals", error);
@@ -1789,11 +1792,17 @@ function getAwardKeysForGames(playerId, games) {
 }
 
 function getFinishedGamesAsc(games = state.games) {
-  return [...games].filter(isFinishedGame).sort((a, b) => new Date(a.date) - new Date(b.date));
+  return [...games].filter(isFinishedGame).sort((a, b) => {
+    const timeDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    return timeDiff || String(a.id).localeCompare(String(b.id));
+  });
 }
 
 function getFinishedGamesDesc(games = state.games) {
-  return [...games].filter(isFinishedGame).sort((a, b) => new Date(b.date) - new Date(a.date));
+  return [...games].filter(isFinishedGame).sort((a, b) => {
+    const timeDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+    return timeDiff || String(b.id).localeCompare(String(a.id));
+  });
 }
 
 function getPlayerTeamRecord(playerId, limit = PROFILE_HISTORY_LIMIT, games = state.games) {
