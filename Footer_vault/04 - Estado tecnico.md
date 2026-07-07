@@ -276,6 +276,13 @@ Implementacao:
 - Revelacoes ficam marcadas por `playerId:gameId:awardKey` no dispositivo; ha fallback em memoria se `localStorage` falhar.
 - Cache-buster actualizado para `20260706-awardreveal1`.
 
+## 2026-07-07 - Melhorias na revelacao de cartas
+
+- Modal de carta desbloqueada passa a mostrar o nome e a descricao da carta abaixo da carta visual.
+- Quando ha varias cartas desbloqueadas, mostra o total de cartas e usa uma faixa horizontal arrastavel com `scroll-snap`.
+- Adicionada verificacao local `scripts/check-award-reveal-ui.mjs` para garantir contador, nome/descricao e carrossel.
+- Validacoes: `node scripts/check-award-reveal-ui.mjs`, `node --check app.js`, `npm.cmd run build:web`, `node --check www\app.js`.
+
 ## Comandos uteis
 
 Ver estado:

@@ -4271,9 +4271,10 @@ function renderAwardRevealGate() {
     <div class="award-reveal-card">
       <p class="eyebrow">Carta desbloqueada</p>
       <h2>${awards.length > 1 ? "Novas cartas desbloqueadas" : "Nova carta desbloqueada"}</h2>
+      ${awards.length > 1 ? `<p class="award-reveal-count" data-award-reveal-count>${awards.length} cartas desbloqueadas</p>` : ""}
       <p>${formatDate(game.date)}</p>
-      <div class="award-reveal-grid">
-        ${awards.map((award) => renderPlayerCard(playerData, { mode: "award", variant: award })).join("")}
+      <div class="award-reveal-track" aria-label="Cartas desbloqueadas">
+        ${awards.map((award) => renderAwardRevealItem(playerData, award)).join("")}
       </div>
       <button class="primary-btn" data-dismiss-award-reveal>Continuar</button>
     </div>
@@ -4283,6 +4284,18 @@ function renderAwardRevealGate() {
     saveSeenAwardReveals(seen);
     render();
   });
+}
+
+function renderAwardRevealItem(playerData, award) {
+  return `
+    <article class="award-reveal-item">
+      ${renderPlayerCard(playerData, { mode: "award", variant: award })}
+      <div class="award-reveal-copy">
+        <strong class="award-reveal-title">${escapeHtml(award.label)}</strong>
+        <p class="award-reveal-description">${escapeHtml(award.description)}</p>
+      </div>
+    </article>
+  `;
 }
 
 function countMvpVotes(votes) {

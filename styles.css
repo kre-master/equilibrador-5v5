@@ -1149,21 +1149,53 @@ body.mvp-gate-open {
   margin: 0;
 }
 
+.award-reveal-count {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .award-reveal-card button {
   width: min(100%, 340px);
   justify-self: center;
 }
 
-.award-reveal-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+.award-reveal-track {
+  display: flex;
   gap: 16px;
-  align-items: center;
-  justify-items: center;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  padding: 4px 2px 12px;
+  margin-inline: -2px;
 }
 
-.award-reveal-grid .player-card-award {
+.award-reveal-item {
+  display: grid;
+  flex: 0 0 min(100%, 260px);
+  gap: 12px;
+  justify-items: center;
+  scroll-snap-align: center;
+}
+
+.award-reveal-item .player-card-award {
   width: min(210px, 58vw);
+}
+
+.award-reveal-copy {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 320px);
+  text-align: center;
+}
+
+.award-reveal-title {
+  font-size: 1.05rem;
+}
+
+.award-reveal-description {
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 @keyframes award-reveal-pop {
