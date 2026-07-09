@@ -90,8 +90,18 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Templates novos vivem em `assets/new cards template`.
 - Cartas podem variar por contexto: base, forma, vitorias, MVP, premios e outros.
 - Montra de premios deve mostrar progresso desbloqueadas x/y.
+- Carta `Primeira vitoria` e desbloqueada apenas quando o jogador ganha pela primeira vez um jogo registado e fica na montra permanente.
+- Carta `Primeira vitoria` nao deve ser usada como carta ativa so por o jogador estar numa sequencia atual de 1 vitoria.
 - Cartas `4 em 5` e `5 em 5` contam os ultimos jogos em que o jogador participou; ausencias entre esses jogos nao invalidam a carta.
 - Cartas de `vitorias seguidas` exigem jogos consecutivos da equipa sem ausencia do jogador pelo meio.
+
+## Stats / Hall of Fame
+
+- Deve existir separador `Stats` para historico agregado de jogadores.
+- Stats iniciais: mais vitorias, melhor win rate, mais presencas, mais MVPs, historico de MVPs, maior sequencia de vitorias, maior caloteiro atual e melhor dupla.
+- Melhor dupla exige pelo menos 2 jogos juntos.
+- Melhor win rate deve preferir jogadores com minimo de 5 presencas; se nao houver historico suficiente, pode mostrar os melhores disponiveis.
+- Nao incluir ranking `anti-amuleto`.
 
 ## Campeoes de estacao
 

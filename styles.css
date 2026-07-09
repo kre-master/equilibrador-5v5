@@ -2164,6 +2164,119 @@ th.stat-col {
   line-height: 1;
 }
 
+.stats-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.stats-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-hero-card,
+.stats-ranking-card {
+  border: 1px solid rgba(190, 205, 198, 0.62);
+  border-radius: 20px;
+  background: rgba(247,250,249,.76);
+  box-shadow: 0 12px 30px rgba(26,44,39,.06);
+}
+
+.stats-hero-card {
+  display: grid;
+  gap: 7px;
+  padding: 15px;
+}
+
+.stats-hero-card span,
+.stats-hero-card small,
+.stats-ranking-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.stats-hero-card strong {
+  color: var(--green);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.stats-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-ranking-card {
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+}
+
+.stats-ranking-card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.stats-ranking-list {
+  display: grid;
+  gap: 8px;
+}
+
+.stats-ranking-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid rgba(190, 205, 198, 0.44);
+  border-radius: 15px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,.66);
+}
+
+.stats-ranking-row strong {
+  text-align: right;
+}
+
+.stats-rank-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.stats-player-link {
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stats-player-link:hover {
+  color: var(--green);
+}
+
+.stats-pair-row {
+  grid-template-columns: 32px minmax(0, 1fr) minmax(96px, auto);
+}
+
+.stats-mvp-history-row {
+  grid-template-columns: minmax(130px, .85fr) minmax(0, 1fr) auto;
+}
+
 .section-title-row {
   display: flex;
   align-items: center;
@@ -2768,6 +2881,8 @@ th.stat-col {
   .finance-game-row,
   .profile-grid,
   .summary-grid,
+  .stats-highlight-grid,
+  .stats-rank-grid,
   .finance-summary,
   .add-existing-row,
   .add-guest-row,
@@ -2845,6 +2960,22 @@ th.stat-col {
 
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stats-ranking-row,
+  .stats-pair-row,
+  .stats-mvp-history-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .stats-ranking-row strong,
+  .stats-mvp-history-row small {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .stats-mvp-history-row span {
+    grid-column: 1 / -1;
   }
 
   .recent-summary-grid {

@@ -17,7 +17,7 @@ const FORM_LEVELS = {
 const PLAYER_CARD_VARIANTS = {
   rookie: { key: "rookie", asset: "assets/new cards template/card_rookie.png", label: "Rookie", description: "Jogador ainda sem jogos registados pela equipa." },
   base: { key: "base", asset: "assets/new cards template/card_base.png", label: "Base", description: "Carta normal quando nao existe outro destaque ativo." },
-  win_1x: { key: "win_1x", asset: "assets/new cards template/card_win_1x.png", label: "1 vitoria seguida", description: "Jogador venceu o ultimo jogo da equipa em que participou, sem ausencia pelo meio." },
+  win_1x: { key: "win_1x", asset: "assets/new cards template/card_win_1x.png", label: "Primeira vitoria", description: "Jogador venceu o primeiro jogo desde que ha historico registado." },
   win_2x: { key: "win_2x", asset: "assets/new cards template/card_win_2x.png", label: "2 vitorias seguidas", description: "Jogador venceu dois jogos consecutivos da equipa, sem ausencia pelo meio." },
   win_3x: { key: "win_3x", asset: "assets/new cards template/card_win_3x.png", label: "3 vitorias seguidas", description: "Jogador venceu tres jogos consecutivos da equipa, sem ausencia pelo meio." },
   win_4x: { key: "win_4x", asset: "assets/new cards template/card_win_4x.png", label: "4 vitorias seguidas", description: "Jogador venceu quatro jogos consecutivos da equipa, sem ausencia pelo meio." },
@@ -186,6 +186,7 @@ const els = {
   claimsList: document.querySelector("#claims-list"),
   accountsList: document.querySelector("#accounts-list"),
   paymentsPanel: document.querySelector("#payments-panel"),
+  statsPanel: document.querySelector("#stats-panel"),
   eventForm: document.querySelector("#event-form"),
   eventTitle: document.querySelector("#event-title"),
   eventDate: document.querySelector("#event-date"),
@@ -1344,6 +1345,7 @@ function render() {
   renderClaimsList();
   renderAccountsList();
   renderPaymentsPanel();
+  renderStatsPanel();
   renderEventsList();
   renderPlayerProfile();
   renderMvpVoteGate();
@@ -2014,7 +2016,6 @@ function getActivePlayerCardAward(playerData, form = getPlayerForm(playerData), 
   if (form.winStreak >= 4) return "win_4x";
   if (form.winStreak >= 3) return "win_3x";
   if (form.winStreak >= 2) return "win_2x";
-  if (form.winStreak >= 1) return "win_1x";
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 5) return "form_5w_5";
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 4) return "form_4w_5";
   if (form.recentGamesCount >= FORM_LOOKBACK_GAMES && form.wins >= 3) return "form_3w_5";
@@ -2797,6 +2798,240 @@ function renderPaymentsPanel() {
   els.paymentsPanel.querySelectorAll("[data-edit-payment]").forEach((button) => {
     button.addEventListener("click", () => editPayment(button.dataset.editPayment));
   });
+}
+
+function renderStatsPanel() {
+  if (!els.statsPanel) return;
+  const rows = getPlayerHistoryStatsRows();
+  const activeRows = rows.filter((row) => row.appearances > 0 || row.mvpCount > 0);
+  const winRateBaseRows = activeRows.filter((row) => row.appearances >= 5);
+  const winRateRows = (winRateBaseRows.length ? winRateBaseRows : activeRows)
+    .slice()
+    .sort(sortByWinRate)
+    .slice(0, 5);
+  const currentDebts = getCurrentDebtRows().slice(0, 5);
+  const pairRows = getBestPairStats(5);
+  const mvpHistoryRows = getMvpHistoryRows(10);
+
+  if (!activeRows.length) {
+    els.statsPanel.innerHTML = `<div class="empty-state">Ainda nao ha historico suficiente para gerar stats.</div>`;
+    return;
+  }
+
+  const mostWins = activeRows.slice().sort(sortByWins)[0];
+  const mostAppearances = activeRows.slice().sort(sortByAppearances)[0];
+  const mostMvps = activeRows.slice().sort(sortByMvps)[0];
+  const bestStreak = activeRows.slice().sort(sortByWinStreak)[0];
+
+  els.statsPanel.innerHTML = `
+    <div class="stats-highlight-grid">
+      ${renderStatsHighlight("Mais vitorias", mostWins?.wins || 0, mostWins ? mostWins.player : null, `${mostWins?.appearances || 0} presencas`)}
+      ${renderStatsHighlight("Mais presencas", mostAppearances?.appearances || 0, mostAppearances ? mostAppearances.player : null, `${mostAppearances?.wins || 0} vitorias`)}
+      ${renderStatsHighlight("Mais MVPs", mostMvps?.mvpCount || 0, mostMvps ? mostMvps.player : null, `${mostMvps?.appearances || 0} jogos`)}
+      ${renderStatsHighlight("Maior sequencia", bestStreak?.bestWinStreak || 0, bestStreak ? bestStreak.player : null, "vitorias seguidas")}
+    </div>
+
+    <div class="stats-rank-grid">
+      ${renderStatsRanking("Mais vitorias", activeRows.slice().sort(sortByWins).slice(0, 5), (row) => `${row.wins}V em ${row.appearances} jogos`)}
+      ${renderStatsRanking("Melhor win rate", winRateRows, (row) => `${row.winRate}% (${row.wins}V/${row.appearances}J)`)}
+      ${renderStatsRanking("Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
+      ${renderStatsRanking("Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
+      ${renderStatsRanking("Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
+      ${renderDebtRanking(currentDebts)}
+      ${renderPairRanking(pairRows)}
+      ${renderMvpHistoryRanking(mvpHistoryRows)}
+    </div>
+  `;
+
+  els.statsPanel.querySelectorAll("[data-open-stats-player]").forEach((button) => {
+    button.addEventListener("click", () => openPlayerProfile(button.dataset.openStatsPlayer));
+  });
+}
+
+function getPlayerHistoryStatsRows() {
+  return state.players.map((playerData) => {
+    const summary = getPlayerMatchSummary(playerData.id);
+    const finishedGames = summary.games.filter((item) => item.outcome !== "open");
+    const appearances = finishedGames.length;
+    const mvpCount = getFinishedGames().reduce((count, game) => count + (getOfficialMvpIdsForGame(game).has(playerData.id) ? 1 : 0), 0);
+    const awardAudit = getPlayerWinAwardAudit(playerData.id);
+    return {
+      player: playerData,
+      appearances,
+      wins: summary.wins,
+      draws: summary.draws,
+      losses: summary.losses,
+      winRate: appearances ? Math.round((summary.wins / appearances) * 100) : 0,
+      mvpCount,
+      bestWinStreak: awardAudit.bestWinStreak,
+    };
+  });
+}
+
+function getCurrentDebtRows() {
+  const report = buildMonthlyPaymentReport(monthKey(new Date()));
+  return report.rows
+    .filter((row) => row.currentBalance > 0)
+    .sort((a, b) => b.currentBalance - a.currentBalance || a.player.name.localeCompare(b.player.name));
+}
+
+function getBestPairStats(limit = 5) {
+  const pairs = new Map();
+  getFinishedGames().forEach((game) => {
+    ["A", "B"].forEach((side) => {
+      const ids = getGameSidePlayerIds(game, side).filter((id) => findPlayer(id)).sort();
+      const outcome = getPlayerOutcome(game, side);
+      const margin = outcome === "win" ? Math.max(0, getTeamGoalDiff(game, side)) : 0;
+      for (let i = 0; i < ids.length; i += 1) {
+        for (let j = i + 1; j < ids.length; j += 1) {
+          const key = `${ids[i]}::${ids[j]}`;
+          const stats = pairs.get(key) || {
+            playerIds: [ids[i], ids[j]],
+            gamesTogether: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            winMarginTotal: 0,
+          };
+          stats.gamesTogether += 1;
+          if (outcome === "win") {
+            stats.wins += 1;
+            stats.winMarginTotal += margin;
+          }
+          if (outcome === "draw") stats.draws += 1;
+          if (outcome === "loss") stats.losses += 1;
+          pairs.set(key, stats);
+        }
+      }
+    });
+  });
+
+  return [...pairs.values()]
+    .filter((stats) => stats.gamesTogether >= 2)
+    .map((stats) => ({
+      ...stats,
+      players: stats.playerIds.map(findPlayer).filter(Boolean),
+      winRate: Math.round((stats.wins / stats.gamesTogether) * 100),
+      score: stats.wins * 12 + stats.winMarginTotal * 2 + stats.gamesTogether + (stats.wins / stats.gamesTogether),
+    }))
+    .filter((stats) => stats.players.length === 2)
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.wins - a.wins ||
+      b.winMarginTotal - a.winMarginTotal ||
+      b.gamesTogether - a.gamesTogether ||
+      a.players.map((playerData) => playerData.name).join(" + ").localeCompare(b.players.map((playerData) => playerData.name).join(" + "))
+    )
+    .slice(0, limit);
+}
+
+function getMvpHistoryRows(limit = 10) {
+  return getFinishedGames()
+    .map((game) => {
+      const winners = [...getOfficialMvpIdsForGame(game)].map(findPlayer).filter(Boolean);
+      return { game, winners, totalVotes: getMvpTotalVotes(game.id) };
+    })
+    .filter((row) => row.winners.length)
+    .slice(0, limit);
+}
+
+function sortByWins(a, b) {
+  return b.wins - a.wins || b.appearances - a.appearances || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByWinRate(a, b) {
+  return b.winRate - a.winRate || b.wins - a.wins || b.appearances - a.appearances || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByAppearances(a, b) {
+  return b.appearances - a.appearances || b.wins - a.wins || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByMvps(a, b) {
+  return b.mvpCount - a.mvpCount || b.wins - a.wins || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByWinStreak(a, b) {
+  return b.bestWinStreak - a.bestWinStreak || b.wins - a.wins || a.player.name.localeCompare(b.player.name);
+}
+
+function renderStatsHighlight(label, value, playerData, detail) {
+  return `
+    <article class="stats-hero-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${playerData ? `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>` : "<em>-</em>"}
+      <small>${escapeHtml(detail || "")}</small>
+    </article>
+  `;
+}
+
+function renderStatsRanking(title, rows, valueRenderer) {
+  return `
+    <section class="stats-ranking-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row, index) => `
+          <article class="stats-ranking-row">
+            <span class="stats-rank-number">${index + 1}</span>
+            <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
+            <strong>${escapeHtml(valueRenderer(row))}</strong>
+          </article>
+        `).join("") : `<div class="empty-state compact">Sem dados.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderDebtRanking(rows) {
+  return `
+    <section class="stats-ranking-card">
+      <h3>Maior caloteiro atual</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row, index) => `
+          <article class="stats-ranking-row">
+            <span class="stats-rank-number">${index + 1}</span>
+            <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
+            <strong>${euro(row.currentBalance)}</strong>
+          </article>
+        `).join("") : `<div class="empty-state compact">Ninguem em divida neste mes.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderPairRanking(rows) {
+  return `
+    <section class="stats-ranking-card">
+      <h3>Melhor dupla</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row, index) => `
+          <article class="stats-ranking-row stats-pair-row">
+            <span class="stats-rank-number">${index + 1}</span>
+            <span>${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join(" + ")}</span>
+            <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
+          </article>
+        `).join("") : `<div class="empty-state compact">Ainda nao ha duplas com 2 jogos.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderMvpHistoryRanking(rows) {
+  return `
+    <section class="stats-ranking-card stats-history-card">
+      <h3>Historico de MVPs</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row) => `
+          <article class="stats-ranking-row stats-mvp-history-row">
+            <span>${escapeHtml(formatDate(row.game.date))}</span>
+            <strong>${row.winners.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join(" + ")}</strong>
+            <small>${row.totalVotes} votos</small>
+          </article>
+        `).join("") : `<div class="empty-state compact">Ainda nao ha MVPs fechados.</div>`}
+      </div>
+    </section>
+  `;
 }
 
 function renderPaymentRow(row, games) {

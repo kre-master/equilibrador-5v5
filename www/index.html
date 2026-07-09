@@ -7,15 +7,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Footer">
     <title>Footer</title>
-    <link rel="manifest" href="manifest.webmanifest?v=20260709-mvpreveal1">
-    <link rel="stylesheet" href="styles.css?v=20260709-mvpreveal1">
+    <link rel="manifest" href="manifest.webmanifest?v=20260709-stats1">
+    <link rel="stylesheet" href="styles.css?v=20260709-stats1">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="topbar-main">
           <div class="brand">
-            <img class="brand-logo" src="assets/footer-logo.png?v=20260709-mvpreveal1" width="48" height="48" alt="">
+            <img class="brand-logo" src="assets/footer-logo.png?v=20260709-stats1" width="48" height="48" alt="">
             <h1>Footer</h1>
           </div>
           <div class="account-bar">
@@ -30,6 +30,7 @@
           <button class="tab" data-view="today">Gerar</button>
           <button class="tab" data-view="account">Conta</button>
           <button class="tab" data-view="players">Jogadores</button>
+          <button class="tab" data-view="stats">Stats</button>
           <button class="tab admin-only" data-view="payments">Pagamentos</button>
           <button class="tab admin-only" data-view="claims">Pedidos</button>
           <button class="tab" data-view="games">Historico</button>
@@ -251,6 +252,18 @@
           </section>
         </section>
 
+        <section class="view" id="view-stats">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Hall of Fame</p>
+                <h2>Stats</h2>
+              </div>
+            </div>
+            <div id="stats-panel" class="stats-panel"></div>
+          </section>
+        </section>
+
         <section class="view" id="view-payments">
           <section class="panel wide-panel">
             <div class="panel-head">
@@ -290,8 +303,8 @@
     </div>
 
     <canvas id="export-canvas" width="1600" height="2200" hidden></canvas>
-    <script src="app-config.js?v=20260709-mvpreveal1"></script>
+    <script src="app-config.js?v=20260709-stats1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260709-mvpreveal1"></script>
+    <script src="app.js?v=20260709-stats1"></script>
   </body>
 </html>

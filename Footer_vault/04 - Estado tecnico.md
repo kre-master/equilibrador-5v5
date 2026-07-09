@@ -292,6 +292,18 @@ Implementacao:
 - O popup de MVP oficial aparece antes das cartas desbloqueadas e fica marcado localmente por `playerId:gameId:official_mvp`.
 - Cache-buster actualizado para `20260709-mvpreveal1`.
 
+## 2026-07-09 - Stats e Primeira vitoria
+
+- Adicionado separador `Stats` com Hall of Fame agregado.
+- Rankings incluidos: mais vitorias, melhor win rate, mais presencas, mais MVPs, maior sequencia de vitorias, maior caloteiro atual, melhor dupla e historico de MVPs.
+- Ranking `anti-amuleto` ficou de fora por decisao do utilizador.
+- Melhor dupla exige pelo menos 2 jogos juntos.
+- Melhor win rate usa minimo de 5 presencas quando existir historico suficiente.
+- Carta `1 vitoria seguida` passa a chamar-se `Primeira vitoria`.
+- `Primeira vitoria` e premio unico de montra, desbloqueado apenas na primeira vitoria historica do jogador.
+- `Primeira vitoria` deixou de ser carta ativa por sequencia atual de 1 vitoria.
+- Cache-buster actualizado para `20260709-stats1`.
+
 ## Comandos uteis
 
 Ver estado:
