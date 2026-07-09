@@ -283,6 +283,15 @@ Implementacao:
 - Adicionada verificacao local `scripts/check-award-reveal-ui.mjs` para garantir contador, nome/descricao e carrossel.
 - Validacoes: `node scripts/check-award-reveal-ui.mjs`, `node --check app.js`, `npm.cmd run build:web`, `node --check www\app.js`.
 
+## 2026-07-09 - MVP historico e popup de eleito MVP
+
+- Corrigida a base real Supabase: a funcao `public.mvp_vote_counts()` estava em falta apesar de existirem votos em `game_mvp_votes`.
+- Confirmacao na base: 57 votos MVP em 7 jogos; 6 jogos ja tinham minimo de 5 votos.
+- O painel MVP volta a usar contagens agregadas sem expor quem votou em quem.
+- Adicionado popup `Foste eleito MVP` quando os votos do ultimo jogo finalizado do jogador estao fechados e o jogador e MVP oficial.
+- O popup de MVP oficial aparece antes das cartas desbloqueadas e fica marcado localmente por `playerId:gameId:official_mvp`.
+- Cache-buster actualizado para `20260709-mvpreveal1`.
+
 ## Comandos uteis
 
 Ver estado:

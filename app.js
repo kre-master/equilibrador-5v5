@@ -4219,6 +4219,7 @@ function renderMvpVoteGate() {
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
     els.mvpGate.innerHTML = "";
+    if (renderOfficialMvpRevealGate()) return;
     renderAwardRevealGate();
     return;
   }
@@ -4258,6 +4259,54 @@ function getPendingAwardRevealRequirement() {
   const awards = getAwardsUnlockedByGame(linkedPlayer.id, game)
     .filter((award) => !seen.has(getAwardRevealKey(linkedPlayer.id, game.id, award.key)));
   return awards.length ? { playerData: linkedPlayer, game, awards, seen } : null;
+}
+
+function getPendingOfficialMvpRevealRequirement() {
+  const linkedPlayer = getLinkedPlayer();
+  if (!linkedPlayer) return null;
+  const game = getFinishedGamesDesc(state.games)
+    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
+  if (!game || !isMvpVotingClosed(game)) return null;
+  const mvpIds = getOfficialMvpIdsForGame(game);
+  if (!mvpIds.has(linkedPlayer.id)) return null;
+  const seen = getSeenAwardReveals();
+  const revealKey = getAwardRevealKey(linkedPlayer.id, game.id, "official_mvp");
+  if (seen.has(revealKey)) return null;
+  const variantKey = getMvpStreakCardKey(linkedPlayer.id, game);
+  const variant = PLAYER_CARD_VARIANTS[variantKey] || PLAYER_CARD_VARIANTS.mvp;
+  return { playerData: linkedPlayer, game, variant, seen, revealKey };
+}
+
+function renderOfficialMvpRevealGate() {
+  if (!els.mvpGate) return false;
+  const requirement = getPendingOfficialMvpRevealRequirement();
+  if (!requirement) return false;
+  document.body.classList.add("mvp-gate-open");
+  els.mvpGate.classList.remove("hidden");
+  const { playerData, game, variant, seen, revealKey } = requirement;
+  els.mvpGate.innerHTML = `
+    <div class="award-reveal-card mvp-reveal-card">
+      <p class="eyebrow">MVP interno</p>
+      <h2>Foste eleito MVP</h2>
+      <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
+      <div class="award-reveal-track single">
+        <article class="award-reveal-item">
+          ${renderPlayerCard(playerData, { mode: "award", variant })}
+          <div class="award-reveal-copy">
+            <strong class="award-reveal-title">${escapeHtml(variant.label)}</strong>
+            <p class="award-reveal-description">Foste eleito MVP deste jogo pelos votos fechados.</p>
+          </div>
+        </article>
+      </div>
+      <button class="primary-btn" data-dismiss-mvp-reveal>Continuar</button>
+    </div>
+  `;
+  els.mvpGate.querySelector("[data-dismiss-mvp-reveal]")?.addEventListener("click", () => {
+    seen.add(revealKey);
+    saveSeenAwardReveals(seen);
+    render();
+  });
+  return true;
 }
 
 function renderAwardRevealGate() {
