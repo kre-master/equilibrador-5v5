@@ -304,6 +304,13 @@ Implementacao:
 - `Primeira vitoria` deixou de ser carta ativa por sequencia atual de 1 vitoria.
 - Cache-buster actualizado para `20260709-stats1`.
 
+## 2026-07-09 - UI Stats
+
+- UI do separador `Stats` ficou mais vibrante: cabecalho `Quadro de honra`, cartoes de destaque com acentos visuais e rankings com efeito de podium.
+- Cada titulo principal/ranking de Stats passa a ter emoji decorativo.
+- Mantida a mesma logica de calculo; alteracao e apenas visual.
+- Cache-buster actualizado para `20260709-statsui1`.
+
 ## Comandos uteis
 
 Ver estado:

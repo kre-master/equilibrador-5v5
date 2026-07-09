@@ -2824,19 +2824,32 @@ function renderStatsPanel() {
   const bestStreak = activeRows.slice().sort(sortByWinStreak)[0];
 
   els.statsPanel.innerHTML = `
+    <section class="stats-arena">
+      <div>
+        <p class="eyebrow">Liga Footer</p>
+        <h3>📊 Quadro de honra</h3>
+        <span>Os destaques historicos do grupo, calculados pelos jogos finalizados.</span>
+      </div>
+      <div class="stats-arena-badges">
+        <span>${activeRows.length} jogadores</span>
+        <span>${getFinishedGames().length} jogos</span>
+        <span>${mvpHistoryRows.length} MVPs fechados</span>
+      </div>
+    </section>
+
     <div class="stats-highlight-grid">
-      ${renderStatsHighlight("Mais vitorias", mostWins?.wins || 0, mostWins ? mostWins.player : null, `${mostWins?.appearances || 0} presencas`)}
-      ${renderStatsHighlight("Mais presencas", mostAppearances?.appearances || 0, mostAppearances ? mostAppearances.player : null, `${mostAppearances?.wins || 0} vitorias`)}
-      ${renderStatsHighlight("Mais MVPs", mostMvps?.mvpCount || 0, mostMvps ? mostMvps.player : null, `${mostMvps?.appearances || 0} jogos`)}
-      ${renderStatsHighlight("Maior sequencia", bestStreak?.bestWinStreak || 0, bestStreak ? bestStreak.player : null, "vitorias seguidas")}
+      ${renderStatsHighlight("🏆 Mais vitorias", mostWins?.wins || 0, mostWins ? mostWins.player : null, `${mostWins?.appearances || 0} presencas`)}
+      ${renderStatsHighlight("👟 Mais presencas", mostAppearances?.appearances || 0, mostAppearances ? mostAppearances.player : null, `${mostAppearances?.wins || 0} vitorias`)}
+      ${renderStatsHighlight("⭐ Mais MVPs", mostMvps?.mvpCount || 0, mostMvps ? mostMvps.player : null, `${mostMvps?.appearances || 0} jogos`)}
+      ${renderStatsHighlight("🔥 Maior sequencia", bestStreak?.bestWinStreak || 0, bestStreak ? bestStreak.player : null, "vitorias seguidas")}
     </div>
 
     <div class="stats-rank-grid">
-      ${renderStatsRanking("Mais vitorias", activeRows.slice().sort(sortByWins).slice(0, 5), (row) => `${row.wins}V em ${row.appearances} jogos`)}
-      ${renderStatsRanking("Melhor win rate", winRateRows, (row) => `${row.winRate}% (${row.wins}V/${row.appearances}J)`)}
-      ${renderStatsRanking("Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
-      ${renderStatsRanking("Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
-      ${renderStatsRanking("Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
+      ${renderStatsRanking("🏆 Mais vitorias", activeRows.slice().sort(sortByWins).slice(0, 5), (row) => `${row.wins}V em ${row.appearances} jogos`)}
+      ${renderStatsRanking("📈 Melhor win rate", winRateRows, (row) => `${row.winRate}% (${row.wins}V/${row.appearances}J)`)}
+      ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
+      ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
+      ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
       ${renderDebtRanking(currentDebts)}
       ${renderPairRanking(pairRows)}
       ${renderMvpHistoryRanking(mvpHistoryRows)}
@@ -2972,7 +2985,7 @@ function renderStatsRanking(title, rows, valueRenderer) {
       <h3>${escapeHtml(title)}</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row, index) => `
-          <article class="stats-ranking-row">
+          <article class="stats-ranking-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
             <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
             <strong>${escapeHtml(valueRenderer(row))}</strong>
@@ -2986,10 +2999,10 @@ function renderStatsRanking(title, rows, valueRenderer) {
 function renderDebtRanking(rows) {
   return `
     <section class="stats-ranking-card">
-      <h3>Maior caloteiro atual</h3>
+      <h3>💸 Maior caloteiro atual</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row, index) => `
-          <article class="stats-ranking-row">
+          <article class="stats-ranking-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
             <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
             <strong>${euro(row.currentBalance)}</strong>
@@ -3003,10 +3016,10 @@ function renderDebtRanking(rows) {
 function renderPairRanking(rows) {
   return `
     <section class="stats-ranking-card">
-      <h3>Melhor dupla</h3>
+      <h3>🤝 Melhor dupla</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row, index) => `
-          <article class="stats-ranking-row stats-pair-row">
+          <article class="stats-ranking-row stats-pair-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
             <span>${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join(" + ")}</span>
             <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
@@ -3020,7 +3033,7 @@ function renderPairRanking(rows) {
 function renderMvpHistoryRanking(rows) {
   return `
     <section class="stats-ranking-card stats-history-card">
-      <h3>Historico de MVPs</h3>
+      <h3>🗂️ Historico de MVPs</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row) => `
           <article class="stats-ranking-row stats-mvp-history-row">
