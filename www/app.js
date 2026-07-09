@@ -2809,7 +2809,8 @@ function renderStatsPanel() {
     .slice()
     .sort(sortByWinRate)
     .slice(0, 5);
-  const currentDebts = getCurrentDebtRows().slice(0, 5);
+  const showDebtStats = canShowDebtStats();
+  const currentDebts = showDebtStats ? getCurrentDebtRows().slice(0, 5) : [];
   const pairRows = getBestPairStats(5);
   const mvpHistoryRows = getMvpHistoryRows(10);
 
@@ -2850,7 +2851,7 @@ function renderStatsPanel() {
       ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
-      ${renderDebtRanking(currentDebts)}
+      ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
       ${renderMvpHistoryRanking(mvpHistoryRows)}
     </div>
@@ -2886,6 +2887,10 @@ function getCurrentDebtRows() {
   return report.rows
     .filter((row) => row.currentBalance > 0)
     .sort((a, b) => b.currentBalance - a.currentBalance || a.player.name.localeCompare(b.player.name));
+}
+
+function canShowDebtStats() {
+  return isAdmin;
 }
 
 function getBestPairStats(limit = 5) {
@@ -3008,6 +3013,17 @@ function renderDebtRanking(rows) {
             <strong>${euro(row.currentBalance)}</strong>
           </article>
         `).join("") : `<div class="empty-state compact">Ninguem em divida neste mes.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderDebtRankingUnavailable() {
+  return `
+    <section class="stats-ranking-card">
+      <h3>ðŸ’¸ Maior caloteiro atual</h3>
+      <div class="stats-ranking-list">
+        <div class="empty-state compact">Ranking financeiro disponivel so para admins.</div>
       </div>
     </section>
   `;

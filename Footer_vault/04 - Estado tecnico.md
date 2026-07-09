@@ -311,6 +311,15 @@ Implementacao:
 - Mantida a mesma logica de calculo; alteracao e apenas visual.
 - Cache-buster actualizado para `20260709-statsui1`.
 
+## 2026-07-09 - Consistencia do maior caloteiro
+
+- Corrigida inconsistencia em que admin e conta pessoal podiam ver jogadores diferentes no ranking `Maior caloteiro atual`.
+- Causa: contas nao-admin nao carregam dados financeiros completos do Supabase (`payments`, overrides e settings), mas o painel Stats calculava o ranking mesmo assim com dados vazios/cache local.
+- Decisao: o ranking financeiro continua visivel para admins; contas nao-admin veem cartao explicativo em vez de ranking possivelmente errado.
+- Adicionada verificacao local `scripts/check-stats-finance-visibility.mjs`.
+- Cache-buster actualizado para `20260709-statsfinance1`.
+- Validacoes: `node scripts/check-stats-finance-visibility.mjs`, `node --check app.js`, `npm.cmd run build:web`, `node --check www\app.js`.
+
 ## Comandos uteis
 
 Ver estado:
