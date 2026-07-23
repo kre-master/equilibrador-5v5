@@ -9,6 +9,17 @@
     root.FooterStats = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createStatsApi() {
+  function toFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function compareStrings(a, b) {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+  }
+
   function combinations(items, size) {
     const result = [];
 
@@ -39,7 +50,9 @@
     const byCombination = new Map();
 
     (teamPerformances || []).forEach((performance) => {
-      const playerIds = [...new Set(performance.playerIds || [])].sort();
+      const playerIds = [...new Set(performance.playerIds || [])].sort((a, b) =>
+        compareStrings(String(a), String(b))
+      );
 
       combinations(playerIds, groupSize).forEach((combinationIds) => {
         const key = JSON.stringify(combinationIds);
@@ -55,7 +68,7 @@
         stats.gamesTogether += 1;
         if (performance.outcome === "win") {
           stats.wins += 1;
-          stats.winMarginTotal += Number(performance.winMargin) || 0;
+          stats.winMarginTotal += Math.max(0, toFiniteNumber(performance.winMargin));
         } else if (performance.outcome === "draw") {
           stats.draws += 1;
         } else if (performance.outcome === "loss") {
@@ -86,9 +99,17 @@
 
         if (numericDifference) return numericDifference;
 
-        const aNames = a.playerIds.map((id) => String(getPlayerName(id) ?? id)).sort();
-        const bNames = b.playerIds.map((id) => String(getPlayerName(id) ?? id)).sort();
-        return aNames.join("\u0000").localeCompare(bNames.join("\u0000"));
+        const aNameKey = JSON.stringify(
+          a.playerIds.map((id) => String(getPlayerName(id) ?? id)).sort(compareStrings)
+        );
+        const bNameKey = JSON.stringify(
+          b.playerIds.map((id) => String(getPlayerName(id) ?? id)).sort(compareStrings)
+        );
+        const nameDifference = compareStrings(aNameKey, bNameKey);
+
+        if (nameDifference) return nameDifference;
+
+        return compareStrings(JSON.stringify(a.playerIds), JSON.stringify(b.playerIds));
       });
 
     return Number.isInteger(limit) ? ranking.slice(0, Math.max(0, limit)) : ranking;
@@ -98,8 +119,8 @@
     const summary = (playerPerformances || []).reduce(
       (totals, performance) => ({
         appearances: totals.appearances + 1,
-        goalsFor: totals.goalsFor + (Number(performance.goalsFor) || 0),
-        goalsAgainst: totals.goalsAgainst + (Number(performance.goalsAgainst) || 0),
+        goalsFor: totals.goalsFor + toFiniteNumber(performance.goalsFor),
+        goalsAgainst: totals.goalsAgainst + toFiniteNumber(performance.goalsAgainst),
       }),
       { appearances: 0, goalsFor: 0, goalsAgainst: 0 }
     );

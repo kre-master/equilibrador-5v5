@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 import stats from "../stats-calculations.js";
 
@@ -139,6 +141,32 @@ test("ranking uses alphabetical player names as the final tie-break", () => {
   );
 });
 
+test("duplicate display names use canonical player IDs for deterministic ordering", () => {
+  const performances = [
+    { playerIds: ["b-id"], outcome: "draw", winMargin: 0 },
+    { playerIds: ["a-id"], outcome: "draw", winMargin: 0 },
+  ];
+  const getPlayerName = () => "Same name";
+
+  const forward = buildCombinationRanking(performances, 1, 1, 2, getPlayerName);
+  const reversed = buildCombinationRanking(
+    [...performances].reverse(),
+    1,
+    1,
+    2,
+    getPlayerName
+  );
+
+  assert.deepEqual(
+    forward.map((item) => item.playerIds),
+    [["a-id"], ["b-id"]]
+  );
+  assert.deepEqual(
+    reversed.map((item) => item.playerIds),
+    forward.map((item) => item.playerIds)
+  );
+});
+
 test("goal averages retain exact precision before display rounding", () => {
   const summary = summarizePlayerGoals([
     { playerId: "a", goalsFor: 2, goalsAgainst: 1 },
@@ -148,4 +176,48 @@ test("goal averages retain exact precision before display rounding", () => {
 
   assert.equal(summary.averageGoalsFor, 5 / 3);
   assert.equal(summary.averageGoalsAgainst, 1);
+});
+
+test("non-finite goals are normalized to zero", () => {
+  const summary = summarizePlayerGoals([
+    { playerId: "a", goalsFor: 5, goalsAgainst: 3 },
+    { playerId: "a", goalsFor: Infinity, goalsAgainst: -Infinity },
+    { playerId: "a", goalsFor: "Infinity", goalsAgainst: Number.NaN },
+  ]);
+
+  assert.deepEqual(summary, {
+    appearances: 3,
+    goalsFor: 5,
+    goalsAgainst: 3,
+    averageGoalsFor: 5 / 3,
+    averageGoalsAgainst: 1,
+  });
+});
+
+test("win margins are finite and non-negative", () => {
+  const ranking = buildCombinationRanking(
+    [
+      { playerIds: ["a"], outcome: "win", winMargin: 4 },
+      { playerIds: ["a"], outcome: "win", winMargin: Infinity },
+      { playerIds: ["a"], outcome: "win", winMargin: -Infinity },
+      { playerIds: ["a"], outcome: "win", winMargin: -3 },
+    ],
+    1,
+    1,
+    1
+  );
+
+  assert.equal(ranking[0].winMarginTotal, 4);
+  assert.equal(ranking[0].score, 61);
+  assert.ok(Number.isFinite(ranking[0].score));
+});
+
+test("classic browser execution exposes FooterStats without CommonJS", () => {
+  const source = readFileSync(new URL("../stats-calculations.js", import.meta.url), "utf8");
+  const browserContext = {};
+
+  runInNewContext(source, browserContext);
+
+  assert.equal(typeof browserContext.FooterStats.buildCombinationRanking, "function");
+  assert.equal(typeof browserContext.FooterStats.summarizePlayerGoals, "function");
 });
