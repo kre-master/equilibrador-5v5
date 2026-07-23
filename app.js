@@ -2867,6 +2867,13 @@ function getPlayerHistoryStatsRows() {
     const summary = getPlayerMatchSummary(playerData.id);
     const finishedGames = summary.games.filter((item) => item.outcome !== "open");
     const appearances = finishedGames.length;
+    const goalSummary = FooterStats.summarizePlayerGoals(
+      finishedGames.map((item) => {
+        const goalsFor = item.side === "A" ? Number(item.game.scoreA) : Number(item.game.scoreB);
+        const goalsAgainst = item.side === "A" ? Number(item.game.scoreB) : Number(item.game.scoreA);
+        return { playerId: playerData.id, goalsFor, goalsAgainst };
+      })
+    );
     const mvpCount = getFinishedGames().reduce((count, game) => count + (getOfficialMvpIdsForGame(game).has(playerData.id) ? 1 : 0), 0);
     const awardAudit = getPlayerWinAwardAudit(playerData.id);
     return {
@@ -2878,6 +2885,10 @@ function getPlayerHistoryStatsRows() {
       winRate: appearances ? Math.round((summary.wins / appearances) * 100) : 0,
       mvpCount,
       bestWinStreak: awardAudit.bestWinStreak,
+      goalsFor: goalSummary.goalsFor,
+      goalsAgainst: goalSummary.goalsAgainst,
+      goalsForAverage: goalSummary.averageGoalsFor,
+      goalsAgainstAverage: goalSummary.averageGoalsAgainst,
     };
   });
 }
@@ -2893,54 +2904,47 @@ function canShowDebtStats() {
   return isAdmin;
 }
 
-function getBestPairStats(limit = 5) {
-  const pairs = new Map();
-  getFinishedGames().forEach((game) => {
-    ["A", "B"].forEach((side) => {
-      const ids = getGameSidePlayerIds(game, side).filter((id) => findPlayer(id)).sort();
+function getFinishedTeamPerformances() {
+  return getFinishedGames().flatMap((game) =>
+    ["A", "B"].map((side) => {
       const outcome = getPlayerOutcome(game, side);
-      const margin = outcome === "win" ? Math.max(0, getTeamGoalDiff(game, side)) : 0;
-      for (let i = 0; i < ids.length; i += 1) {
-        for (let j = i + 1; j < ids.length; j += 1) {
-          const key = `${ids[i]}::${ids[j]}`;
-          const stats = pairs.get(key) || {
-            playerIds: [ids[i], ids[j]],
-            gamesTogether: 0,
-            wins: 0,
-            draws: 0,
-            losses: 0,
-            winMarginTotal: 0,
-          };
-          stats.gamesTogether += 1;
-          if (outcome === "win") {
-            stats.wins += 1;
-            stats.winMarginTotal += margin;
-          }
-          if (outcome === "draw") stats.draws += 1;
-          if (outcome === "loss") stats.losses += 1;
-          pairs.set(key, stats);
-        }
-      }
-    });
-  });
+      return {
+        playerIds: getGameSidePlayerIds(game, side).filter((id) => findPlayer(id)).sort(),
+        outcome,
+        winMargin: outcome === "win" ? Math.max(0, getTeamGoalDiff(game, side)) : 0,
+      };
+    })
+  );
+}
 
-  return [...pairs.values()]
-    .filter((stats) => stats.gamesTogether >= 2)
+function getBestPairStats(limit = 5) {
+  return FooterStats.buildCombinationRanking(
+    getFinishedTeamPerformances(),
+    2,
+    2,
+    limit,
+    (playerId) => findPlayer(playerId)?.name
+  )
     .map((stats) => ({
       ...stats,
       players: stats.playerIds.map(findPlayer).filter(Boolean),
-      winRate: Math.round((stats.wins / stats.gamesTogether) * 100),
-      score: stats.wins * 12 + stats.winMarginTotal * 2 + stats.gamesTogether + (stats.wins / stats.gamesTogether),
     }))
-    .filter((stats) => stats.players.length === 2)
-    .sort((a, b) =>
-      b.score - a.score ||
-      b.wins - a.wins ||
-      b.winMarginTotal - a.winMarginTotal ||
-      b.gamesTogether - a.gamesTogether ||
-      a.players.map((playerData) => playerData.name).join(" + ").localeCompare(b.players.map((playerData) => playerData.name).join(" + "))
-    )
-    .slice(0, limit);
+    .filter((stats) => stats.players.length === 2);
+}
+
+function getBestTrioStats(limit = 5) {
+  return FooterStats.buildCombinationRanking(
+    getFinishedTeamPerformances(),
+    3,
+    3,
+    limit,
+    (playerId) => findPlayer(playerId)?.name
+  )
+    .map((stats) => ({
+      ...stats,
+      players: stats.playerIds.map(findPlayer).filter(Boolean),
+    }))
+    .filter((stats) => stats.players.length === 3);
 }
 
 function getMvpHistoryRows(limit = 10) {
@@ -2971,6 +2975,20 @@ function sortByMvps(a, b) {
 
 function sortByWinStreak(a, b) {
   return b.bestWinStreak - a.bestWinStreak || b.wins - a.wins || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByGoalsForAverage(a, b) {
+  return b.goalsForAverage - a.goalsForAverage
+    || b.goalsFor - a.goalsFor
+    || b.appearances - a.appearances
+    || a.player.name.localeCompare(b.player.name);
+}
+
+function sortByGoalsAgainstAverage(a, b) {
+  return a.goalsAgainstAverage - b.goalsAgainstAverage
+    || a.goalsAgainst - b.goalsAgainst
+    || b.appearances - a.appearances
+    || a.player.name.localeCompare(b.player.name);
 }
 
 function renderStatsHighlight(label, value, playerData, detail) {
