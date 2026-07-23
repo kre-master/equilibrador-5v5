@@ -2879,6 +2879,15 @@ function getPlayerHistoryStatsRows() {
       (item) => item.outcome !== "open" && hasValidFinalScore(item.game)
     );
     const appearances = finishedGames.length;
+    const outcomes = finishedGames.reduce(
+      (counts, item) => {
+        if (item.outcome === "win") counts.wins += 1;
+        if (item.outcome === "draw") counts.draws += 1;
+        if (item.outcome === "loss") counts.losses += 1;
+        return counts;
+      },
+      { wins: 0, draws: 0, losses: 0 }
+    );
     const goalSummary = FooterStats.summarizePlayerGoals(
       finishedGames.map((item) => {
         const goalsFor = item.side === "A" ? Number(item.game.scoreA) : Number(item.game.scoreB);
@@ -2891,10 +2900,10 @@ function getPlayerHistoryStatsRows() {
     return {
       player: playerData,
       appearances,
-      wins: summary.wins,
-      draws: summary.draws,
-      losses: summary.losses,
-      winRate: appearances ? Math.round((summary.wins / appearances) * 100) : 0,
+      wins: outcomes.wins,
+      draws: outcomes.draws,
+      losses: outcomes.losses,
+      winRate: appearances ? Math.round((outcomes.wins / appearances) * 100) : 0,
       mvpCount,
       bestWinStreak: awardAudit.bestWinStreak,
       goalsFor: goalSummary.goalsFor,
