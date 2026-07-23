@@ -2862,10 +2862,22 @@ function renderStatsPanel() {
   });
 }
 
+function hasValidFinalScore(game) {
+  return [game?.scoreA, game?.scoreB].every(
+    (score) =>
+      score !== null
+      && score !== undefined
+      && String(score).trim() !== ""
+      && Number.isFinite(Number(score))
+  );
+}
+
 function getPlayerHistoryStatsRows() {
   return state.players.map((playerData) => {
     const summary = getPlayerMatchSummary(playerData.id);
-    const finishedGames = summary.games.filter((item) => item.outcome !== "open");
+    const finishedGames = summary.games.filter(
+      (item) => item.outcome !== "open" && hasValidFinalScore(item.game)
+    );
     const appearances = finishedGames.length;
     const goalSummary = FooterStats.summarizePlayerGoals(
       finishedGames.map((item) => {
@@ -2905,7 +2917,7 @@ function canShowDebtStats() {
 }
 
 function getFinishedTeamPerformances() {
-  return getFinishedGames().flatMap((game) =>
+  return getFinishedGames().filter(hasValidFinalScore).flatMap((game) =>
     ["A", "B"].map((side) => {
       const outcome = getPlayerOutcome(game, side);
       return {
@@ -2917,34 +2929,53 @@ function getFinishedTeamPerformances() {
   );
 }
 
-function getBestPairStats(limit = 5) {
-  return FooterStats.buildCombinationRanking(
+function compareCanonicalIdKeys(aIds, bIds) {
+  const aKey = aIds.map(String).join("::");
+  const bKey = bIds.map(String).join("::");
+  if (aKey < bKey) return -1;
+  if (aKey > bKey) return 1;
+  return 0;
+}
+
+function sortCombinationStats(a, b) {
+  const numericDifference =
+    b.score - a.score
+    || b.wins - a.wins
+    || b.winMarginTotal - a.winMarginTotal
+    || b.gamesTogether - a.gamesTogether;
+  if (numericDifference) return numericDifference;
+
+  const compareNames = (left, right) => left.localeCompare(right, "pt-PT");
+  const aNameKey = a.players.map((playerData) => playerData.name).sort(compareNames).join(" + ");
+  const bNameKey = b.players.map((playerData) => playerData.name).sort(compareNames).join(" + ");
+  return aNameKey.localeCompare(bNameKey, "pt-PT")
+    || compareCanonicalIdKeys(a.playerIds, b.playerIds);
+}
+
+function getBestCombinationStats(groupSize, minimumGames, limit) {
+  const ranking = FooterStats.buildCombinationRanking(
     getFinishedTeamPerformances(),
-    2,
-    2,
-    limit,
+    groupSize,
+    minimumGames,
+    undefined,
     (playerId) => findPlayer(playerId)?.name
   )
     .map((stats) => ({
       ...stats,
       players: stats.playerIds.map(findPlayer).filter(Boolean),
     }))
-    .filter((stats) => stats.players.length === 2);
+    .filter((stats) => stats.players.length === groupSize)
+    .sort(sortCombinationStats);
+
+  return Number.isInteger(limit) ? ranking.slice(0, Math.max(0, limit)) : ranking;
+}
+
+function getBestPairStats(limit = 5) {
+  return getBestCombinationStats(2, 2, limit);
 }
 
 function getBestTrioStats(limit = 5) {
-  return FooterStats.buildCombinationRanking(
-    getFinishedTeamPerformances(),
-    3,
-    3,
-    limit,
-    (playerId) => findPlayer(playerId)?.name
-  )
-    .map((stats) => ({
-      ...stats,
-      players: stats.playerIds.map(findPlayer).filter(Boolean),
-    }))
-    .filter((stats) => stats.players.length === 3);
+  return getBestCombinationStats(3, 3, limit);
 }
 
 function getMvpHistoryRows(limit = 10) {
@@ -2981,14 +3012,16 @@ function sortByGoalsForAverage(a, b) {
   return b.goalsForAverage - a.goalsForAverage
     || b.goalsFor - a.goalsFor
     || b.appearances - a.appearances
-    || a.player.name.localeCompare(b.player.name);
+    || a.player.name.localeCompare(b.player.name, "pt-PT")
+    || compareCanonicalIdKeys([a.player.id], [b.player.id]);
 }
 
 function sortByGoalsAgainstAverage(a, b) {
   return a.goalsAgainstAverage - b.goalsAgainstAverage
     || a.goalsAgainst - b.goalsAgainst
     || b.appearances - a.appearances
-    || a.player.name.localeCompare(b.player.name);
+    || a.player.name.localeCompare(b.player.name, "pt-PT")
+    || compareCanonicalIdKeys([a.player.id], [b.player.id]);
 }
 
 function renderStatsHighlight(label, value, playerData, detail) {
