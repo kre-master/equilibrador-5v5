@@ -2412,7 +2412,8 @@ th.stat-col {
 .stats-combination-member {
   display: inline-flex;
   align-items: center;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: auto;
   max-width: 100%;
   gap: 4px;
 }
@@ -2420,15 +2421,16 @@ th.stat-col {
 .stats-combination-member .stats-player-link {
   display: inline-flex;
   align-items: center;
-  min-width: 0;
+  min-width: auto;
   min-height: 44px;
   max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .stats-combination-member:not(:first-child) .stats-player-link {
-  max-width: calc(100% - 16px);
+  max-width: none;
 }
 
 .stats-combination-separator {

@@ -330,6 +330,8 @@ Implementacao:
 - `scripts/build-web.mjs` copia `stats-calculations.js` e valida todos os scripts locais referenciados pelo `index.html` gerado.
 - `www/` esta sincronizado com a origem e usa o cache-buster `20260723-statsrankings1`.
 - As linhas de combinacoes sao responsivas, os links dos jogadores nas combinacoes tem altura minima de 44 px e os separadores nao ficam orfaos no fim da linha.
+- Nomes nas duplas e triplas mantem-se inteiros: se nao couberem, passam para a linha seguinte sem quebra por letra.
+- Cache-buster do CSS actualizado para `20260723-combonames1`.
 
 Validacao completa:
 
