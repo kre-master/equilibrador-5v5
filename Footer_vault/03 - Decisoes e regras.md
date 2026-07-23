@@ -100,6 +100,15 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Deve existir separador `Stats` para historico agregado de jogadores.
 - Stats iniciais: mais vitorias, melhor win rate, mais presencas, mais MVPs, historico de MVPs, maior sequencia de vitorias, maior caloteiro atual e melhor dupla.
 - Melhor dupla exige pelo menos 2 jogos juntos.
+- Stats incluem um ranking top-5 `Melhores triplas`.
+- Uma tripla so e elegivel depois de os mesmos tres jogadores completarem pelo menos 3 jogos finalizados juntos na mesma equipa.
+- A ordenacao competitiva de duplas e triplas segue, por ordem: vitorias, contribuicao para a margem de golos nas vitorias, jogos em conjunto e componente percentual.
+- Empates restantes sao resolvidos deterministicamente pelos nomes em portugues e depois pelos IDs canonicos dos jogadores.
+- `Melhor media de golos marcados` e `Menor media de golos sofridos` sao rankings de jogadores.
+- Um jogador precisa de pelo menos 5 participacoes finalizadas com resultado valido para entrar nesses rankings.
+- Em cada participacao, os golos marcados e sofridos sao sempre calculados da perspectiva da equipa desse jogador.
+- A apresentacao usa duas casas decimais, mas a ordenacao usa a precisao completa.
+- Jogos com resultados em falta, vazios, nao numericos ou nao finitos nao contam para estes rankings nem para os totais de resultados dos jogadores.
 - Melhor win rate deve preferir jogadores com minimo de 5 presencas; se nao houver historico suficiente, pode mostrar os melhores disponiveis.
 - Nao incluir ranking `anti-amuleto`.
 

@@ -320,6 +320,28 @@ Implementacao:
 - Cache-buster actualizado para `20260709-statsfinance1`.
 - Validacoes: `node scripts/check-stats-finance-visibility.mjs`, `node --check app.js`, `npm.cmd run build:web`, `node --check www\app.js`.
 
+## 2026-07-23 - Rankings de Stats
+
+Implementacao:
+
+- Adicionado o modulo puro `stats-calculations.js`, compativel com global de browser e CommonJS, com testes automatizados.
+- `app.js` integra os resumos de duplas, triplas e medias de golos por jogador.
+- `scripts/build-web.mjs` copia `stats-calculations.js` e valida todos os scripts locais referenciados pelo `index.html` gerado.
+- `www/` esta sincronizado com a origem e usa o cache-buster `20260723-statsrankings1`.
+- As linhas de combinacoes sao responsivas, os jogadores mantem alvos de toque de 44 px e os separadores nao ficam orfaos no fim da linha.
+
+Validacao completa:
+
+- `npm.cmd run test:stats`: passou, 12 testes, 12 aprovados, 0 falhas.
+- `node --check app.js`: passou.
+- `node --check stats-calculations.js`: passou.
+- `npm.cmd run build:web`: passou sem alterar `www/app-config.js`.
+- `node --check www/app.js`: passou.
+- `www/stats-calculations.js`: existe.
+- Hashes SHA-256 de `app.js`, `styles.css`, `index.html` e `stats-calculations.js`: cada ficheiro de origem corresponde exactamente ao equivalente em `www/`.
+- Smoke test local: `index.html` devolveu HTTP 200, o cache-buster `20260723-statsrankings1` estava presente e `stats-calculations.js` devolveu HTTP 200.
+- `git diff --check`: passou.
+
 ## Comandos uteis
 
 Ver estado:
