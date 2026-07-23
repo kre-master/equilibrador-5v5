@@ -2409,7 +2409,30 @@ th.stat-col {
   min-width: 0;
 }
 
+.stats-combination-member {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 4px;
+}
+
+.stats-combination-member .stats-player-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.stats-combination-member:not(:first-child) .stats-player-link {
+  max-width: calc(100% - 16px);
+}
+
 .stats-combination-separator {
+  flex: 0 0 auto;
   color: var(--muted);
   font-weight: 900;
 }

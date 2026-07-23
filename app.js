@@ -2856,7 +2856,7 @@ function renderStatsPanel() {
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
       ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
-      ${renderStatsRanking("🛡️ Menos golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
+      ${renderStatsRanking("🛡️ Menor media de golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
       ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
       ${renderTrioRanking(trioRows)}
@@ -3111,13 +3111,22 @@ function renderPairRanking(rows) {
         ${rows.length ? rows.map((row, index) => `
           <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
-            <span class="stats-combination-names">${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join('<span class="stats-combination-separator" aria-hidden="true">+</span>')}</span>
+            <span class="stats-combination-names">${renderCombinationMembers(row.players)}</span>
             <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
           </article>
         `).join("") : `<div class="empty-state compact">Ainda nao ha duplas com 2 jogos.</div>`}
       </div>
     </section>
   `;
+}
+
+function renderCombinationMembers(players) {
+  return players.map((playerData, index) => `
+    <span class="stats-combination-member">
+      ${index ? '<span class="stats-combination-separator" aria-hidden="true">+</span>' : ""}
+      <button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>
+    </span>
+  `).join("");
 }
 
 function renderTrioRanking(rows) {
@@ -3128,7 +3137,7 @@ function renderTrioRanking(rows) {
         ${rows.length ? rows.map((row, index) => `
           <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
-            <span class="stats-combination-names">${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join('<span class="stats-combination-separator" aria-hidden="true">+</span>')}</span>
+            <span class="stats-combination-names">${renderCombinationMembers(row.players)}</span>
             <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
           </article>
         `).join("") : `<div class="empty-state compact">Ainda nao ha triplas com 3 jogos.</div>`}

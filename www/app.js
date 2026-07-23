@@ -2812,6 +2812,10 @@ function renderStatsPanel() {
   const showDebtStats = canShowDebtStats();
   const currentDebts = showDebtStats ? getCurrentDebtRows().slice(0, 5) : [];
   const pairRows = getBestPairStats(5);
+  const trioRows = getBestTrioStats(5);
+  const goalEligibleRows = activeRows.filter((row) => row.appearances >= 5);
+  const goalsForRows = goalEligibleRows.slice().sort(sortByGoalsForAverage).slice(0, 5);
+  const goalsAgainstRows = goalEligibleRows.slice().sort(sortByGoalsAgainstAverage).slice(0, 5);
   const mvpHistoryRows = getMvpHistoryRows(10);
 
   if (!activeRows.length) {
@@ -2851,8 +2855,11 @@ function renderStatsPanel() {
       ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
+      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
+      ${renderStatsRanking("🛡️ Menor media de golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
       ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
+      ${renderTrioRanking(trioRows)}
       ${renderMvpHistoryRanking(mvpHistoryRows)}
     </div>
   `;
@@ -2862,22 +2869,54 @@ function renderStatsPanel() {
   });
 }
 
+function hasValidFinalScore(game) {
+  return [game?.scoreA, game?.scoreB].every(
+    (score) =>
+      score !== null
+      && score !== undefined
+      && String(score).trim() !== ""
+      && Number.isFinite(Number(score))
+  );
+}
+
 function getPlayerHistoryStatsRows() {
   return state.players.map((playerData) => {
     const summary = getPlayerMatchSummary(playerData.id);
-    const finishedGames = summary.games.filter((item) => item.outcome !== "open");
+    const finishedGames = summary.games.filter(
+      (item) => item.outcome !== "open" && hasValidFinalScore(item.game)
+    );
     const appearances = finishedGames.length;
+    const outcomes = finishedGames.reduce(
+      (counts, item) => {
+        if (item.outcome === "win") counts.wins += 1;
+        if (item.outcome === "draw") counts.draws += 1;
+        if (item.outcome === "loss") counts.losses += 1;
+        return counts;
+      },
+      { wins: 0, draws: 0, losses: 0 }
+    );
+    const goalSummary = FooterStats.summarizePlayerGoals(
+      finishedGames.map((item) => {
+        const goalsFor = item.side === "A" ? Number(item.game.scoreA) : Number(item.game.scoreB);
+        const goalsAgainst = item.side === "A" ? Number(item.game.scoreB) : Number(item.game.scoreA);
+        return { playerId: playerData.id, goalsFor, goalsAgainst };
+      })
+    );
     const mvpCount = getFinishedGames().reduce((count, game) => count + (getOfficialMvpIdsForGame(game).has(playerData.id) ? 1 : 0), 0);
     const awardAudit = getPlayerWinAwardAudit(playerData.id);
     return {
       player: playerData,
       appearances,
-      wins: summary.wins,
-      draws: summary.draws,
-      losses: summary.losses,
-      winRate: appearances ? Math.round((summary.wins / appearances) * 100) : 0,
+      wins: outcomes.wins,
+      draws: outcomes.draws,
+      losses: outcomes.losses,
+      winRate: appearances ? Math.round((outcomes.wins / appearances) * 100) : 0,
       mvpCount,
       bestWinStreak: awardAudit.bestWinStreak,
+      goalsFor: goalSummary.goalsFor,
+      goalsAgainst: goalSummary.goalsAgainst,
+      goalsForAverage: goalSummary.averageGoalsFor,
+      goalsAgainstAverage: goalSummary.averageGoalsAgainst,
     };
   });
 }
@@ -2893,54 +2932,66 @@ function canShowDebtStats() {
   return isAdmin;
 }
 
-function getBestPairStats(limit = 5) {
-  const pairs = new Map();
-  getFinishedGames().forEach((game) => {
-    ["A", "B"].forEach((side) => {
-      const ids = getGameSidePlayerIds(game, side).filter((id) => findPlayer(id)).sort();
+function getFinishedTeamPerformances() {
+  return getFinishedGames().filter(hasValidFinalScore).flatMap((game) =>
+    ["A", "B"].map((side) => {
       const outcome = getPlayerOutcome(game, side);
-      const margin = outcome === "win" ? Math.max(0, getTeamGoalDiff(game, side)) : 0;
-      for (let i = 0; i < ids.length; i += 1) {
-        for (let j = i + 1; j < ids.length; j += 1) {
-          const key = `${ids[i]}::${ids[j]}`;
-          const stats = pairs.get(key) || {
-            playerIds: [ids[i], ids[j]],
-            gamesTogether: 0,
-            wins: 0,
-            draws: 0,
-            losses: 0,
-            winMarginTotal: 0,
-          };
-          stats.gamesTogether += 1;
-          if (outcome === "win") {
-            stats.wins += 1;
-            stats.winMarginTotal += margin;
-          }
-          if (outcome === "draw") stats.draws += 1;
-          if (outcome === "loss") stats.losses += 1;
-          pairs.set(key, stats);
-        }
-      }
-    });
-  });
+      return {
+        playerIds: getGameSidePlayerIds(game, side).filter((id) => findPlayer(id)).sort(),
+        outcome,
+        winMargin: outcome === "win" ? Math.max(0, getTeamGoalDiff(game, side)) : 0,
+      };
+    })
+  );
+}
 
-  return [...pairs.values()]
-    .filter((stats) => stats.gamesTogether >= 2)
+function compareCanonicalIdKeys(aIds, bIds) {
+  const aKey = aIds.map(String).join("::");
+  const bKey = bIds.map(String).join("::");
+  if (aKey < bKey) return -1;
+  if (aKey > bKey) return 1;
+  return 0;
+}
+
+function sortCombinationStats(a, b) {
+  const numericDifference =
+    b.score - a.score
+    || b.wins - a.wins
+    || b.winMarginTotal - a.winMarginTotal
+    || b.gamesTogether - a.gamesTogether;
+  if (numericDifference) return numericDifference;
+
+  const compareNames = (left, right) => left.localeCompare(right, "pt-PT");
+  const aNameKey = a.players.map((playerData) => playerData.name).sort(compareNames).join(" + ");
+  const bNameKey = b.players.map((playerData) => playerData.name).sort(compareNames).join(" + ");
+  return aNameKey.localeCompare(bNameKey, "pt-PT")
+    || compareCanonicalIdKeys(a.playerIds, b.playerIds);
+}
+
+function getBestCombinationStats(groupSize, minimumGames, limit) {
+  const ranking = FooterStats.buildCombinationRanking(
+    getFinishedTeamPerformances(),
+    groupSize,
+    minimumGames,
+    undefined,
+    (playerId) => findPlayer(playerId)?.name
+  )
     .map((stats) => ({
       ...stats,
       players: stats.playerIds.map(findPlayer).filter(Boolean),
-      winRate: Math.round((stats.wins / stats.gamesTogether) * 100),
-      score: stats.wins * 12 + stats.winMarginTotal * 2 + stats.gamesTogether + (stats.wins / stats.gamesTogether),
     }))
-    .filter((stats) => stats.players.length === 2)
-    .sort((a, b) =>
-      b.score - a.score ||
-      b.wins - a.wins ||
-      b.winMarginTotal - a.winMarginTotal ||
-      b.gamesTogether - a.gamesTogether ||
-      a.players.map((playerData) => playerData.name).join(" + ").localeCompare(b.players.map((playerData) => playerData.name).join(" + "))
-    )
-    .slice(0, limit);
+    .filter((stats) => stats.players.length === groupSize)
+    .sort(sortCombinationStats);
+
+  return Number.isInteger(limit) ? ranking.slice(0, Math.max(0, limit)) : ranking;
+}
+
+function getBestPairStats(limit = 5) {
+  return getBestCombinationStats(2, 2, limit);
+}
+
+function getBestTrioStats(limit = 5) {
+  return getBestCombinationStats(3, 3, limit);
 }
 
 function getMvpHistoryRows(limit = 10) {
@@ -2973,6 +3024,29 @@ function sortByWinStreak(a, b) {
   return b.bestWinStreak - a.bestWinStreak || b.wins - a.wins || a.player.name.localeCompare(b.player.name);
 }
 
+function sortByGoalsForAverage(a, b) {
+  return b.goalsForAverage - a.goalsForAverage
+    || b.goalsFor - a.goalsFor
+    || b.appearances - a.appearances
+    || a.player.name.localeCompare(b.player.name, "pt-PT")
+    || compareCanonicalIdKeys([a.player.id], [b.player.id]);
+}
+
+function sortByGoalsAgainstAverage(a, b) {
+  return a.goalsAgainstAverage - b.goalsAgainstAverage
+    || a.goalsAgainst - b.goalsAgainst
+    || b.appearances - a.appearances
+    || a.player.name.localeCompare(b.player.name, "pt-PT")
+    || compareCanonicalIdKeys([a.player.id], [b.player.id]);
+}
+
+function formatStatsAverage(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
+}
+
 function renderStatsHighlight(label, value, playerData, detail) {
   return `
     <article class="stats-hero-card">
@@ -2984,7 +3058,7 @@ function renderStatsHighlight(label, value, playerData, detail) {
   `;
 }
 
-function renderStatsRanking(title, rows, valueRenderer) {
+function renderStatsRanking(title, rows, valueRenderer, emptyMessage = "Sem dados.") {
   return `
     <section class="stats-ranking-card">
       <h3>${escapeHtml(title)}</h3>
@@ -2995,7 +3069,7 @@ function renderStatsRanking(title, rows, valueRenderer) {
             <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
             <strong>${escapeHtml(valueRenderer(row))}</strong>
           </article>
-        `).join("") : `<div class="empty-state compact">Sem dados.</div>`}
+        `).join("") : `<div class="empty-state compact">${escapeHtml(emptyMessage)}</div>`}
       </div>
     </section>
   `;
@@ -3035,12 +3109,38 @@ function renderPairRanking(rows) {
       <h3>🤝 Melhor dupla</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row, index) => `
-          <article class="stats-ranking-row stats-pair-row stats-ranking-row-${index + 1}">
+          <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
-            <span>${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join(" + ")}</span>
+            <span class="stats-combination-names">${renderCombinationMembers(row.players)}</span>
             <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
           </article>
         `).join("") : `<div class="empty-state compact">Ainda nao ha duplas com 2 jogos.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderCombinationMembers(players) {
+  return players.map((playerData, index) => `
+    <span class="stats-combination-member">
+      ${index ? '<span class="stats-combination-separator" aria-hidden="true">+</span>' : ""}
+      <button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>
+    </span>
+  `).join("");
+}
+
+function renderTrioRanking(rows) {
+  return `
+    <section class="stats-ranking-card">
+      <h3>🤝 Melhores triplas</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row, index) => `
+          <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
+            <span class="stats-rank-number">${index + 1}</span>
+            <span class="stats-combination-names">${renderCombinationMembers(row.players)}</span>
+            <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
+          </article>
+        `).join("") : `<div class="empty-state compact">Ainda nao ha triplas com 3 jogos.</div>`}
       </div>
     </section>
   `;
