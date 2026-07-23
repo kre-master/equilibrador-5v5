@@ -328,7 +328,7 @@ Implementacao:
 - `app.js` integra os resumos de duplas, triplas e medias de golos por jogador.
 - `scripts/build-web.mjs` copia `stats-calculations.js` e valida todos os scripts locais referenciados pelo `index.html` gerado.
 - `www/` esta sincronizado com a origem e usa o cache-buster `20260723-statsrankings1`.
-- As linhas de combinacoes sao responsivas, os jogadores mantem alvos de toque de 44 px e os separadores nao ficam orfaos no fim da linha.
+- As linhas de combinacoes sao responsivas, os links dos jogadores nas combinacoes tem altura minima de 44 px e os separadores nao ficam orfaos no fim da linha.
 
 Validacao completa:
 
