@@ -326,13 +326,14 @@ Implementacao:
 
 - Adicionado o modulo puro `stats-calculations.js`, compativel com global de browser e CommonJS, com testes automatizados.
 - `app.js` integra os resumos de duplas, triplas e medias de golos por jogador.
+- A sequencia de vitorias em Stats ignora jogos com placar invalido; ausencias, empates e derrotas validos continuam a interrompe-la.
 - `scripts/build-web.mjs` copia `stats-calculations.js` e valida todos os scripts locais referenciados pelo `index.html` gerado.
 - `www/` esta sincronizado com a origem e usa o cache-buster `20260723-statsrankings1`.
 - As linhas de combinacoes sao responsivas, os links dos jogadores nas combinacoes tem altura minima de 44 px e os separadores nao ficam orfaos no fim da linha.
 
 Validacao completa:
 
-- `npm.cmd run test:stats`: passou, 12 testes, 12 aprovados, 0 falhas.
+- `npm.cmd run test:stats`: passou, 14 testes, 14 aprovados, 0 falhas.
 - `node --check app.js`: passou.
 - `node --check stats-calculations.js`: passou.
 - `npm.cmd run build:web`: passou sem alterar `www/app-config.js`.

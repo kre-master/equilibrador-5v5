@@ -132,8 +132,27 @@
     };
   }
 
+  function calculateBestWinStreak(records) {
+    let runningStreak = 0;
+    let bestStreak = 0;
+
+    (records || []).forEach((record) => {
+      if (record?.valid !== true) return;
+      if (record.outcome !== "win") {
+        runningStreak = 0;
+        return;
+      }
+
+      runningStreak += 1;
+      bestStreak = Math.max(bestStreak, runningStreak);
+    });
+
+    return bestStreak;
+  }
+
   return {
     buildCombinationRanking,
+    calculateBestWinStreak,
     summarizePlayerGoals,
   };
 });

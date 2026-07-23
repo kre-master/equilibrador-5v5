@@ -2903,7 +2903,17 @@ function getPlayerHistoryStatsRows() {
       })
     );
     const mvpCount = getFinishedGames().reduce((count, game) => count + (getOfficialMvpIdsForGame(game).has(playerData.id) ? 1 : 0), 0);
-    const awardAudit = getPlayerWinAwardAudit(playerData.id);
+    const bestWinStreak = FooterStats.calculateBestWinStreak(
+      getFinishedGamesAsc().map((game) => {
+        const valid = hasValidFinalScore(game);
+        if (!valid) return { valid, outcome: "absent" };
+        const participation = getPlayerParticipation(game, playerData.id);
+        return {
+          valid,
+          outcome: participation ? getPlayerOutcome(game, participation.side) : "absent",
+        };
+      })
+    );
     return {
       player: playerData,
       appearances,
@@ -2912,7 +2922,7 @@ function getPlayerHistoryStatsRows() {
       losses: outcomes.losses,
       winRate: appearances ? Math.round((outcomes.wins / appearances) * 100) : 0,
       mvpCount,
-      bestWinStreak: awardAudit.bestWinStreak,
+      bestWinStreak,
       goalsFor: goalSummary.goalsFor,
       goalsAgainst: goalSummary.goalsAgainst,
       goalsForAverage: goalSummary.averageGoalsFor,

@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 
 import stats from "../stats-calculations.js";
 
-const { buildCombinationRanking, summarizePlayerGoals } = stats;
+const { buildCombinationRanking, calculateBestWinStreak, summarizePlayerGoals } = stats;
 
 test("trios require at least three games", () => {
   const twoGames = [
@@ -62,6 +62,28 @@ test("summarizePlayerGoals totals appearances and goals", () => {
     goalsAgainst: 10,
     averageGoalsFor: 9,
     averageGoalsAgainst: 5,
+  });
+});
+
+test("invalid records do not interrupt a winning streak", () => {
+  const bestStreak = calculateBestWinStreak([
+    { valid: true, outcome: "win" },
+    { valid: false, outcome: "loss" },
+    { valid: true, outcome: "win" },
+  ]);
+
+  assert.equal(bestStreak, 2);
+});
+
+test("valid non-win outcomes interrupt a winning streak", () => {
+  ["absent", "draw", "loss"].forEach((outcome) => {
+    const bestStreak = calculateBestWinStreak([
+      { valid: true, outcome: "win" },
+      { valid: true, outcome },
+      { valid: true, outcome: "win" },
+    ]);
+
+    assert.equal(bestStreak, 1);
   });
 });
 
@@ -219,5 +241,6 @@ test("classic browser execution exposes FooterStats without CommonJS", () => {
   runInNewContext(source, browserContext);
 
   assert.equal(typeof browserContext.FooterStats.buildCombinationRanking, "function");
+  assert.equal(typeof browserContext.FooterStats.calculateBestWinStreak, "function");
   assert.equal(typeof browserContext.FooterStats.summarizePlayerGoals, "function");
 });
