@@ -2812,6 +2812,10 @@ function renderStatsPanel() {
   const showDebtStats = canShowDebtStats();
   const currentDebts = showDebtStats ? getCurrentDebtRows().slice(0, 5) : [];
   const pairRows = getBestPairStats(5);
+  const trioRows = getBestTrioStats(5);
+  const goalEligibleRows = activeRows.filter((row) => row.appearances >= 5);
+  const goalsForRows = goalEligibleRows.slice().sort(sortByGoalsForAverage).slice(0, 5);
+  const goalsAgainstRows = goalEligibleRows.slice().sort(sortByGoalsAgainstAverage).slice(0, 5);
   const mvpHistoryRows = getMvpHistoryRows(10);
 
   if (!activeRows.length) {
@@ -2851,8 +2855,11 @@ function renderStatsPanel() {
       ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
+      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
+      ${renderStatsRanking("🛡️ Menos golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
       ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
+      ${renderTrioRanking(trioRows)}
       ${renderMvpHistoryRanking(mvpHistoryRows)}
     </div>
   `;
@@ -3033,6 +3040,13 @@ function sortByGoalsAgainstAverage(a, b) {
     || compareCanonicalIdKeys([a.player.id], [b.player.id]);
 }
 
+function formatStatsAverage(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
+}
+
 function renderStatsHighlight(label, value, playerData, detail) {
   return `
     <article class="stats-hero-card">
@@ -3044,7 +3058,7 @@ function renderStatsHighlight(label, value, playerData, detail) {
   `;
 }
 
-function renderStatsRanking(title, rows, valueRenderer) {
+function renderStatsRanking(title, rows, valueRenderer, emptyMessage = "Sem dados.") {
   return `
     <section class="stats-ranking-card">
       <h3>${escapeHtml(title)}</h3>
@@ -3055,7 +3069,7 @@ function renderStatsRanking(title, rows, valueRenderer) {
             <button class="stats-player-link" data-open-stats-player="${row.player.id}" type="button">${escapeHtml(row.player.name)}</button>
             <strong>${escapeHtml(valueRenderer(row))}</strong>
           </article>
-        `).join("") : `<div class="empty-state compact">Sem dados.</div>`}
+        `).join("") : `<div class="empty-state compact">${escapeHtml(emptyMessage)}</div>`}
       </div>
     </section>
   `;
@@ -3095,12 +3109,29 @@ function renderPairRanking(rows) {
       <h3>🤝 Melhor dupla</h3>
       <div class="stats-ranking-list">
         ${rows.length ? rows.map((row, index) => `
-          <article class="stats-ranking-row stats-pair-row stats-ranking-row-${index + 1}">
+          <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
             <span class="stats-rank-number">${index + 1}</span>
-            <span>${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join(" + ")}</span>
+            <span class="stats-combination-names">${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join('<span class="stats-combination-separator" aria-hidden="true">+</span>')}</span>
             <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
           </article>
         `).join("") : `<div class="empty-state compact">Ainda nao ha duplas com 2 jogos.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderTrioRanking(rows) {
+  return `
+    <section class="stats-ranking-card">
+      <h3>🤝 Melhores triplas</h3>
+      <div class="stats-ranking-list">
+        ${rows.length ? rows.map((row, index) => `
+          <article class="stats-ranking-row stats-combination-row stats-ranking-row-${index + 1}">
+            <span class="stats-rank-number">${index + 1}</span>
+            <span class="stats-combination-names">${row.players.map((playerData) => `<button class="stats-player-link" data-open-stats-player="${playerData.id}" type="button">${escapeHtml(playerData.name)}</button>`).join('<span class="stats-combination-separator" aria-hidden="true">+</span>')}</span>
+            <strong>${row.winRate}% (${row.wins}V/${row.gamesTogether}J)</strong>
+          </article>
+        `).join("") : `<div class="empty-state compact">Ainda nao ha triplas com 3 jogos.</div>`}
       </div>
     </section>
   `;

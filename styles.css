@@ -2398,8 +2398,25 @@ th.stat-col {
   color: var(--green);
 }
 
-.stats-pair-row {
-  grid-template-columns: 32px minmax(0, 1fr) minmax(96px, auto);
+.stats-combination-row {
+  grid-template-columns: 32px minmax(0, 1fr) minmax(132px, auto);
+}
+
+.stats-combination-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.stats-combination-separator {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.stats-combination-row strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .stats-mvp-history-row {
@@ -3114,7 +3131,7 @@ th.stat-col {
   }
 
   .stats-ranking-row,
-  .stats-pair-row,
+  .stats-combination-row,
   .stats-mvp-history-row {
     grid-template-columns: 28px minmax(0, 1fr);
   }
@@ -3123,6 +3140,10 @@ th.stat-col {
   .stats-mvp-history-row small {
     grid-column: 2;
     text-align: left;
+  }
+
+  .stats-combination-names {
+    grid-column: 2;
   }
 
   .stats-mvp-history-row span {
