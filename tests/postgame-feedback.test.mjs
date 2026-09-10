@@ -88,8 +88,8 @@ test("sorts pending check-ins by oldest date and then deterministic ID", () => {
 
 test("uses ID tie-break when equivalent timestamps use different formats", () => {
   const sorted = sortPendingCheckins([
-    { id: "b", date: "2026-09-01T10:00:00Z" },
-    { id: "a", date: "2026-09-01T10:00:00.000Z" },
+    { id: "b", date: "2026-09-01T10:00:00.000Z" },
+    { id: "a", date: "2026-09-01T10:00:00Z" },
   ]);
 
   assert.deepEqual(sorted.map((item) => item.id), ["a", "b"]);
