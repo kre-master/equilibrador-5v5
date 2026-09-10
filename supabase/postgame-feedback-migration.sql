@@ -55,6 +55,11 @@ revoke all on table public.feature_rollouts from public, anon, authenticated;
 grant select on table public.game_feedback to authenticated;
 grant select on table public.feature_rollouts to authenticated;
 
+-- Postgame votes and feedback must be committed together by the RPC below.
+-- Existing vote rows are preserved; only the legacy direct insert path is closed.
+revoke insert on table public.game_mvp_votes from authenticated;
+drop policy if exists "mvp votes insert linked player" on public.game_mvp_votes;
+
 alter table public.game_feedback enable row level security;
 alter table public.feature_rollouts enable row level security;
 
@@ -64,7 +69,7 @@ on public.game_feedback for select
 to authenticated
 using (
   user_id = (select auth.uid())
-  or public.is_admin()
+  or (select public.is_admin())
 );
 
 drop policy if exists "rollouts read authenticated" on public.feature_rollouts;
@@ -76,6 +81,11 @@ using (true);
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
+
+-- Remove the legacy privileged helper from the first rollout of this migration.
+-- Drop the public wrapper first so upgrades are safe even if dependencies were tracked.
+drop function if exists public.submit_postgame_checkin(text, text, integer, integer);
+drop function if exists private.submit_postgame_checkin(text, text, integer, integer);
 
 -- The privileged implementation lives outside the exposed public schema. It is
 -- SECURITY DEFINER only so one transaction can write both RLS-protected tables.
