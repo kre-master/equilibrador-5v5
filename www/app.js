@@ -4616,6 +4616,8 @@ function renderMvpPanel(game) {
       </div>
       ${canVote && myVote ? `
         <span class="metric good-pill">Voto registado</span>
+      ` : canVote && remoteEnabled ? `
+        <span class="metric">Completa o questionário pós-jogo no topo.</span>
       ` : canVote ? `
         <select data-mvp-candidate="${game.id}">
           <option value="">Escolher MVP</option>
