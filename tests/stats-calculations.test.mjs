@@ -5,7 +5,18 @@ import { runInNewContext } from "node:vm";
 
 import stats from "../stats-calculations.js";
 
-const { buildCombinationRanking, calculateBestWinStreak, summarizePlayerGoals } = stats;
+const { buildCombinationRanking, calculateBestWinStreak, countLeadingAbsences, isGoalAverageEligible, summarizePlayerGoals } = stats;
+
+test("goal averages require five games and no more than five recent absences", () => {
+  assert.equal(isGoalAverageEligible({ appearances: 4, recentAbsences: 0 }), false);
+  assert.equal(isGoalAverageEligible({ appearances: 5, recentAbsences: 5 }), true);
+  assert.equal(isGoalAverageEligible({ appearances: 5, recentAbsences: 6 }), false);
+});
+
+test("only consecutive leading absences count", () => {
+  assert.equal(countLeadingAbsences(["absent", "absent", "win"]), 2);
+  assert.equal(countLeadingAbsences(["win", "absent", "absent"]), 0);
+});
 
 test("trios require at least three games", () => {
   const twoGames = [

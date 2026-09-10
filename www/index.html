@@ -31,6 +31,7 @@
           <button class="tab" data-view="account">Conta</button>
           <button class="tab" data-view="players">Jogadores</button>
           <button class="tab" data-view="stats">Stats</button>
+          <button class="tab" data-view="monthly">Resumo mensal</button>
           <button class="tab admin-only" data-view="payments">Pagamentos</button>
           <button class="tab admin-only" data-view="claims">Pedidos</button>
           <button class="tab" data-view="games">Historico</button>
@@ -38,6 +39,7 @@
       </header>
 
       <section id="mvp-gate" class="mvp-gate hidden" aria-live="polite"></section>
+      <section id="monthly-auto-gate" class="mvp-gate hidden" aria-live="polite"></section>
 
       <main>
         <section class="view active" id="view-events">
@@ -264,6 +266,16 @@
           </section>
         </section>
 
+        <section class="view" id="view-monthly">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">O teu mês</p><h2>Resumo mensal</h2></div>
+              <label class="month-picker">Mês <select id="monthly-month"></select></label>
+            </div>
+            <div id="monthly-panel" class="monthly-panel"></div>
+          </section>
+        </section>
+
         <section class="view" id="view-payments">
           <section class="panel wide-panel">
             <div class="panel-head">
@@ -306,6 +318,8 @@
     <script src="app-config.js?v=20260723-statsrankings1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="stats-calculations.js?v=20260723-statsrankings1"></script>
-    <script src="app.js?v=20260723-statsrankings1"></script>
+    <script src="postgame-feedback.js?v=20260910-postgame"></script>
+    <script src="monthly-recap.js?v=20260910-recap"></script>
+    <script src="app.js?v=20260910-postgame"></script>
   </body>
 </html>
