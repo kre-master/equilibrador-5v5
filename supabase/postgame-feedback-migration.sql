@@ -74,13 +74,13 @@ to authenticated
 using (true);
 
 create schema if not exists private;
-revoke all on schema private from public, anon;
+revoke all on schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
 
 -- The privileged implementation lives outside the exposed public schema. It is
 -- SECURITY DEFINER only so one transaction can write both RLS-protected tables.
 -- Every relation is schema-qualified and the caller is re-derived from auth.uid().
-create or replace function private.submit_postgame_checkin(
+create or replace function private.submit_postgame_checkin_internal(
   p_game_id text,
   p_candidate_player_id text,
   p_game_intensity integer,
@@ -250,9 +250,9 @@ exception
 end;
 $function$;
 
-revoke all on function private.submit_postgame_checkin(text, text, integer, integer)
+revoke all on function private.submit_postgame_checkin_internal(text, text, integer, integer)
 from public, anon, authenticated;
-grant execute on function private.submit_postgame_checkin(text, text, integer, integer)
+grant execute on function private.submit_postgame_checkin_internal(text, text, integer, integer)
 to authenticated;
 
 -- PostgREST exposes only this invoker wrapper. Authenticated callers receive only
@@ -273,7 +273,7 @@ security invoker
 set search_path = ''
 as $function$
   select result.game_id, result.player_id, result.created_at
-  from private.submit_postgame_checkin(
+  from private.submit_postgame_checkin_internal(
     p_game_id,
     p_candidate_player_id,
     p_game_intensity,
