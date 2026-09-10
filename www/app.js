@@ -6,6 +6,12 @@ const PostgameRules = window.FooterPostgame || {
   INTENSITY_SCALE: { question: "Intensidade do jogo: Velhinhos ou Champions?", anchors: { 1: "Velhinhos", 5: "Bom ritmo", 10: "Champions" } },
   ENERGY_SCALE: { question: "Morreste ou jogavas mais meia hora?", anchors: { 1: "Morri", 5: "Ainda dava uns minutos", 10: "Mais meia hora facil" } },
 };
+const FooterMonthly = window.FooterMonthly || {
+  activeMinutesForSquad: (size) => 50 * Math.min(1, 5 / (Number(size) || 5)),
+  metForIntensity: (score) => Number.isFinite(Number(score)) && Number(score) >= 1 && Number(score) <= 10 ? 5 + ((Number(score) - 1) / 9) * 5 : 7,
+  estimateCalories: ({ weightKg, minutes, met }) => Math.round(Number(met) * Number(weightKg) * Number(minutes) / 60),
+  average: (values) => values.length ? values.reduce((sum, value) => sum + Number(value), 0) / values.length : null,
+};
 const FooterStats = window.FooterStats || {
   summarizePlayerGoals: (rows) => { const appearances = rows.length; const goalsFor = rows.reduce((s, r) => s + Number(r.goalsFor || 0), 0); const goalsAgainst = rows.reduce((s, r) => s + Number(r.goalsAgainst || 0), 0); return { appearances, goalsFor, goalsAgainst, averageGoalsFor: appearances ? goalsFor / appearances : 0, averageGoalsAgainst: appearances ? goalsAgainst / appearances : 0 }; },
   calculateBestWinStreak: (records) => { let running = 0; let best = 0; (records || []).forEach((record) => { if (record?.valid !== true) return; running = record.outcome === "win" ? running + 1 : 0; best = Math.max(best, running); }); return best; },
@@ -129,6 +135,7 @@ let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
 let gameFeedback = state.gameFeedback || [];
 let featureRollouts = state.featureRollouts || [];
+let privateWeightHistory = [];
 let mvpVoteCounts = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
@@ -333,6 +340,14 @@ function gameFeedbackFromRow(row) { return normalizeGameFeedbackRecord(row); }
 function normalizeFeatureRolloutRecord(record) {
   if (!record || typeof record !== "object") return null;
   return { key: String(record.key || "postgame_feedback"), activatedAt: record.activatedAt || record.activated_at || null, transitionGameId: record.transitionGameId || record.transition_game_id || null };
+}
+
+function normalizePrivateMetricRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const weightKg = Number(record.weightKg ?? record.weight_kg);
+  const playerId = record.playerId || record.player_id;
+  if (!playerId || !Number.isFinite(weightKg) || weightKg < 30 || weightKg > 250) return null;
+  return { id: String(record.id || createUuid()), playerId: String(playerId), userId: record.userId || record.user_id || null, weightKg, effectiveFrom: String(record.effectiveFrom || record.effective_from || todayInputDate()), createdAt: record.createdAt || record.created_at || new Date().toISOString() };
 }
 
 function normalizePlayerRecord(record, index) {
@@ -962,6 +977,7 @@ async function loadRemoteState() {
     gameMvpVotes = [];
     gameFeedback = [];
     featureRollouts = [];
+    privateWeightHistory = [];
     mvpVoteCounts = [];
     updateAccessUi();
     return;
@@ -976,6 +992,7 @@ async function loadRemoteState() {
     { data: mvpCountRows, error: mvpCountError },
     { data: feedbackRows, error: feedbackError },
     { data: rolloutRows, error: rolloutError },
+    { data: privateMetricRows, error: privateMetricError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
@@ -985,6 +1002,7 @@ async function loadRemoteState() {
     supabaseClient.rpc("mvp_vote_counts"),
     supabaseClient.from("game_feedback").select("*").order("created_at", { ascending: false }),
     supabaseClient.from("feature_rollouts").select("*").eq("key", "postgame_feedback"),
+    supabaseClient.from("player_private_metrics").select("*").eq("user_id", currentSession.user.id).order("effective_from", { ascending: false }),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -997,6 +1015,7 @@ async function loadRemoteState() {
   if (mvpCountError) console.warn("MVP vote count load failed. Run supabase/schema.sql again.", mvpCountError);
   if (feedbackError) console.warn("Postgame feedback load failed. Run supabase/postgame-feedback-migration.sql.", feedbackError);
   if (rolloutError) console.warn("Postgame rollout load failed. Run supabase/postgame-feedback-migration.sql.", rolloutError);
+  if (privateMetricError) console.warn("Private weight load failed. Run supabase/monthly-recap-migration.sql.", privateMetricError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -1055,6 +1074,7 @@ async function loadRemoteState() {
   gameMvpVotes = state.gameMvpVotes || [];
   gameFeedback = state.gameFeedback || [];
   featureRollouts = state.featureRollouts || [];
+  privateWeightHistory = (privateMetricRows || []).map(normalizePrivateMetricRecord).filter(Boolean);
   mvpVoteCounts = (mvpCountRows || []).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
@@ -1678,7 +1698,7 @@ function renderPlayerProfile() {
         <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
         <strong>${escapeHtml(playerData.name)}</strong>
         ${account ? `<span>${escapeHtml(account.email || account.username || "")}</span>` : ""}
-        ${playerData.linkedUserId === currentSession?.user?.id ? `<label class="private-weight">Peso estimado (kg, privado)<input type="number" min="35" max="200" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight></label>` : ""}
+        ${playerData.linkedUserId === currentSession?.user?.id ? `<label class="private-weight">Peso estimado (kg, privado)<input type="number" min="30" max="250" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight><small>Só tu tens acesso. Uma nova medição não altera meses anteriores.</small></label>` : ""}
       </div>
     </section>
   `;
@@ -1715,6 +1735,16 @@ function renderPlayerProfile() {
         openAward();
       }
     });
+  });
+  els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", async (event) => {
+    const value = Number(event.target.value);
+    if (value < 30 || value > 250) {
+      alert("Indica um peso entre 30 e 250 kg.");
+      return;
+    }
+    event.target.disabled = true;
+    await savePrivateWeight(playerData.id, value);
+    event.target.disabled = false;
   });
 }
 
@@ -4625,8 +4655,18 @@ function renderMvpPanel(game) {
         </select>
         <button class="ghost-btn" data-save-mvp-vote="${game.id}">Votar</button>
       ` : `<span class="metric">So participantes votam</span>`}
+      ${renderPostgameAdminInsights(game)}
     </section>
   `;
+}
+
+function renderPostgameAdminInsights(game) {
+  if (!isAdmin) return "";
+  const rows = gameFeedback.filter((item) => item.gameId === game.id);
+  if (!rows.length) return `<div class="postgame-admin"><strong>Respostas pós-jogo</strong><span>0 respostas</span></div>`;
+  const intensity = FooterMonthly.average(rows.map((item) => item.gameIntensity));
+  const energy = FooterMonthly.average(rows.map((item) => item.remainingEnergy));
+  return `<div class="postgame-admin"><strong>Respostas pós-jogo · ${rows.length}</strong><span>Jogo ${intensity.toFixed(1)}/10 · Forma percebida ${energy.toFixed(1)}/10</span><div>${rows.map((item) => `<small>${escapeHtml(findPlayer(item.playerId)?.name || "Jogador")}: jogo ${item.gameIntensity}, forma ${item.remainingEnergy}</small>`).join("")}</div></div>`;
 }
 
 function getLatestFinishedGame() {
@@ -4643,9 +4683,29 @@ function getPostgameRollout() {
 }
 
 function getPrivateWeightKey(playerId) { return `footer-weight-${currentSession?.user?.id || "local"}-${playerId}`; }
-function getPlayerWeight(playerId) {
+function getPlayerWeight(playerId, effectiveDate = new Date().toISOString()) {
+  const dateKey = String(effectiveDate).slice(0, 10);
+  const stored = privateWeightHistory
+    .filter((item) => item.playerId === playerId && item.effectiveFrom <= dateKey)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom) || new Date(b.createdAt) - new Date(a.createdAt))[0];
+  if (stored) return stored.weightKg;
   const value = Number(localStorage.getItem(getPrivateWeightKey(playerId)) || "75");
   return Number.isFinite(value) && value >= 35 && value <= 200 ? value : 75;
+}
+async function savePrivateWeight(playerId, weightKg) {
+  localStorage.setItem(getPrivateWeightKey(playerId), String(weightKg));
+  if (remoteEnabled && supabaseClient && currentSession?.user) {
+    const row = { player_id: playerId, user_id: currentSession.user.id, weight_kg: weightKg, effective_from: todayInputDate() };
+    const { data, error } = await supabaseClient.from("player_private_metrics").insert(row).select().single();
+    if (error) {
+      alert(`O peso ficou guardado neste dispositivo, mas ainda nao no Supabase. Executa monthly-recap-migration.sql. Detalhe: ${error.message}`);
+      return false;
+    }
+    const normalized = normalizePrivateMetricRecord(data);
+    if (normalized) privateWeightHistory.push(normalized);
+  }
+  renderMonthlyRecap();
+  return true;
 }
 function getPreviousMonthKey() { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - 1); return monthKey(date); }
 function getMonthlyGames(playerId, key) { return getFinishedGames().filter((game) => monthKey(game.date) === key && getPlayerParticipation(game, playerId)); }
@@ -4660,20 +4720,34 @@ function getMonthlyRecapData(playerId, key) {
     alreadySeen.add(award.key);
   }));
   const feedback = games.map((game) => gameFeedback.find((item) => item.gameId === game.id && item.playerId === playerId)).filter(Boolean);
-  const squadSizes = games.map((game) => getGamePlayerIds(game).length || 5);
-  const activeMinutes = games.reduce((sum, game, index) => sum + 50 * Math.min(1, 5 / squadSizes[index]), 0);
-  const avgIntensity = feedback.length ? feedback.reduce((sum, item) => sum + item.gameIntensity, 0) / feedback.length : 7;
-  const met = 5 + ((avgIntensity - 1) / 9) * 5;
-  const calories = Math.round(met * getPlayerWeight(playerId) * activeMinutes / 60);
-  const wins = games.filter((game) => { const p = getPlayerParticipation(game, playerId); return p && getPlayerOutcome(game, p.side) === "win"; }).length;
+  const activeMinutes = games.reduce((sum, game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    const squadSize = participation ? getGameSidePlayerIds(game, participation.side).length : 5;
+    return sum + FooterMonthly.activeMinutesForSquad(squadSize);
+  }, 0);
+  const avgIntensity = FooterMonthly.average(feedback.map((item) => item.gameIntensity));
+  const avgEnergy = FooterMonthly.average(feedback.map((item) => item.remainingEnergy));
+  const calories = games.reduce((sum, game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    const squadSize = participation ? getGameSidePlayerIds(game, participation.side).length : 5;
+    const minutes = FooterMonthly.activeMinutesForSquad(squadSize);
+    const answer = feedback.find((item) => item.gameId === game.id);
+    return sum + FooterMonthly.estimateCalories({ weightKg: getPlayerWeight(playerId, game.date), minutes, met: FooterMonthly.metForIntensity(answer?.gameIntensity) });
+  }, 0);
+  const outcomes = games.map((game) => { const participation = getPlayerParticipation(game, playerId); return participation ? getPlayerOutcome(game, participation.side) : "open"; });
+  const wins = outcomes.filter((outcome) => outcome === "win").length;
+  const draws = outcomes.filter((outcome) => outcome === "draw").length;
+  const losses = outcomes.filter((outcome) => outcome === "loss").length;
   const mvps = games.filter((game) => getOfficialMvpIdsForGame(game).has(playerId)).length;
-  return { games, wins, losses: games.length - wins, awards, firstAwards: awards.filter((award) => award.isFirst), repeatedAwards: awards.filter((award) => !award.isFirst), mvps, activeMinutes, calories, feedback, avgIntensity };
+  const teamGamesInMonth = getFinishedGames().filter((game) => monthKey(game.date) === key).length;
+  return { games, wins, draws, losses, attendedAll: Boolean(teamGamesInMonth && games.length === teamGamesInMonth), awards, firstAwards: awards.filter((award) => award.isFirst), repeatedAwards: awards.filter((award) => !award.isFirst), mvps, activeMinutes, calories, feedback, avgIntensity, avgEnergy };
 }
 function getMonthlyMessage(data) {
   if (!data.games.length) return "Este mês passaste ao lado — até o banco sentiu a tua falta.";
   if (data.wins === data.games.length) return `Perfeito: ${data.games.length} jogos, ${data.games.length} vitórias. O balneário está a pedir autógrafos.`;
-  if (!data.wins) return `${data.games.length} jogos, zero vitórias. Pelo menos a consistência esteve lá.`;
+  if (data.losses === data.games.length) return `${data.games.length} jogos, ${data.games.length} derrotas. Pelo menos a consistência esteve lá.`;
   if (data.games.length === 1) return "Uma aparição especial. Tipo concerto esgotado, mas com chuteiras.";
+  if (data.attendedAll) return `Não falhaste um jogo. As pernas podem discordar, mas a folha de presenças confirma.`;
   return `${data.wins} vitórias em ${data.games.length} jogos. Nem sempre Champions, mas raramente Velhinhos.`;
 }
 function renderMonthlyRecap() {
@@ -4685,19 +4759,23 @@ function renderMonthlyRecap() {
   if (els.monthlyMonth) { els.monthlyMonth.innerHTML = months.map((key) => `<option value="${key}" ${key === currentMonthlyMonth ? "selected" : ""}>${formatMonthLabel(key)}</option>`).join(""); els.monthlyMonth.disabled = !months.length; }
   if (!months.length) { els.monthlyPanel.innerHTML = `<div class="empty-state">Ainda não há um mês com jogos teus.</div>`; return; }
   const data = getMonthlyRecapData(playerData.id, currentMonthlyMonth);
-  const firstGameYear = getFinishedGames().filter((game) => getPlayerParticipation(game, playerData.id)).sort((a,b) => new Date(a.date)-new Date(b.date))[0];
-  const year = firstGameYear ? new Date(firstGameYear.date).getFullYear() : new Date().getFullYear();
-  const yearMonths = Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
+  const year = Number(currentMonthlyMonth.slice(0, 4));
+  const gamesInYear = getFinishedGames().filter((game) => new Date(game.date).getFullYear() === year).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const firstMonthIndex = gamesInYear.length ? new Date(gamesInYear[0].date).getMonth() : 0;
+  const now = new Date();
+  const lastMonthIndex = year === now.getFullYear() ? now.getMonth() : 11;
+  const yearMonths = Array.from({ length: Math.max(1, lastMonthIndex - firstMonthIndex + 1) }, (_, index) => `${year}-${String(firstMonthIndex + index + 1).padStart(2, "0")}`);
   els.monthlyPanel.innerHTML = `
-    <section class="monthly-hero"><p class="eyebrow">${formatMonthLabel(currentMonthlyMonth)}</p><h3>${escapeHtml(getMonthlyMessage(data))}</h3><div class="monthly-hero-stats"><span>${data.games.length} jogos</span><span>${data.wins} vitórias</span><span>${data.mvps} MVP${data.mvps === 1 ? "" : "s"}</span></div></section>
-    <div class="monthly-stat-grid"><article><strong>${Math.round(data.activeMinutes)} min</strong><span>atividade estimada</span></article><article><strong>${data.calories} kcal</strong><span>estimadas</span></article><article><strong>${data.avgIntensity.toFixed(1)}/10</strong><span>ritmo percebido</span></article></div>
+    <section class="monthly-hero"><p class="eyebrow">${formatMonthLabel(currentMonthlyMonth)}</p><h3>${escapeHtml(getMonthlyMessage(data))}</h3><div class="monthly-hero-stats"><span>${data.games.length} jogos</span><span>${data.wins}V · ${data.draws}E · ${data.losses}D</span><span>${data.mvps} MVP${data.mvps === 1 ? "" : "s"}</span></div></section>
+    <div class="monthly-stat-grid"><article><strong>${Math.round(data.activeMinutes)} min</strong><span>atividade estimada</span></article><article><strong>${data.calories} kcal</strong><span>estimadas com ${getPlayerWeight(playerData.id)} kg</span></article><article><strong>${data.avgIntensity == null ? "—" : `${data.avgIntensity.toFixed(1)}/10`}</strong><span>Velhinhos ↔ Champions</span></article><article><strong>${data.avgEnergy == null ? "—" : `${data.avgEnergy.toFixed(1)}/10`}</strong><span>forma física percebida</span></article></div>
     <section class="monthly-section"><h3>Cartas recebidas</h3><p>${data.firstAwards.length} novas pela primeira vez · ${data.repeatedAwards.length} repetidas</p><div class="award-grid">${data.awards.length ? data.awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("") : `<div class="empty-state compact">Nenhuma carta este mês — ainda.</div>`}</div></section>
-    <section class="monthly-section"><h3>${year} desde o primeiro jogo</h3><div class="monthly-bars">${yearMonths.map((key) => { const monthData = getMonthlyRecapData(playerData.id, key); const height = Math.min(100, monthData.games.length * 20); return `<button class="monthly-bar" title="${formatMonthLabel(key)}: ${monthData.games.length} jogos" style="--bar-height:${height}%" data-month-select="${key}"><span></span><small>${key.slice(5)}</small></button>`; }).join("")}</div></section>`;
+    <section class="monthly-section"><h3>${year} desde o primeiro jogo</h3><p>Altura da barra: presenças. Ponto: forma física percebida.</p><div class="monthly-bars">${yearMonths.map((key) => { const monthData = getMonthlyRecapData(playerData.id, key); const height = Math.min(100, monthData.games.length * 20); const energy = monthData.avgEnergy == null ? null : monthData.avgEnergy * 10; return `<button class="monthly-bar" aria-label="${formatMonthLabel(key)}: ${monthData.games.length} jogos${monthData.avgEnergy == null ? ", sem resposta de forma física" : `, forma física ${monthData.avgEnergy.toFixed(1)} em 10`}" style="--bar-height:${height}%;--energy-height:${energy ?? 0}%" data-month-select="${key}"><span></span>${energy == null ? "" : `<i aria-hidden="true"></i>`}<small>${key.slice(5)}</small></button>`; }).join("")}</div></section>`;
   els.monthlyPanel.querySelectorAll("[data-month-select]").forEach((button) => button.addEventListener("click", () => { currentMonthlyMonth = button.dataset.monthSelect; renderMonthlyRecap(); }));
   maybeOpenMonthlyRecap(playerData.id, currentMonthlyMonth, months, data);
 }
 function maybeOpenMonthlyRecap(playerId, key, months, data) {
   if (key !== getPreviousMonthKey() || !months.includes(key) || !data.games.length || !els.monthlyAutoGate) return;
+  if (getPendingPostgameCheckins().length || getPendingOfficialMvpRevealRequirement() || getPendingAwardRevealRequirement()) return;
   const storageKey = `footer-monthly-open-${playerId}-${key}`;
   if (localStorage.getItem(storageKey)) return;
   localStorage.setItem(storageKey, "1");
@@ -4730,8 +4808,9 @@ function getPendingPostgameCheckins() {
 
 function renderMvpVoteGate() {
   if (!els.mvpGate) return;
-  const requirement = getPendingPostgameCheckins()[0] || null;
-  document.body.classList.toggle("mvp-gate-open", Boolean(requirement));
+  const pendingCheckins = getPendingPostgameCheckins();
+  const requirement = pendingCheckins[0] || null;
+  document.body.classList.toggle("mvp-gate-open", Boolean(requirement) || !els.monthlyAutoGate?.classList.contains("hidden"));
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
     els.mvpGate.innerHTML = "";
@@ -4743,38 +4822,57 @@ function renderMvpVoteGate() {
   const { game, candidates } = requirement;
   els.mvpGate.innerHTML = `
     <div class="mvp-gate-card">
-      <p class="eyebrow">Fecho do jogo pendente</p>
+      <p class="eyebrow">Fecho do jogo · 1 de ${pendingCheckins.length}</p>
       <h2>Vota no MVP e conta como foi o jogo</h2>
       <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
       <select data-gate-mvp-candidate="${game.id}">
         <option value="">Escolher MVP</option>
         ${candidates.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)}</option>`).join("")}
       </select>
-      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.INTENSITY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-intensity="${game.id}"><output data-gate-intensity-value>5</output><small>1 ${PostgameRules.INTENSITY_SCALE.anchors[1]} · 5 ${PostgameRules.INTENSITY_SCALE.anchors[5]} · 10 ${PostgameRules.INTENSITY_SCALE.anchors[10]}</small></label>
-      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.ENERGY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-energy="${game.id}"><output data-gate-energy-value>5</output><small>1 ${PostgameRules.ENERGY_SCALE.anchors[1]} · 5 ${PostgameRules.ENERGY_SCALE.anchors[5]} · 10 ${PostgameRules.ENERGY_SCALE.anchors[10]}</small></label>
-      <button class="primary-btn" data-gate-save-postgame="${game.id}">Guardar e continuar</button>
+      ${renderPostgameScale("intensity", PostgameRules.INTENSITY_SCALE)}
+      ${renderPostgameScale("energy", PostgameRules.ENERGY_SCALE)}
+      <button class="primary-btn" data-gate-save-postgame="${game.id}" disabled>Guardar e continuar</button>
       <span class="hint">O voto MVP e confidencial. As respostas ficam visiveis apenas para ti e para o admin.</span>
     </div>
   `;
 
-  els.mvpGate.querySelectorAll("input[type=range]").forEach((input) => input.addEventListener("input", () => {
-    const output = input.parentElement?.querySelector("output");
-    if (output) output.textContent = input.value;
+  const select = els.mvpGate.querySelector(`[data-gate-mvp-candidate="${game.id}"]`);
+  const saveButton = els.mvpGate.querySelector("[data-gate-save-postgame]");
+  const updateSaveState = () => {
+    const intensity = els.mvpGate.querySelector('[data-scale-button="intensity"][aria-checked="true"]');
+    const energy = els.mvpGate.querySelector('[data-scale-button="energy"][aria-checked="true"]');
+    saveButton.disabled = !(select?.value && intensity && energy);
+  };
+  select?.addEventListener("change", updateSaveState);
+  els.mvpGate.querySelectorAll("[data-scale-button]").forEach((button) => button.addEventListener("click", () => {
+    const key = button.dataset.scaleButton;
+    els.mvpGate.querySelectorAll(`[data-scale-button="${key}"]`).forEach((item) => { item.setAttribute("aria-checked", "false"); item.classList.remove("selected"); });
+    button.setAttribute("aria-checked", "true");
+    button.classList.add("selected");
+    updateSaveState();
   }));
   els.mvpGate.querySelector("[data-gate-save-postgame]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
-    const select = els.mvpGate.querySelector(`[data-gate-mvp-candidate="${game.id}"]`);
     const candidateId = select?.value;
-    if (!linkedPlayer || !candidateId) return;
-    const intensity = Number(els.mvpGate.querySelector(`[data-gate-intensity="${game.id}"]`)?.value);
-    const energy = Number(els.mvpGate.querySelector(`[data-gate-energy="${game.id}"]`)?.value);
+    const intensityButton = els.mvpGate.querySelector('[data-scale-button="intensity"][aria-checked="true"]');
+    const energyButton = els.mvpGate.querySelector('[data-scale-button="energy"][aria-checked="true"]');
+    if (!linkedPlayer || !candidateId || !intensityButton || !energyButton) {
+      const missingControl = !candidateId ? select : !intensityButton ? els.mvpGate.querySelector('[data-scale-button="intensity"]') : els.mvpGate.querySelector('[data-scale-button="energy"]');
+      missingControl?.focus();
+      return;
+    }
+    const intensity = Number(intensityButton.dataset.value);
+    const energy = Number(energyButton.dataset.value);
+    saveButton.disabled = true;
+    saveButton.textContent = "A guardar...";
     const ok = await submitPostgameCheckin(game, linkedPlayer, candidateId, intensity, energy);
     if (ok) render();
+    else { saveButton.textContent = "Tentar novamente"; updateSaveState(); }
   });
-  els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", (event) => {
-    const value = Number(event.target.value);
-    if (value >= 35 && value <= 200) { localStorage.setItem(getPrivateWeightKey(playerData.id), String(value)); renderMonthlyRecap(); }
-  });
+}
+
+function renderPostgameScale(key, scale) {
+  return `<fieldset class="postgame-scale"><legend>${escapeHtml(scale.question)}</legend><div class="postgame-scale-options" role="radiogroup" aria-label="${escapeHtml(scale.question)}">${Array.from({ length: 10 }, (_, index) => { const value = index + 1; const anchor = scale.anchors[value]; return `<button type="button" role="radio" aria-checked="false" aria-label="${value}${anchor ? `, ${escapeHtml(anchor)}` : ""}" data-scale-button="${key}" data-value="${value}">${value}</button>`; }).join("")}</div><small>1 ${escapeHtml(scale.anchors[1])} · 5 ${escapeHtml(scale.anchors[5])} · 10 ${escapeHtml(scale.anchors[10])}</small></fieldset>`;
 }
 
 async function submitPostgameCheckin(game, linkedPlayer, candidateId, gameIntensity, remainingEnergy) {

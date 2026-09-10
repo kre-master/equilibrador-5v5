@@ -50,10 +50,10 @@ function policyDefinition(sql, policyName, tableName) {
   return match[0];
 }
 
-test("canonical schema ends with the standalone postgame migration", () => {
+test("canonical schema contains the standalone postgame migration", () => {
   assert.ok(
-    normalized(schemaSql).endsWith(normalized(migrationSql)),
-    "schema.sql must contain the exact final migration definitions as its suffix",
+    normalized(schemaSql).includes(normalized(migrationSql)),
+    "schema.sql must contain the exact postgame migration definitions",
   );
 });
 
