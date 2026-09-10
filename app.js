@@ -6,6 +6,14 @@ const PostgameRules = window.FooterPostgame || {
   INTENSITY_SCALE: { question: "Intensidade do jogo: Velhinhos ou Champions?", anchors: { 1: "Velhinhos", 5: "Bom ritmo", 10: "Champions" } },
   ENERGY_SCALE: { question: "Morreste ou jogavas mais meia hora?", anchors: { 1: "Morri", 5: "Ainda dava uns minutos", 10: "Mais meia hora facil" } },
 };
+const FooterStats = window.FooterStats || {
+  summarizePlayerGoals: (rows) => { const appearances = rows.length; const goalsFor = rows.reduce((s, r) => s + Number(r.goalsFor || 0), 0); const goalsAgainst = rows.reduce((s, r) => s + Number(r.goalsAgainst || 0), 0); return { appearances, goalsFor, goalsAgainst, averageGoalsFor: appearances ? goalsFor / appearances : 0, averageGoalsAgainst: appearances ? goalsAgainst / appearances : 0 }; },
+  calculateBestWinStreak: (records) => { let running = 0; let best = 0; (records || []).forEach((record) => { if (record?.valid !== true) return; running = record.outcome === "win" ? running + 1 : 0; best = Math.max(best, running); }); return best; },
+  countLeadingAbsences: (rows) => { let count = 0; for (const row of rows) { if (row === "absent") count += 1; else break; } return count; },
+  isGoalAverageEligible: ({ appearances, recentAbsences }) => appearances >= 5 && recentAbsences <= 5,
+  sortGoalsForAverage: (a, b, name) => b.goalsForAverage - a.goalsForAverage || b.goalsFor - a.goalsFor || b.appearances - a.appearances || name(a).localeCompare(name(b)),
+  sortGoalsAgainstAverage: (a, b, name) => a.goalsAgainstAverage - b.goalsAgainstAverage || a.goalsAgainst - b.goalsAgainst || b.appearances - a.appearances || name(a).localeCompare(name(b)),
+};
 const PAYMENT_RULES = {
   playerFeePerGame: 4,
   monthlyCap: 15,
@@ -137,6 +145,7 @@ let previewGame = null;
 let authActionBusy = false;
 let currentPlayerProfileId = null;
 let currentViewName = "events";
+let currentMonthlyMonth = null;
 let navigationHistoryReady = false;
 let awardRevealSessionSeenKeys = new Set();
 
@@ -191,11 +200,14 @@ const els = {
   accountSignup: document.querySelector("#account-signup"),
   adminLogout: document.querySelector("#admin-logout"),
   mvpGate: document.querySelector("#mvp-gate"),
+  monthlyAutoGate: document.querySelector("#monthly-auto-gate"),
   accountPanel: document.querySelector("#account-panel"),
   claimsList: document.querySelector("#claims-list"),
   accountsList: document.querySelector("#accounts-list"),
   paymentsPanel: document.querySelector("#payments-panel"),
   statsPanel: document.querySelector("#stats-panel"),
+  monthlyPanel: document.querySelector("#monthly-panel"),
+  monthlyMonth: document.querySelector("#monthly-month"),
   eventForm: document.querySelector("#event-form"),
   eventTitle: document.querySelector("#event-title"),
   eventDate: document.querySelector("#event-date"),
@@ -797,6 +809,7 @@ function bindEvents() {
   on(els.adminLogout, "click", adminLogout);
   on(els.eventForm, "submit", saveEventFromForm);
   on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
+  on(els.monthlyMonth, "change", () => { currentMonthlyMonth = els.monthlyMonth.value; renderMonthlyRecap(); });
 }
 
 async function initApp() {
@@ -1388,6 +1401,7 @@ function render() {
   renderAccountsList();
   renderPaymentsPanel();
   renderStatsPanel();
+  renderMonthlyRecap();
   renderEventsList();
   renderPlayerProfile();
   renderMvpVoteGate();
@@ -1664,6 +1678,7 @@ function renderPlayerProfile() {
         <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
         <strong>${escapeHtml(playerData.name)}</strong>
         ${account ? `<span>${escapeHtml(account.email || account.username || "")}</span>` : ""}
+        ${playerData.linkedUserId === currentSession?.user?.id ? `<label class="private-weight">Peso estimado (kg, privado)<input type="number" min="35" max="200" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight></label>` : ""}
       </div>
     </section>
   `;
@@ -2855,7 +2870,7 @@ function renderStatsPanel() {
   const currentDebts = showDebtStats ? getCurrentDebtRows().slice(0, 5) : [];
   const pairRows = getBestPairStats(5);
   const trioRows = getBestTrioStats(5);
-  const goalEligibleRows = activeRows.filter((row) => row.appearances >= 5);
+  const goalEligibleRows = activeRows.filter((row) => row.goalAverageEligible);
   const goalsForRows = goalEligibleRows.slice().sort(sortByGoalsForAverage).slice(0, 5);
   const goalsAgainstRows = goalEligibleRows.slice().sort(sortByGoalsAgainstAverage).slice(0, 5);
   const mvpHistoryRows = getMvpHistoryRows(10);
@@ -2897,8 +2912,8 @@ function renderStatsPanel() {
       ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
-      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
-      ${renderStatsRanking("🛡️ Menor media de golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
+      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Preciso de 5 jogos e nao estar ausente ha mais de 5 jogos.")}
+      ${renderStatsRanking("🧤 Menos golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Preciso de 5 jogos e nao estar ausente ha mais de 5 jogos.")}
       ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
       ${renderTrioRanking(trioRows)}
@@ -2956,6 +2971,7 @@ function getPlayerHistoryStatsRows() {
         };
       })
     );
+    const recentAbsences = FooterStats.countLeadingAbsences(getPlayerTeamRecord(playerData.id, Number.MAX_SAFE_INTEGER).map((item) => item.outcome));
     return {
       player: playerData,
       appearances,
@@ -2969,6 +2985,8 @@ function getPlayerHistoryStatsRows() {
       goalsAgainst: goalSummary.goalsAgainst,
       goalsForAverage: goalSummary.averageGoalsFor,
       goalsAgainstAverage: goalSummary.averageGoalsAgainst,
+      recentAbsences,
+      goalAverageEligible: FooterStats.isGoalAverageEligible({ appearances, recentAbsences }),
     };
   });
 }
@@ -4622,6 +4640,70 @@ function getPostgameRollout() {
   })();
 }
 
+function getPrivateWeightKey(playerId) { return `footer-weight-${currentSession?.user?.id || "local"}-${playerId}`; }
+function getPlayerWeight(playerId) {
+  const value = Number(localStorage.getItem(getPrivateWeightKey(playerId)) || "75");
+  return Number.isFinite(value) && value >= 35 && value <= 200 ? value : 75;
+}
+function getPreviousMonthKey() { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - 1); return monthKey(date); }
+function getMonthlyGames(playerId, key) { return getFinishedGames().filter((game) => monthKey(game.date) === key && getPlayerParticipation(game, playerId)); }
+function getMonthlyRecapData(playerId, key) {
+  const games = getMonthlyGames(playerId, key);
+  const awards = [];
+  const alreadySeen = new Set();
+  getFinishedGamesAsc().filter((game) => monthKey(game.date) < key).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => alreadySeen.add(award.key)));
+  games.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => {
+    const isFirst = !alreadySeen.has(award.key);
+    awards.push({ ...award, gameId: game.id, date: game.date, isFirst });
+    alreadySeen.add(award.key);
+  }));
+  const feedback = games.map((game) => gameFeedback.find((item) => item.gameId === game.id && item.playerId === playerId)).filter(Boolean);
+  const squadSizes = games.map((game) => getGamePlayerIds(game).length || 5);
+  const activeMinutes = games.reduce((sum, game, index) => sum + 50 * Math.min(1, 5 / squadSizes[index]), 0);
+  const avgIntensity = feedback.length ? feedback.reduce((sum, item) => sum + item.gameIntensity, 0) / feedback.length : 7;
+  const met = 5 + ((avgIntensity - 1) / 9) * 5;
+  const calories = Math.round(met * getPlayerWeight(playerId) * activeMinutes / 60);
+  const wins = games.filter((game) => { const p = getPlayerParticipation(game, playerId); return p && getPlayerOutcome(game, p.side) === "win"; }).length;
+  const mvps = games.filter((game) => getOfficialMvpIdsForGame(game).has(playerId)).length;
+  return { games, wins, losses: games.length - wins, awards, firstAwards: awards.filter((award) => award.isFirst), repeatedAwards: awards.filter((award) => !award.isFirst), mvps, activeMinutes, calories, feedback, avgIntensity };
+}
+function getMonthlyMessage(data) {
+  if (!data.games.length) return "Este mês passaste ao lado — até o banco sentiu a tua falta.";
+  if (data.wins === data.games.length) return `Perfeito: ${data.games.length} jogos, ${data.games.length} vitórias. O balneário está a pedir autógrafos.`;
+  if (!data.wins) return `${data.games.length} jogos, zero vitórias. Pelo menos a consistência esteve lá.`;
+  if (data.games.length === 1) return "Uma aparição especial. Tipo concerto esgotado, mas com chuteiras.";
+  return `${data.wins} vitórias em ${data.games.length} jogos. Nem sempre Champions, mas raramente Velhinhos.`;
+}
+function renderMonthlyRecap() {
+  if (!els.monthlyPanel) return;
+  const playerData = getLinkedPlayer();
+  if (!playerData) { els.monthlyPanel.innerHTML = `<div class="empty-state">Liga a tua conta a um jogador para veres o teu resumo.</div>`; return; }
+  const months = [...new Set(getFinishedGames().filter((game) => getPlayerParticipation(game, playerData.id)).map((game) => monthKey(game.date)))].sort().reverse();
+  if (!currentMonthlyMonth || !months.includes(currentMonthlyMonth)) currentMonthlyMonth = months[0] || monthKey(new Date());
+  if (els.monthlyMonth) { els.monthlyMonth.innerHTML = months.map((key) => `<option value="${key}" ${key === currentMonthlyMonth ? "selected" : ""}>${formatMonthLabel(key)}</option>`).join(""); els.monthlyMonth.disabled = !months.length; }
+  if (!months.length) { els.monthlyPanel.innerHTML = `<div class="empty-state">Ainda não há um mês com jogos teus.</div>`; return; }
+  const data = getMonthlyRecapData(playerData.id, currentMonthlyMonth);
+  const firstGameYear = getFinishedGames().filter((game) => getPlayerParticipation(game, playerData.id)).sort((a,b) => new Date(a.date)-new Date(b.date))[0];
+  const year = firstGameYear ? new Date(firstGameYear.date).getFullYear() : new Date().getFullYear();
+  const yearMonths = Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
+  els.monthlyPanel.innerHTML = `
+    <section class="monthly-hero"><p class="eyebrow">${formatMonthLabel(currentMonthlyMonth)}</p><h3>${escapeHtml(getMonthlyMessage(data))}</h3><div class="monthly-hero-stats"><span>${data.games.length} jogos</span><span>${data.wins} vitórias</span><span>${data.mvps} MVP${data.mvps === 1 ? "" : "s"}</span></div></section>
+    <div class="monthly-stat-grid"><article><strong>${Math.round(data.activeMinutes)} min</strong><span>atividade estimada</span></article><article><strong>${data.calories} kcal</strong><span>estimadas</span></article><article><strong>${data.avgIntensity.toFixed(1)}/10</strong><span>ritmo percebido</span></article></div>
+    <section class="monthly-section"><h3>Cartas recebidas</h3><p>${data.firstAwards.length} novas pela primeira vez · ${data.repeatedAwards.length} repetidas</p><div class="award-grid">${data.awards.length ? data.awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("") : `<div class="empty-state compact">Nenhuma carta este mês — ainda.</div>`}</div></section>
+    <section class="monthly-section"><h3>${year} desde o primeiro jogo</h3><div class="monthly-bars">${yearMonths.map((key) => { const monthData = getMonthlyRecapData(playerData.id, key); const height = Math.min(100, monthData.games.length * 20); return `<button class="monthly-bar" title="${formatMonthLabel(key)}: ${monthData.games.length} jogos" style="--bar-height:${height}%" data-month-select="${key}"><span></span><small>${key.slice(5)}</small></button>`; }).join("")}</div></section>`;
+  els.monthlyPanel.querySelectorAll("[data-month-select]").forEach((button) => button.addEventListener("click", () => { currentMonthlyMonth = button.dataset.monthSelect; renderMonthlyRecap(); }));
+  maybeOpenMonthlyRecap(playerData.id, currentMonthlyMonth, months, data);
+}
+function maybeOpenMonthlyRecap(playerId, key, months, data) {
+  if (key !== getPreviousMonthKey() || !months.includes(key) || !data.games.length || !els.monthlyAutoGate) return;
+  const storageKey = `footer-monthly-open-${playerId}-${key}`;
+  if (localStorage.getItem(storageKey)) return;
+  localStorage.setItem(storageKey, "1");
+  els.monthlyAutoGate.classList.remove("hidden"); document.body.classList.add("mvp-gate-open");
+  els.monthlyAutoGate.innerHTML = `<div class="mvp-gate-card"><p class="eyebrow">Olha como foi o teu último mês</p><h2>${escapeHtml(getMonthlyMessage(data))}</h2><p>${data.games.length} jogos · ${data.wins} vitórias · ${data.calories} kcal estimadas</p><button class="primary-btn" data-open-monthly>Ver resumo</button></div>`;
+  els.monthlyAutoGate.querySelector("[data-open-monthly]").addEventListener("click", () => { els.monthlyAutoGate.classList.add("hidden"); document.body.classList.remove("mvp-gate-open"); showView("monthly"); renderMonthlyRecap(); });
+}
+
 function getPendingPostgameCheckins() {
   const linkedPlayer = getLinkedPlayer();
   if (!linkedPlayer) return [];
@@ -4686,6 +4768,10 @@ function renderMvpVoteGate() {
     const energy = Number(els.mvpGate.querySelector(`[data-gate-energy="${game.id}"]`)?.value);
     const ok = await submitPostgameCheckin(game, linkedPlayer, candidateId, intensity, energy);
     if (ok) render();
+  });
+  els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", (event) => {
+    const value = Number(event.target.value);
+    if (value >= 35 && value <= 200) { localStorage.setItem(getPrivateWeightKey(playerData.id), String(value)); renderMonthlyRecap(); }
   });
 }
 

@@ -1,4 +1,19 @@
 const STORAGE_KEY = "five-a-side-balancer-state-v1";
+const PostgameRules = window.FooterPostgame || {
+  isScaleValue: (value) => Number.isInteger(value) && value >= 1 && value <= 10,
+  isCheckinRequired: ({ hasVote = false, hasFeedback = false, isTransitionGame = false, isAfterRollout = false, isBeforeRollout = false } = {}) => !hasFeedback && !isBeforeRollout && (isTransitionGame ? !hasVote : Boolean(isAfterRollout)),
+  sortPendingCheckins: (items) => [...items].sort((a, b) => new Date(a.date) - new Date(b.date)),
+  INTENSITY_SCALE: { question: "Intensidade do jogo: Velhinhos ou Champions?", anchors: { 1: "Velhinhos", 5: "Bom ritmo", 10: "Champions" } },
+  ENERGY_SCALE: { question: "Morreste ou jogavas mais meia hora?", anchors: { 1: "Morri", 5: "Ainda dava uns minutos", 10: "Mais meia hora facil" } },
+};
+const FooterStats = window.FooterStats || {
+  summarizePlayerGoals: (rows) => { const appearances = rows.length; const goalsFor = rows.reduce((s, r) => s + Number(r.goalsFor || 0), 0); const goalsAgainst = rows.reduce((s, r) => s + Number(r.goalsAgainst || 0), 0); return { appearances, goalsFor, goalsAgainst, averageGoalsFor: appearances ? goalsFor / appearances : 0, averageGoalsAgainst: appearances ? goalsAgainst / appearances : 0 }; },
+  calculateBestWinStreak: (records) => { let running = 0; let best = 0; (records || []).forEach((record) => { if (record?.valid !== true) return; running = record.outcome === "win" ? running + 1 : 0; best = Math.max(best, running); }); return best; },
+  countLeadingAbsences: (rows) => { let count = 0; for (const row of rows) { if (row === "absent") count += 1; else break; } return count; },
+  isGoalAverageEligible: ({ appearances, recentAbsences }) => appearances >= 5 && recentAbsences <= 5,
+  sortGoalsForAverage: (a, b, name) => b.goalsForAverage - a.goalsForAverage || b.goalsFor - a.goalsFor || b.appearances - a.appearances || name(a).localeCompare(name(b)),
+  sortGoalsAgainstAverage: (a, b, name) => a.goalsAgainstAverage - b.goalsAgainstAverage || a.goalsAgainst - b.goalsAgainst || b.appearances - a.appearances || name(a).localeCompare(name(b)),
+};
 const PAYMENT_RULES = {
   playerFeePerGame: 4,
   monthlyCap: 15,
@@ -112,6 +127,8 @@ let knownProfiles = [];
 let playerClaims = [];
 let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
+let gameFeedback = state.gameFeedback || [];
+let featureRollouts = state.featureRollouts || [];
 let mvpVoteCounts = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
@@ -128,6 +145,7 @@ let previewGame = null;
 let authActionBusy = false;
 let currentPlayerProfileId = null;
 let currentViewName = "events";
+let currentMonthlyMonth = null;
 let navigationHistoryReady = false;
 let awardRevealSessionSeenKeys = new Set();
 
@@ -182,11 +200,14 @@ const els = {
   accountSignup: document.querySelector("#account-signup"),
   adminLogout: document.querySelector("#admin-logout"),
   mvpGate: document.querySelector("#mvp-gate"),
+  monthlyAutoGate: document.querySelector("#monthly-auto-gate"),
   accountPanel: document.querySelector("#account-panel"),
   claimsList: document.querySelector("#claims-list"),
   accountsList: document.querySelector("#accounts-list"),
   paymentsPanel: document.querySelector("#payments-panel"),
   statsPanel: document.querySelector("#stats-panel"),
+  monthlyPanel: document.querySelector("#monthly-panel"),
+  monthlyMonth: document.querySelector("#monthly-month"),
   eventForm: document.querySelector("#event-form"),
   eventTitle: document.querySelector("#event-title"),
   eventDate: document.querySelector("#event-date"),
@@ -288,11 +309,30 @@ function migrateState(saved) {
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
   saved.gameMvpVotes = Array.isArray(saved.gameMvpVotes) ? saved.gameMvpVotes.map(normalizeMvpVoteRecord).filter(Boolean) : [];
+  saved.gameFeedback = Array.isArray(saved.gameFeedback) ? saved.gameFeedback.map(normalizeGameFeedbackRecord).filter(Boolean) : [];
+  saved.featureRollouts = Array.isArray(saved.featureRollouts) ? saved.featureRollouts.map(normalizeFeatureRolloutRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
   saved.gameFinanceOverrides = Array.isArray(saved.gameFinanceOverrides) ? saved.gameFinanceOverrides.map(normalizeGameFinanceOverrideRecord).filter(Boolean) : [];
   saved.financeSettings = normalizeFinanceSettings(saved.financeSettings);
   return saved;
+}
+
+function normalizeGameFeedbackRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const gameId = record.gameId || record.game_id;
+  const playerId = record.playerId || record.player_id;
+  const intensity = Number(record.gameIntensity ?? record.game_intensity);
+  const energy = Number(record.remainingEnergy ?? record.remaining_energy);
+  if (!gameId || !playerId || !PostgameRules.isScaleValue(intensity) || !PostgameRules.isScaleValue(energy)) return null;
+  return { id: String(record.id || createUuid()), gameId: String(gameId), playerId: String(playerId), userId: record.userId || record.user_id || null, gameIntensity: intensity, remainingEnergy: energy, calculationVersion: Number(record.calculationVersion ?? record.calculation_version ?? 1), createdAt: record.createdAt || record.created_at || new Date().toISOString() };
+}
+
+function gameFeedbackFromRow(row) { return normalizeGameFeedbackRecord(row); }
+
+function normalizeFeatureRolloutRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  return { key: String(record.key || "postgame_feedback"), activatedAt: record.activatedAt || record.activated_at || null, transitionGameId: record.transitionGameId || record.transition_game_id || null };
 }
 
 function normalizePlayerRecord(record, index) {
@@ -654,6 +694,8 @@ function financeSettingsToRow(settings) {
 
 function saveState() {
   state.gameMvpVotes = gameMvpVotes;
+  state.gameFeedback = gameFeedback;
+  state.featureRollouts = featureRollouts;
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
   state.gameFinanceOverrides = gameFinanceOverrides;
@@ -767,6 +809,7 @@ function bindEvents() {
   on(els.adminLogout, "click", adminLogout);
   on(els.eventForm, "submit", saveEventFromForm);
   on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
+  on(els.monthlyMonth, "change", () => { currentMonthlyMonth = els.monthlyMonth.value; renderMonthlyRecap(); });
 }
 
 async function initApp() {
@@ -917,6 +960,8 @@ async function loadRemoteState() {
   if (!currentSession?.user) {
     eventResponses = [];
     gameMvpVotes = [];
+    gameFeedback = [];
+    featureRollouts = [];
     mvpVoteCounts = [];
     updateAccessUi();
     return;
@@ -929,6 +974,8 @@ async function loadRemoteState() {
     { data: responses, error: responseError },
     { data: mvpRows, error: mvpError },
     { data: mvpCountRows, error: mvpCountError },
+    { data: feedbackRows, error: feedbackError },
+    { data: rolloutRows, error: rolloutError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
@@ -936,6 +983,8 @@ async function loadRemoteState() {
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
     supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
     supabaseClient.rpc("mvp_vote_counts"),
+    supabaseClient.from("game_feedback").select("*").order("created_at", { ascending: false }),
+    supabaseClient.from("feature_rollouts").select("*").eq("key", "postgame_feedback"),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -946,6 +995,8 @@ async function loadRemoteState() {
   }
   if (mvpError) console.warn("MVP vote load failed. Run supabase/schema.sql again.", mvpError);
   if (mvpCountError) console.warn("MVP vote count load failed. Run supabase/schema.sql again.", mvpCountError);
+  if (feedbackError) console.warn("Postgame feedback load failed. Run supabase/postgame-feedback-migration.sql.", feedbackError);
+  if (rolloutError) console.warn("Postgame rollout load failed. Run supabase/postgame-feedback-migration.sql.", rolloutError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -992,6 +1043,8 @@ async function loadRemoteState() {
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
     gameMvpVotes: (mvpRows || []).map(mvpVoteFromRow).filter(Boolean),
+    gameFeedback: (feedbackRows || []).map(gameFeedbackFromRow).filter(Boolean),
+    featureRollouts: (rolloutRows || []).map(normalizeFeatureRolloutRecord).filter(Boolean),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
     gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
@@ -1000,6 +1053,8 @@ async function loadRemoteState() {
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   gameMvpVotes = state.gameMvpVotes || [];
+  gameFeedback = state.gameFeedback || [];
+  featureRollouts = state.featureRollouts || [];
   mvpVoteCounts = (mvpCountRows || []).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
@@ -1346,6 +1401,7 @@ function render() {
   renderAccountsList();
   renderPaymentsPanel();
   renderStatsPanel();
+  renderMonthlyRecap();
   renderEventsList();
   renderPlayerProfile();
   renderMvpVoteGate();
@@ -1622,6 +1678,7 @@ function renderPlayerProfile() {
         <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
         <strong>${escapeHtml(playerData.name)}</strong>
         ${account ? `<span>${escapeHtml(account.email || account.username || "")}</span>` : ""}
+        ${playerData.linkedUserId === currentSession?.user?.id ? `<label class="private-weight">Peso estimado (kg, privado)<input type="number" min="35" max="200" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight></label>` : ""}
       </div>
     </section>
   `;
@@ -2813,7 +2870,7 @@ function renderStatsPanel() {
   const currentDebts = showDebtStats ? getCurrentDebtRows().slice(0, 5) : [];
   const pairRows = getBestPairStats(5);
   const trioRows = getBestTrioStats(5);
-  const goalEligibleRows = activeRows.filter((row) => row.appearances >= 5);
+  const goalEligibleRows = activeRows.filter((row) => row.goalAverageEligible);
   const goalsForRows = goalEligibleRows.slice().sort(sortByGoalsForAverage).slice(0, 5);
   const goalsAgainstRows = goalEligibleRows.slice().sort(sortByGoalsAgainstAverage).slice(0, 5);
   const mvpHistoryRows = getMvpHistoryRows(10);
@@ -2855,8 +2912,8 @@ function renderStatsPanel() {
       ${renderStatsRanking("👟 Mais presencas", activeRows.slice().sort(sortByAppearances).slice(0, 5), (row) => `${row.appearances} jogos`)}
       ${renderStatsRanking("⭐ Mais MVPs", activeRows.slice().sort(sortByMvps).slice(0, 5), (row) => `${row.mvpCount} MVP${row.mvpCount === 1 ? "" : "s"}`)}
       ${renderStatsRanking("🔥 Vitorias seguidas", activeRows.slice().sort(sortByWinStreak).slice(0, 5), (row) => `${row.bestWinStreak} seguidas`)}
-      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
-      ${renderStatsRanking("🛡️ Menor media de golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Ainda nao ha jogadores com 5 jogos.")}
+      ${renderStatsRanking("⚽ Melhor media de golos marcados", goalsForRows, (row) => `${formatStatsAverage(row.goalsForAverage)} golos/jogo`, "Preciso de 5 jogos e nao estar ausente ha mais de 5 jogos.")}
+      ${renderStatsRanking("🧤 Menos golos sofridos", goalsAgainstRows, (row) => `${formatStatsAverage(row.goalsAgainstAverage)} golos/jogo`, "Preciso de 5 jogos e nao estar ausente ha mais de 5 jogos.")}
       ${showDebtStats ? renderDebtRanking(currentDebts) : renderDebtRankingUnavailable()}
       ${renderPairRanking(pairRows)}
       ${renderTrioRanking(trioRows)}
@@ -2914,6 +2971,7 @@ function getPlayerHistoryStatsRows() {
         };
       })
     );
+    const recentAbsences = FooterStats.countLeadingAbsences(getPlayerTeamRecord(playerData.id, Number.MAX_SAFE_INTEGER).map((item) => item.outcome));
     return {
       player: playerData,
       appearances,
@@ -2927,6 +2985,8 @@ function getPlayerHistoryStatsRows() {
       goalsAgainst: goalSummary.goalsAgainst,
       goalsForAverage: goalSummary.averageGoalsFor,
       goalsAgainstAverage: goalSummary.averageGoalsAgainst,
+      recentAbsences,
+      goalAverageEligible: FooterStats.isGoalAverageEligible({ appearances, recentAbsences }),
     };
   });
 }
@@ -4573,22 +4633,102 @@ function getLatestFinishedGame() {
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
 }
 
-function getPendingMvpVoteRequirement() {
+function getPostgameRollout() {
+  return featureRollouts.find((item) => item.key === "postgame_feedback") || (() => {
+    const transition = getLatestFinishedGame();
+    return transition ? { key: "postgame_feedback", activatedAt: transition.date, transitionGameId: transition.id } : null;
+  })();
+}
+
+function getPrivateWeightKey(playerId) { return `footer-weight-${currentSession?.user?.id || "local"}-${playerId}`; }
+function getPlayerWeight(playerId) {
+  const value = Number(localStorage.getItem(getPrivateWeightKey(playerId)) || "75");
+  return Number.isFinite(value) && value >= 35 && value <= 200 ? value : 75;
+}
+function getPreviousMonthKey() { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - 1); return monthKey(date); }
+function getMonthlyGames(playerId, key) { return getFinishedGames().filter((game) => monthKey(game.date) === key && getPlayerParticipation(game, playerId)); }
+function getMonthlyRecapData(playerId, key) {
+  const games = getMonthlyGames(playerId, key);
+  const awards = [];
+  const alreadySeen = new Set();
+  getFinishedGamesAsc().filter((game) => monthKey(game.date) < key).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => alreadySeen.add(award.key)));
+  games.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => {
+    const isFirst = !alreadySeen.has(award.key);
+    awards.push({ ...award, gameId: game.id, date: game.date, isFirst });
+    alreadySeen.add(award.key);
+  }));
+  const feedback = games.map((game) => gameFeedback.find((item) => item.gameId === game.id && item.playerId === playerId)).filter(Boolean);
+  const squadSizes = games.map((game) => getGamePlayerIds(game).length || 5);
+  const activeMinutes = games.reduce((sum, game, index) => sum + 50 * Math.min(1, 5 / squadSizes[index]), 0);
+  const avgIntensity = feedback.length ? feedback.reduce((sum, item) => sum + item.gameIntensity, 0) / feedback.length : 7;
+  const met = 5 + ((avgIntensity - 1) / 9) * 5;
+  const calories = Math.round(met * getPlayerWeight(playerId) * activeMinutes / 60);
+  const wins = games.filter((game) => { const p = getPlayerParticipation(game, playerId); return p && getPlayerOutcome(game, p.side) === "win"; }).length;
+  const mvps = games.filter((game) => getOfficialMvpIdsForGame(game).has(playerId)).length;
+  return { games, wins, losses: games.length - wins, awards, firstAwards: awards.filter((award) => award.isFirst), repeatedAwards: awards.filter((award) => !award.isFirst), mvps, activeMinutes, calories, feedback, avgIntensity };
+}
+function getMonthlyMessage(data) {
+  if (!data.games.length) return "Este mês passaste ao lado — até o banco sentiu a tua falta.";
+  if (data.wins === data.games.length) return `Perfeito: ${data.games.length} jogos, ${data.games.length} vitórias. O balneário está a pedir autógrafos.`;
+  if (!data.wins) return `${data.games.length} jogos, zero vitórias. Pelo menos a consistência esteve lá.`;
+  if (data.games.length === 1) return "Uma aparição especial. Tipo concerto esgotado, mas com chuteiras.";
+  return `${data.wins} vitórias em ${data.games.length} jogos. Nem sempre Champions, mas raramente Velhinhos.`;
+}
+function renderMonthlyRecap() {
+  if (!els.monthlyPanel) return;
+  const playerData = getLinkedPlayer();
+  if (!playerData) { els.monthlyPanel.innerHTML = `<div class="empty-state">Liga a tua conta a um jogador para veres o teu resumo.</div>`; return; }
+  const months = [...new Set(getFinishedGames().filter((game) => getPlayerParticipation(game, playerData.id)).map((game) => monthKey(game.date)))].sort().reverse();
+  if (!currentMonthlyMonth || !months.includes(currentMonthlyMonth)) currentMonthlyMonth = months[0] || monthKey(new Date());
+  if (els.monthlyMonth) { els.monthlyMonth.innerHTML = months.map((key) => `<option value="${key}" ${key === currentMonthlyMonth ? "selected" : ""}>${formatMonthLabel(key)}</option>`).join(""); els.monthlyMonth.disabled = !months.length; }
+  if (!months.length) { els.monthlyPanel.innerHTML = `<div class="empty-state">Ainda não há um mês com jogos teus.</div>`; return; }
+  const data = getMonthlyRecapData(playerData.id, currentMonthlyMonth);
+  const firstGameYear = getFinishedGames().filter((game) => getPlayerParticipation(game, playerData.id)).sort((a,b) => new Date(a.date)-new Date(b.date))[0];
+  const year = firstGameYear ? new Date(firstGameYear.date).getFullYear() : new Date().getFullYear();
+  const yearMonths = Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
+  els.monthlyPanel.innerHTML = `
+    <section class="monthly-hero"><p class="eyebrow">${formatMonthLabel(currentMonthlyMonth)}</p><h3>${escapeHtml(getMonthlyMessage(data))}</h3><div class="monthly-hero-stats"><span>${data.games.length} jogos</span><span>${data.wins} vitórias</span><span>${data.mvps} MVP${data.mvps === 1 ? "" : "s"}</span></div></section>
+    <div class="monthly-stat-grid"><article><strong>${Math.round(data.activeMinutes)} min</strong><span>atividade estimada</span></article><article><strong>${data.calories} kcal</strong><span>estimadas</span></article><article><strong>${data.avgIntensity.toFixed(1)}/10</strong><span>ritmo percebido</span></article></div>
+    <section class="monthly-section"><h3>Cartas recebidas</h3><p>${data.firstAwards.length} novas pela primeira vez · ${data.repeatedAwards.length} repetidas</p><div class="award-grid">${data.awards.length ? data.awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("") : `<div class="empty-state compact">Nenhuma carta este mês — ainda.</div>`}</div></section>
+    <section class="monthly-section"><h3>${year} desde o primeiro jogo</h3><div class="monthly-bars">${yearMonths.map((key) => { const monthData = getMonthlyRecapData(playerData.id, key); const height = Math.min(100, monthData.games.length * 20); return `<button class="monthly-bar" title="${formatMonthLabel(key)}: ${monthData.games.length} jogos" style="--bar-height:${height}%" data-month-select="${key}"><span></span><small>${key.slice(5)}</small></button>`; }).join("")}</div></section>`;
+  els.monthlyPanel.querySelectorAll("[data-month-select]").forEach((button) => button.addEventListener("click", () => { currentMonthlyMonth = button.dataset.monthSelect; renderMonthlyRecap(); }));
+  maybeOpenMonthlyRecap(playerData.id, currentMonthlyMonth, months, data);
+}
+function maybeOpenMonthlyRecap(playerId, key, months, data) {
+  if (key !== getPreviousMonthKey() || !months.includes(key) || !data.games.length || !els.monthlyAutoGate) return;
+  const storageKey = `footer-monthly-open-${playerId}-${key}`;
+  if (localStorage.getItem(storageKey)) return;
+  localStorage.setItem(storageKey, "1");
+  els.monthlyAutoGate.classList.remove("hidden"); document.body.classList.add("mvp-gate-open");
+  els.monthlyAutoGate.innerHTML = `<div class="mvp-gate-card"><p class="eyebrow">Olha como foi o teu último mês</p><h2>${escapeHtml(getMonthlyMessage(data))}</h2><p>${data.games.length} jogos · ${data.wins} vitórias · ${data.calories} kcal estimadas</p><button class="primary-btn" data-open-monthly>Ver resumo</button></div>`;
+  els.monthlyAutoGate.querySelector("[data-open-monthly]").addEventListener("click", () => { els.monthlyAutoGate.classList.add("hidden"); document.body.classList.remove("mvp-gate-open"); showView("monthly"); renderMonthlyRecap(); });
+}
+
+function getPendingPostgameCheckins() {
   const linkedPlayer = getLinkedPlayer();
-  if (!linkedPlayer) return null;
-  const game = getFinishedGamesDesc(state.games)
-    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
-  if (!game) return null;
-  const participants = hydrate(getGamePlayerIds(game));
-  if (getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
-  const candidates = participants.filter((playerData) => playerData.id !== linkedPlayer.id);
-  if (!candidates.length) return null;
-  return { game, linkedPlayer, candidates };
+  if (!linkedPlayer) return [];
+  const rollout = getPostgameRollout();
+  const transitionGame = rollout?.transitionGameId ? state.games.find((item) => item.id === rollout.transitionGameId) : null;
+  const rolloutTime = rollout?.activatedAt ? Date.parse(rollout.activatedAt) : Infinity;
+  const pending = getFinishedGamesDesc(state.games).filter((game) => {
+    if (!getPlayerParticipation(game, linkedPlayer.id)) return false;
+    const hasVote = Boolean(getMvpVoteForPlayer(game.id, linkedPlayer.id));
+    const hasFeedback = gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id);
+    const gameTime = Date.parse(game.date);
+    const isTransitionGame = Boolean(transitionGame && game.id === transitionGame.id);
+    const isAfterRollout = Number.isFinite(gameTime) && gameTime >= rolloutTime && !isTransitionGame;
+    const isBeforeRollout = Number.isFinite(gameTime) && gameTime < rolloutTime && !isTransitionGame;
+    return PostgameRules.isCheckinRequired({ hasVote, hasFeedback, isTransitionGame, isAfterRollout, isBeforeRollout });
+  }).map((game) => {
+    const participants = hydrate(getGamePlayerIds(game));
+    return { game, linkedPlayer, candidates: participants.filter((playerData) => playerData.id !== linkedPlayer.id) };
+  }).filter((item) => item.candidates.length);
+  return pending.sort((a, b) => new Date(a.game.date) - new Date(b.game.date) || String(a.game.id).localeCompare(String(b.game.id)));
 }
 
 function renderMvpVoteGate() {
   if (!els.mvpGate) return;
-  const requirement = getPendingMvpVoteRequirement();
+  const requirement = getPendingPostgameCheckins()[0] || null;
   document.body.classList.toggle("mvp-gate-open", Boolean(requirement));
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
@@ -4601,26 +4741,55 @@ function renderMvpVoteGate() {
   const { game, candidates } = requirement;
   els.mvpGate.innerHTML = `
     <div class="mvp-gate-card">
-      <p class="eyebrow">Voto MVP pendente</p>
-      <h2>Vota no MVP do ultimo jogo para continuar</h2>
+      <p class="eyebrow">Fecho do jogo pendente</p>
+      <h2>Vota no MVP e conta como foi o jogo</h2>
       <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
       <select data-gate-mvp-candidate="${game.id}">
         <option value="">Escolher MVP</option>
         ${candidates.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)}</option>`).join("")}
       </select>
-      <button class="primary-btn" data-gate-save-mvp-vote="${game.id}">Votar e continuar</button>
-      <span class="hint">O voto e confidencial. Nao podes votar em ti proprio.</span>
+      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.INTENSITY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-intensity="${game.id}"><output data-gate-intensity-value>5</output><small>1 ${PostgameRules.INTENSITY_SCALE.anchors[1]} · 5 ${PostgameRules.INTENSITY_SCALE.anchors[5]} · 10 ${PostgameRules.INTENSITY_SCALE.anchors[10]}</small></label>
+      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.ENERGY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-energy="${game.id}"><output data-gate-energy-value>5</output><small>1 ${PostgameRules.ENERGY_SCALE.anchors[1]} · 5 ${PostgameRules.ENERGY_SCALE.anchors[5]} · 10 ${PostgameRules.ENERGY_SCALE.anchors[10]}</small></label>
+      <button class="primary-btn" data-gate-save-postgame="${game.id}">Guardar e continuar</button>
+      <span class="hint">O voto MVP e confidencial. As respostas ficam visiveis apenas para ti e para o admin.</span>
     </div>
   `;
 
-  els.mvpGate.querySelector("[data-gate-save-mvp-vote]")?.addEventListener("click", async () => {
+  els.mvpGate.querySelectorAll("input[type=range]").forEach((input) => input.addEventListener("input", () => {
+    const output = input.parentElement?.querySelector("output");
+    if (output) output.textContent = input.value;
+  }));
+  els.mvpGate.querySelector("[data-gate-save-postgame]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
     const select = els.mvpGate.querySelector(`[data-gate-mvp-candidate="${game.id}"]`);
     const candidateId = select?.value;
     if (!linkedPlayer || !candidateId) return;
-    const ok = await saveMvpVote(game, linkedPlayer, candidateId);
+    const intensity = Number(els.mvpGate.querySelector(`[data-gate-intensity="${game.id}"]`)?.value);
+    const energy = Number(els.mvpGate.querySelector(`[data-gate-energy="${game.id}"]`)?.value);
+    const ok = await submitPostgameCheckin(game, linkedPlayer, candidateId, intensity, energy);
     if (ok) render();
   });
+  els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", (event) => {
+    const value = Number(event.target.value);
+    if (value >= 35 && value <= 200) { localStorage.setItem(getPrivateWeightKey(playerData.id), String(value)); renderMonthlyRecap(); }
+  });
+}
+
+async function submitPostgameCheckin(game, linkedPlayer, candidateId, gameIntensity, remainingEnergy) {
+  const participants = new Set(getGamePlayerIds(game));
+  if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId || !participants.has(linkedPlayer.id) || !participants.has(candidateId)) return false;
+  if (!PostgameRules.isScaleValue(gameIntensity) || !PostgameRules.isScaleValue(remainingEnergy)) return false;
+  if (getMvpVoteForPlayer(game.id, linkedPlayer.id) || gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id)) return false;
+  if (remoteEnabled && supabaseClient && currentSession?.user) {
+    const { error } = await supabaseClient.rpc("submit_postgame_checkin", { p_game_id: game.id, p_candidate_player_id: candidateId, p_game_intensity: gameIntensity, p_remaining_energy: remainingEnergy });
+    if (error) { alert(`Nao consegui guardar o fecho do jogo. Confirma a migration do Supabase. Detalhe: ${error.message}`); return false; }
+    await loadRemoteState();
+    return true;
+  }
+  const now = new Date().toISOString();
+  const vote = { id: createUuid(), gameId: game.id, voterPlayerId: linkedPlayer.id, candidatePlayerId: candidateId, userId: currentSession?.user?.id || null, createdAt: now, updatedAt: now };
+  const feedback = { id: createUuid(), gameId: game.id, playerId: linkedPlayer.id, userId: currentSession?.user?.id || null, gameIntensity, remainingEnergy, calculationVersion: 1, createdAt: now };
+  gameMvpVotes.push(vote); gameFeedback.push(feedback); incrementMvpVoteCount(game.id, candidateId); saveState(); updateAccessUi(); return true;
 }
 
 function getPendingAwardRevealRequirement() {

@@ -150,9 +150,24 @@
     return bestStreak;
   }
 
+  function countLeadingAbsences(record) {
+    let count = 0;
+    for (const outcome of record || []) {
+      if (outcome !== "absent") break;
+      count += 1;
+    }
+    return count;
+  }
+
+  function isGoalAverageEligible({ appearances = 0, recentAbsences = 0, minimumGames = 5, maximumAbsences = 5 } = {}) {
+    return appearances >= minimumGames && recentAbsences <= maximumAbsences;
+  }
+
   return {
     buildCombinationRanking,
     calculateBestWinStreak,
+    countLeadingAbsences,
+    isGoalAverageEligible,
     summarizePlayerGoals,
   };
 });
