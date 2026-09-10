@@ -1,4 +1,11 @@
 const STORAGE_KEY = "five-a-side-balancer-state-v1";
+const PostgameRules = window.FooterPostgame || {
+  isScaleValue: (value) => Number.isInteger(value) && value >= 1 && value <= 10,
+  isCheckinRequired: ({ hasVote = false, hasFeedback = false, isTransitionGame = false, isAfterRollout = false, isBeforeRollout = false } = {}) => !hasFeedback && !isBeforeRollout && (isTransitionGame ? !hasVote : Boolean(isAfterRollout)),
+  sortPendingCheckins: (items) => [...items].sort((a, b) => new Date(a.date) - new Date(b.date)),
+  INTENSITY_SCALE: { question: "Intensidade do jogo: Velhinhos ou Champions?", anchors: { 1: "Velhinhos", 5: "Bom ritmo", 10: "Champions" } },
+  ENERGY_SCALE: { question: "Morreste ou jogavas mais meia hora?", anchors: { 1: "Morri", 5: "Ainda dava uns minutos", 10: "Mais meia hora facil" } },
+};
 const PAYMENT_RULES = {
   playerFeePerGame: 4,
   monthlyCap: 15,
@@ -112,6 +119,8 @@ let knownProfiles = [];
 let playerClaims = [];
 let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
+let gameFeedback = state.gameFeedback || [];
+let featureRollouts = state.featureRollouts || [];
 let mvpVoteCounts = [];
 let payments = state.payments || [];
 let attendanceOverrides = state.attendanceOverrides || [];
@@ -288,11 +297,30 @@ function migrateState(saved) {
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
   saved.events = Array.isArray(saved.events) ? saved.events.map(normalizeEventRecord).filter(Boolean) : [];
   saved.gameMvpVotes = Array.isArray(saved.gameMvpVotes) ? saved.gameMvpVotes.map(normalizeMvpVoteRecord).filter(Boolean) : [];
+  saved.gameFeedback = Array.isArray(saved.gameFeedback) ? saved.gameFeedback.map(normalizeGameFeedbackRecord).filter(Boolean) : [];
+  saved.featureRollouts = Array.isArray(saved.featureRollouts) ? saved.featureRollouts.map(normalizeFeatureRolloutRecord).filter(Boolean) : [];
   saved.payments = Array.isArray(saved.payments) ? saved.payments.map(normalizePaymentRecord).filter(Boolean) : [];
   saved.attendanceOverrides = Array.isArray(saved.attendanceOverrides) ? saved.attendanceOverrides.map(normalizeAttendanceOverrideRecord).filter(Boolean) : [];
   saved.gameFinanceOverrides = Array.isArray(saved.gameFinanceOverrides) ? saved.gameFinanceOverrides.map(normalizeGameFinanceOverrideRecord).filter(Boolean) : [];
   saved.financeSettings = normalizeFinanceSettings(saved.financeSettings);
   return saved;
+}
+
+function normalizeGameFeedbackRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const gameId = record.gameId || record.game_id;
+  const playerId = record.playerId || record.player_id;
+  const intensity = Number(record.gameIntensity ?? record.game_intensity);
+  const energy = Number(record.remainingEnergy ?? record.remaining_energy);
+  if (!gameId || !playerId || !PostgameRules.isScaleValue(intensity) || !PostgameRules.isScaleValue(energy)) return null;
+  return { id: String(record.id || createUuid()), gameId: String(gameId), playerId: String(playerId), userId: record.userId || record.user_id || null, gameIntensity: intensity, remainingEnergy: energy, calculationVersion: Number(record.calculationVersion ?? record.calculation_version ?? 1), createdAt: record.createdAt || record.created_at || new Date().toISOString() };
+}
+
+function gameFeedbackFromRow(row) { return normalizeGameFeedbackRecord(row); }
+
+function normalizeFeatureRolloutRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  return { key: String(record.key || "postgame_feedback"), activatedAt: record.activatedAt || record.activated_at || null, transitionGameId: record.transitionGameId || record.transition_game_id || null };
 }
 
 function normalizePlayerRecord(record, index) {
@@ -654,6 +682,8 @@ function financeSettingsToRow(settings) {
 
 function saveState() {
   state.gameMvpVotes = gameMvpVotes;
+  state.gameFeedback = gameFeedback;
+  state.featureRollouts = featureRollouts;
   state.payments = payments;
   state.attendanceOverrides = attendanceOverrides;
   state.gameFinanceOverrides = gameFinanceOverrides;
@@ -917,6 +947,8 @@ async function loadRemoteState() {
   if (!currentSession?.user) {
     eventResponses = [];
     gameMvpVotes = [];
+    gameFeedback = [];
+    featureRollouts = [];
     mvpVoteCounts = [];
     updateAccessUi();
     return;
@@ -929,6 +961,8 @@ async function loadRemoteState() {
     { data: responses, error: responseError },
     { data: mvpRows, error: mvpError },
     { data: mvpCountRows, error: mvpCountError },
+    { data: feedbackRows, error: feedbackError },
+    { data: rolloutRows, error: rolloutError },
   ] = await Promise.all([
     supabaseClient.from("players").select("*").order("name", { ascending: true }),
     supabaseClient.from("games").select("*").order("date", { ascending: false }),
@@ -936,6 +970,8 @@ async function loadRemoteState() {
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
     supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
     supabaseClient.rpc("mvp_vote_counts"),
+    supabaseClient.from("game_feedback").select("*").order("created_at", { ascending: false }),
+    supabaseClient.from("feature_rollouts").select("*").eq("key", "postgame_feedback"),
   ]);
 
   if (playerError || gameError || eventError || responseError) {
@@ -946,6 +982,8 @@ async function loadRemoteState() {
   }
   if (mvpError) console.warn("MVP vote load failed. Run supabase/schema.sql again.", mvpError);
   if (mvpCountError) console.warn("MVP vote count load failed. Run supabase/schema.sql again.", mvpCountError);
+  if (feedbackError) console.warn("Postgame feedback load failed. Run supabase/postgame-feedback-migration.sql.", feedbackError);
+  if (rolloutError) console.warn("Postgame rollout load failed. Run supabase/postgame-feedback-migration.sql.", rolloutError);
 
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
@@ -992,6 +1030,8 @@ async function loadRemoteState() {
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
     gameMvpVotes: (mvpRows || []).map(mvpVoteFromRow).filter(Boolean),
+    gameFeedback: (feedbackRows || []).map(gameFeedbackFromRow).filter(Boolean),
+    featureRollouts: (rolloutRows || []).map(normalizeFeatureRolloutRecord).filter(Boolean),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
     attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
     gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
@@ -1000,6 +1040,8 @@ async function loadRemoteState() {
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || []).map(responseFromRow);
   gameMvpVotes = state.gameMvpVotes || [];
+  gameFeedback = state.gameFeedback || [];
+  featureRollouts = state.featureRollouts || [];
   mvpVoteCounts = (mvpCountRows || []).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
@@ -4573,22 +4615,38 @@ function getLatestFinishedGame() {
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
 }
 
-function getPendingMvpVoteRequirement() {
+function getPostgameRollout() {
+  return featureRollouts.find((item) => item.key === "postgame_feedback") || (() => {
+    const transition = getLatestFinishedGame();
+    return transition ? { key: "postgame_feedback", activatedAt: transition.date, transitionGameId: transition.id } : null;
+  })();
+}
+
+function getPendingPostgameCheckins() {
   const linkedPlayer = getLinkedPlayer();
-  if (!linkedPlayer) return null;
-  const game = getFinishedGamesDesc(state.games)
-    .find((item) => getPlayerParticipation(item, linkedPlayer.id));
-  if (!game) return null;
-  const participants = hydrate(getGamePlayerIds(game));
-  if (getMvpVoteForPlayer(game.id, linkedPlayer.id)) return null;
-  const candidates = participants.filter((playerData) => playerData.id !== linkedPlayer.id);
-  if (!candidates.length) return null;
-  return { game, linkedPlayer, candidates };
+  if (!linkedPlayer) return [];
+  const rollout = getPostgameRollout();
+  const transitionGame = rollout?.transitionGameId ? state.games.find((item) => item.id === rollout.transitionGameId) : null;
+  const rolloutTime = rollout?.activatedAt ? Date.parse(rollout.activatedAt) : Infinity;
+  const pending = getFinishedGamesDesc(state.games).filter((game) => {
+    if (!getPlayerParticipation(game, linkedPlayer.id)) return false;
+    const hasVote = Boolean(getMvpVoteForPlayer(game.id, linkedPlayer.id));
+    const hasFeedback = gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id);
+    const gameTime = Date.parse(game.date);
+    const isTransitionGame = Boolean(transitionGame && game.id === transitionGame.id);
+    const isAfterRollout = Number.isFinite(gameTime) && gameTime >= rolloutTime && !isTransitionGame;
+    const isBeforeRollout = Number.isFinite(gameTime) && gameTime < rolloutTime && !isTransitionGame;
+    return PostgameRules.isCheckinRequired({ hasVote, hasFeedback, isTransitionGame, isAfterRollout, isBeforeRollout });
+  }).map((game) => {
+    const participants = hydrate(getGamePlayerIds(game));
+    return { game, linkedPlayer, candidates: participants.filter((playerData) => playerData.id !== linkedPlayer.id) };
+  }).filter((item) => item.candidates.length);
+  return pending.sort((a, b) => new Date(a.game.date) - new Date(b.game.date) || String(a.game.id).localeCompare(String(b.game.id)));
 }
 
 function renderMvpVoteGate() {
   if (!els.mvpGate) return;
-  const requirement = getPendingMvpVoteRequirement();
+  const requirement = getPendingPostgameCheckins()[0] || null;
   document.body.classList.toggle("mvp-gate-open", Boolean(requirement));
   els.mvpGate.classList.toggle("hidden", !requirement);
   if (!requirement) {
@@ -4601,26 +4659,51 @@ function renderMvpVoteGate() {
   const { game, candidates } = requirement;
   els.mvpGate.innerHTML = `
     <div class="mvp-gate-card">
-      <p class="eyebrow">Voto MVP pendente</p>
-      <h2>Vota no MVP do ultimo jogo para continuar</h2>
+      <p class="eyebrow">Fecho do jogo pendente</p>
+      <h2>Vota no MVP e conta como foi o jogo</h2>
       <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
       <select data-gate-mvp-candidate="${game.id}">
         <option value="">Escolher MVP</option>
         ${candidates.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)}</option>`).join("")}
       </select>
-      <button class="primary-btn" data-gate-save-mvp-vote="${game.id}">Votar e continuar</button>
-      <span class="hint">O voto e confidencial. Nao podes votar em ti proprio.</span>
+      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.INTENSITY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-intensity="${game.id}"><output data-gate-intensity-value>5</output><small>1 ${PostgameRules.INTENSITY_SCALE.anchors[1]} · 5 ${PostgameRules.INTENSITY_SCALE.anchors[5]} · 10 ${PostgameRules.INTENSITY_SCALE.anchors[10]}</small></label>
+      <label class="postgame-scale"><span>${escapeHtml(PostgameRules.ENERGY_SCALE.question)}</span><input type="range" min="1" max="10" value="5" data-gate-energy="${game.id}"><output data-gate-energy-value>5</output><small>1 ${PostgameRules.ENERGY_SCALE.anchors[1]} · 5 ${PostgameRules.ENERGY_SCALE.anchors[5]} · 10 ${PostgameRules.ENERGY_SCALE.anchors[10]}</small></label>
+      <button class="primary-btn" data-gate-save-postgame="${game.id}">Guardar e continuar</button>
+      <span class="hint">O voto MVP e confidencial. As respostas ficam visiveis apenas para ti e para o admin.</span>
     </div>
   `;
 
-  els.mvpGate.querySelector("[data-gate-save-mvp-vote]")?.addEventListener("click", async () => {
+  els.mvpGate.querySelectorAll("input[type=range]").forEach((input) => input.addEventListener("input", () => {
+    const output = input.parentElement?.querySelector("output");
+    if (output) output.textContent = input.value;
+  }));
+  els.mvpGate.querySelector("[data-gate-save-postgame]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
     const select = els.mvpGate.querySelector(`[data-gate-mvp-candidate="${game.id}"]`);
     const candidateId = select?.value;
     if (!linkedPlayer || !candidateId) return;
-    const ok = await saveMvpVote(game, linkedPlayer, candidateId);
+    const intensity = Number(els.mvpGate.querySelector(`[data-gate-intensity="${game.id}"]`)?.value);
+    const energy = Number(els.mvpGate.querySelector(`[data-gate-energy="${game.id}"]`)?.value);
+    const ok = await submitPostgameCheckin(game, linkedPlayer, candidateId, intensity, energy);
     if (ok) render();
   });
+}
+
+async function submitPostgameCheckin(game, linkedPlayer, candidateId, gameIntensity, remainingEnergy) {
+  const participants = new Set(getGamePlayerIds(game));
+  if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId || !participants.has(linkedPlayer.id) || !participants.has(candidateId)) return false;
+  if (!PostgameRules.isScaleValue(gameIntensity) || !PostgameRules.isScaleValue(remainingEnergy)) return false;
+  if (getMvpVoteForPlayer(game.id, linkedPlayer.id) || gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id)) return false;
+  if (remoteEnabled && supabaseClient && currentSession?.user) {
+    const { error } = await supabaseClient.rpc("submit_postgame_checkin", { p_game_id: game.id, p_candidate_player_id: candidateId, p_game_intensity: gameIntensity, p_remaining_energy: remainingEnergy });
+    if (error) { alert(`Nao consegui guardar o fecho do jogo. Confirma a migration do Supabase. Detalhe: ${error.message}`); return false; }
+    await loadRemoteState();
+    return true;
+  }
+  const now = new Date().toISOString();
+  const vote = { id: createUuid(), gameId: game.id, voterPlayerId: linkedPlayer.id, candidatePlayerId: candidateId, userId: currentSession?.user?.id || null, createdAt: now, updatedAt: now };
+  const feedback = { id: createUuid(), gameId: game.id, playerId: linkedPlayer.id, userId: currentSession?.user?.id || null, gameIntensity, remainingEnergy, calculationVersion: 1, createdAt: now };
+  gameMvpVotes.push(vote); gameFeedback.push(feedback); incrementMvpVoteCount(game.id, candidateId); saveState(); updateAccessUi(); return true;
 }
 
 function getPendingAwardRevealRequirement() {
