@@ -84,9 +84,16 @@ test("table grants and RLS expose reads only to authenticated callers", () => {
   assertMatches(migrationSql, /alter table public\.feature_rollouts enable row level security;/i);
 });
 
+test("legacy direct MVP inserts are disabled without deleting existing votes", () => {
+  assertMatches(migrationSql, /revoke insert on table public\.game_mvp_votes from authenticated;/i);
+  assertMatches(migrationSql, /drop policy if exists "mvp votes insert linked player" on public\.game_mvp_votes;/i);
+  assert.doesNotMatch(normalized(migrationSql), /delete\s+from\s+public\.game_mvp_votes/i);
+  assert.doesNotMatch(normalized(migrationSql), /truncate\s+(?:table\s+)?public\.game_mvp_votes/i);
+});
+
 test("feedback policy permits only the owner or an admin, never a third party", () => {
   const policy = policyDefinition(migrationSql, "feedback read own or admin", "public.game_feedback");
-  assertMatches(policy, /for select\s+to authenticated\s+using\s*\(\s*user_id = \(select auth\.uid\(\)\)\s+or public\.is_admin\(\)\s*\)/i);
+  assertMatches(policy, /for select\s+to authenticated\s+using\s*\(\s*user_id = \(select auth\.uid\(\)\)\s+or \(select public\.is_admin\(\)\)\s*\)/i);
   assert.doesNotMatch(policy, /using\s*\(\s*true\s*\)/i);
 });
 
@@ -110,7 +117,14 @@ test("private schema and both RPC layers have least-privilege execution", () => 
   );
   const wrapper = functionDefinition(migrationSql, "public.submit_postgame_checkin");
 
-  assert.doesNotMatch(migrationSql, /function\s+private\.submit_postgame_checkin\s*\(/i);
+  const legacyDrop = normalized(migrationSql).indexOf(
+    "drop function if exists private.submit_postgame_checkin(text, text, integer, integer);",
+  );
+  const internalCreate = normalized(migrationSql).indexOf(
+    "create or replace function private.submit_postgame_checkin_internal(",
+  );
+  assert.ok(legacyDrop >= 0 && internalCreate > legacyDrop);
+  assert.doesNotMatch(migrationSql, /create\s+or\s+replace\s+function\s+private\.submit_postgame_checkin\s*\(/i);
   assertMatches(internal, /language plpgsql\s+security definer\s+set search_path = ''/i);
   assertMatches(wrapper, /language sql\s+security invoker\s+set search_path = ''/i);
   assertMatches(wrapper, /from private\.submit_postgame_checkin_internal\s*\(/i);
