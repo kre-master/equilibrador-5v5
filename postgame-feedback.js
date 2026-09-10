@@ -49,7 +49,7 @@
   function compareDates(left, right) {
     const leftTime = Date.parse(left.date);
     const rightTime = Date.parse(right.date);
-    if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
       return leftTime - rightTime;
     }
 
