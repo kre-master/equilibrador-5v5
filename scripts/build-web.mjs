@@ -4,6 +4,8 @@ const files = [
   "index.html",
   "styles.css",
   "app.js",
+  "postgame-feedback.js",
+  "stats-calculations.js",
   "app-config.js",
   "manifest.webmanifest"
 ];
