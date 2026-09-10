@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node server.mjs 5173",
     "check": "node --check app.js",
+    "test:postgame": "node --test tests/postgame-feedback.test.mjs",
     "build:web": "node scripts/build-web.mjs",
     "cap:sync": "npm run build:web && npx cap sync",
     "cap:sync:android": "npm run build:web && npx cap sync android",
