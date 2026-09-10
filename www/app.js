@@ -4514,6 +4514,8 @@ function renderMvpPanel(game) {
       </div>
       ${canVote && myVote ? `
         <span class="metric good-pill">Voto registado</span>
+      ` : canVote && remoteEnabled ? `
+        <span class="metric">Completa o questionário pós-jogo no topo.</span>
       ` : canVote ? `
         <select data-mvp-candidate="${game.id}">
           <option value="">Escolher MVP</option>
@@ -4548,10 +4550,9 @@ function getMonthlyGames(playerId, key) { return getFinishedGames().filter((game
 function getMonthlyRecapData(playerId, key) {
   const games = getMonthlyGames(playerId, key);
   const awards = [];
-  games.forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => awards.push({ ...award, gameId: game.id, date: game.date })));
-  const firstKeys = new Set();
-  const previousGames = getFinishedGames().filter((game) => new Date(game.date) < new Date(`${key}-01T00:00:00`));
-  previousGames.forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => firstKeys.add(award.key)));
+  const alreadySeen = new Set();
+  getFinishedGamesAsc().filter((game) => monthKey(game.date) < key).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => alreadySeen.add(award.key)));
+  games.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => { const isFirst = !alreadySeen.has(award.key); awards.push({ ...award, gameId: game.id, date: game.date, isFirst }); alreadySeen.add(award.key); }));
   const feedback = games.map((game) => gameFeedback.find((item) => item.gameId === game.id && item.playerId === playerId)).filter(Boolean);
   const squadSizes = games.map((game) => getGamePlayerIds(game).length || 5);
   const activeMinutes = games.reduce((sum, game, index) => sum + 50 * Math.min(1, 5 / squadSizes[index]), 0);
@@ -4560,7 +4561,7 @@ function getMonthlyRecapData(playerId, key) {
   const calories = Math.round(met * getPlayerWeight(playerId) * activeMinutes / 60);
   const wins = games.filter((game) => { const p = getPlayerParticipation(game, playerId); return p && getPlayerOutcome(game, p.side) === "win"; }).length;
   const mvps = games.filter((game) => getOfficialMvpIdsForGame(game).has(playerId)).length;
-  return { games, wins, losses: games.length - wins, awards, firstAwards: awards.filter((award) => !firstKeys.has(award.key)), repeatedAwards: awards.filter((award) => firstKeys.has(award.key)), mvps, activeMinutes, calories, feedback, avgIntensity };
+  return { games, wins, losses: games.length - wins, awards, firstAwards: awards.filter((award) => award.isFirst), repeatedAwards: awards.filter((award) => !award.isFirst), mvps, activeMinutes, calories, feedback, avgIntensity };
 }
 function getMonthlyMessage(data) {
   if (!data.games.length) return "Este mês passaste ao lado — até o banco sentiu a tua falta.";
