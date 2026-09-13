@@ -363,7 +363,10 @@ Implementacao local preparada na branch `codex/meu-perfil`:
 - O modo local e a RPC do Supabase preservam o voto existente e criam apenas `game_feedback` nesse caso.
 - A RPC mantem validacao de autenticacao, jogador associado, participacao, rollout e duplicados; um candidato so pode ser omitido quando ja existe voto.
 - `supabase/postgame-feedback-migration.sql` e o bloco canonico de `supabase/schema.sql` foram atualizados em conjunto.
-- Aplicacao no Supabase remoto permanece pendente; nao foi feita nesta alteracao local.
+- Migration remota `allow_retroactive_postgame_feedback` aplicada no Supabase em 2026-09-13.
+- Verificacao remota confirmou a funcao privada com `SECURITY DEFINER`, `search_path` vazio, detecao de voto existente e insercao condicional do voto.
+- Teste autenticado numa transacao revertida confirmou: voto existente preservado, nenhum voto duplicado e feedback criado; o rollback removeu a resposta artificial.
+- Publicacao do frontend permanece pendente ate autorizacao de `git push`.
 
 Ver estado:
 
