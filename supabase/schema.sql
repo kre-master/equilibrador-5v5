@@ -692,8 +692,8 @@ values (
     from public.games as game
     where game.status = 'finished'
     order by
-      coalesce(game.score_saved_at, game.updated_at) desc nulls last,
       game.date desc,
+      coalesce(game.score_saved_at, game.updated_at) desc nulls last,
       game.id desc
     limit 1
   )

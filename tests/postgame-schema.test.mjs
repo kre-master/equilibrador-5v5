@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const migrationPath = new URL("../supabase/postgame-feedback-migration.sql", import.meta.url);
+const repairMigrationPath = new URL("../supabase/postgame-rollout-repair-migration.sql", import.meta.url);
 const schemaPath = new URL("../supabase/schema.sql", import.meta.url);
 
-const [migrationSql, schemaSql] = await Promise.all([
+const [migrationSql, repairMigrationSql, schemaSql] = await Promise.all([
   readFile(migrationPath, "utf8"),
+  readFile(repairMigrationPath, "utf8"),
   readFile(schemaPath, "utf8"),
 ]);
 
@@ -69,8 +71,17 @@ test("feedback uniqueness and query indexes are present", () => {
   assertMatches(migrationSql, /create index if not exists game_feedback_player_created_idx\s+on public\.game_feedback \(player_id, created_at desc\);/i);
 });
 
-test("rollout is inserted once with a deterministic transition game", () => {
-  assertMatches(migrationSql, /insert into public\.feature_rollouts \(key, activated_at, transition_game_id\)[\s\S]*?'postgame_feedback'[\s\S]*?where game\.status = 'finished'[\s\S]*?coalesce\(game\.score_saved_at, game\.updated_at\) desc nulls last[\s\S]*?game\.date desc[\s\S]*?game\.id desc[\s\S]*?on conflict \(key\) do nothing;/i);
+test("rollout is inserted once using the latest game date", () => {
+  assertMatches(migrationSql, /insert into public\.feature_rollouts \(key, activated_at, transition_game_id\)[\s\S]*?'postgame_feedback'[\s\S]*?where game\.status = 'finished'[\s\S]*?game\.date desc[\s\S]*?coalesce\(game\.score_saved_at, game\.updated_at\) desc nulls last[\s\S]*?game\.id desc[\s\S]*?on conflict \(key\) do nothing;/i);
+});
+
+test("rollout repair targets the previous transition feedback and latest dated game", () => {
+  assertMatches(repairMigrationSql, /select rollout\.transition_game_id[\s\S]*?where rollout\.key = 'postgame_feedback'[\s\S]*?for update;/i);
+  assertMatches(repairMigrationSql, /where game\.status = 'finished'[\s\S]*?order by\s+game\.date desc[\s\S]*?limit 1;/i);
+  assertMatches(repairMigrationSql, /delete from public\.game_feedback as feedback\s+where feedback\.game_id = v_previous_transition_game_id;/i);
+  assertMatches(repairMigrationSql, /update public\.feature_rollouts as rollout\s+set transition_game_id = v_latest_finished_game_id\s+where rollout\.key = 'postgame_feedback';/i);
+  assert.doesNotMatch(repairMigrationSql, /game-\d+/i, "repair must not hardcode generated game IDs");
+  assert.doesNotMatch(repairMigrationSql, /delete from public\.game_mvp_votes/i, "repair must preserve MVP votes");
 });
 
 test("table grants and RLS expose reads only to authenticated callers", () => {

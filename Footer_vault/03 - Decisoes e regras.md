@@ -148,6 +148,7 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 
 ## Fecho do jogo e respostas retroativas
 
+- O jogo de transicao e sempre o jogo finalizado com a data de jogo mais recente; `updated_at` e apenas criterio secundario e nao pode fazer um jogo antigo passar a frente.
 - Um participante sem voto MVP nem respostas faz o fecho completo: voto MVP e as duas perguntas.
 - Um participante que ja tenha votado no MVP, mas ainda nao tenha respondido as duas perguntas, ve apenas essas perguntas.
 - Neste segundo caso, o voto MVP existente e preservado e nao pode ser alterado pelo pedido de respostas.

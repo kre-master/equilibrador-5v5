@@ -366,7 +366,15 @@ Implementacao local preparada na branch `codex/meu-perfil`:
 - Migration remota `allow_retroactive_postgame_feedback` aplicada no Supabase em 2026-09-13.
 - Verificacao remota confirmou a funcao privada com `SECURITY DEFINER`, `search_path` vazio, detecao de voto existente e insercao condicional do voto.
 - Teste autenticado numa transacao revertida confirmou: voto existente preservado, nenhum voto duplicado e feedback criado; o rollback removeu a resposta artificial.
-- Publicacao do frontend permanece pendente ate autorizacao de `git push`.
+- Frontend desta funcionalidade publicado em `main` no commit `bebe531`.
+
+## 2026-09-13 - Correcao do jogo de transicao
+
+- Diagnostico: o rollout tinha escolhido 27/05/2026 porque jogos legados sem `score_saved_at` partilhavam um `updated_at` de importacao ligeiramente posterior ao fecho de 09/09/2026.
+- A selecao inicial passou a ordenar primeiro por `game.date desc` e apenas depois pelo marcador tecnico de fecho.
+- Migration remota `repair_postgame_rollout_to_latest_game` aplicada: jogo de transicao alterado de 27/05/2026 para 09/09/2026.
+- Foram removidas as 4 respostas indevidamente recolhidas para 27/05; os 11 votos MVP desse jogo foram preservados.
+- Confirmados 11 participantes com conta ligada e resposta pendente para 09/09.
 
 Ver estado:
 
