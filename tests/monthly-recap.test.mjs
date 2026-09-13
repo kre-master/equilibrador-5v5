@@ -49,3 +49,12 @@ test("perceived averages stay absent when there are no answers", () => {
   assert.equal(monthly.average([]), null);
   assert.equal(monthly.average([4, 8]), 6);
 });
+
+test("award counts stay numeric and missing values stay absent", () => {
+  assert.equal(monthly.awardCount(3), 3);
+  assert.equal(monthly.awardCount(0), 0);
+  assert.equal(monthly.awardCount(undefined), null);
+  assert.equal(monthly.awardCount(null), null);
+  assert.equal(monthly.awardCount("3"), null);
+  assert.equal(monthly.awardCount(Number.NaN), null);
+});

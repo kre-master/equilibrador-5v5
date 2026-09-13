@@ -1605,7 +1605,6 @@ function renderPlayerProfile() {
   const summary = getPlayerMatchSummary(playerData.id);
   const finishedGames = summary.games.filter((item) => item.outcome !== "open").length;
   const winRate = finishedGames ? Math.round((summary.wins / finishedGames) * 100) : 0;
-  const account = playerData.linkedUserId ? knownProfiles.find((item) => item.id === playerData.linkedUserId) : null;
   const form = getPlayerForm(playerData);
   const synergies = getPlayerSynergies(playerData.id);
   const variant = getPlayerCardVariant(playerData, form);
@@ -1692,15 +1691,11 @@ function renderPlayerProfile() {
       ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
     </section>
 
-    <section class="profile-section player-identity-section">
-      <h3>Perfil</h3>
-      <div class="player-identity-card">
-        <p class="eyebrow">${playerData.isGuest ? "Convidado" : account ? "Perfil ligado" : "Jogador"}</p>
-        <strong>${escapeHtml(playerData.name)}</strong>
-        ${account ? `<span>${escapeHtml(account.email || account.username || "")}</span>` : ""}
-        ${playerData.linkedUserId === currentSession?.user?.id ? `<label class="private-weight">Peso estimado (kg, privado)<input type="number" min="30" max="250" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight><small>Só tu tens acesso. Uma nova medição não altera meses anteriores.</small></label>` : ""}
-      </div>
-    </section>
+    ${playerData.linkedUserId === currentSession?.user?.id ? `
+      <section class="profile-section">
+        <label class="private-weight">Peso estimado (kg, privado)<input type="number" min="30" max="250" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight><small>Só tu tens acesso. Uma nova medição não altera meses anteriores.</small></label>
+      </section>
+    ` : ""}
   `;
 
   els.playerProfile.querySelectorAll("[data-open-player]").forEach((button) => {
@@ -1785,11 +1780,12 @@ function renderSummaryCard(label, value) {
 
 function renderAwardShowcaseCard(playerData, award) {
   const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
+  const count = FooterMonthly.awardCount(award.count);
   return `
-    <article class="award-card" data-award-key="${variant.key}" data-award-count="${award.count}" tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
+    <article class="award-card" data-award-key="${variant.key}"${count == null ? "" : ` data-award-count="${count}"`} tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
       <div class="award-card-preview">
         ${renderPlayerCard(playerData, { mode: "award", variant })}
-        <span class="award-count">x${award.count}</span>
+        ${count == null ? "" : `<span class="award-count">x${count}</span>`}
       </div>
       <strong>${escapeHtml(variant.label)}</strong>
     </article>

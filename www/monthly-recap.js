@@ -28,5 +28,9 @@
     return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
   }
 
-  return { activeMinutesForSquad, metForIntensity, estimateCalories, average };
+  function awardCount(value) {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  return { activeMinutesForSquad, metForIntensity, estimateCalories, average, awardCount };
 });
