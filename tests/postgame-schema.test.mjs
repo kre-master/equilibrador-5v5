@@ -168,6 +168,9 @@ test("internal RPC enforces ranges, rollout transition, and duplicate guards", (
   assertMatches(internal, /p_game_id is distinct from v_transition_game_id[\s\S]*?v_finished_at < v_activated_at/i);
   assertMatches(internal, /from public\.game_mvp_votes as vote[\s\S]*?vote\.game_id = p_game_id[\s\S]*?vote\.voter_player_id = v_player_id/i);
   assertMatches(internal, /from public\.game_feedback as feedback[\s\S]*?feedback\.game_id = p_game_id[\s\S]*?feedback\.player_id = v_player_id/i);
+  assertMatches(internal, /select exists \([\s\S]*?from public\.game_mvp_votes as vote[\s\S]*?\) into v_has_existing_vote;/i);
+  assertMatches(internal, /if v_has_existing_vote and p_candidate_player_id is not null then[\s\S]*?'existing_mvp_vote_must_be_preserved'/i);
+  assertMatches(internal, /if not v_has_existing_vote then[\s\S]*?p_candidate_player_id is null or p_candidate_player_id = v_player_id[\s\S]*?'candidate_did_not_participate'/i);
 });
 
 test("one internal transaction performs both inserts and rethrows uniqueness errors", () => {
@@ -180,6 +183,7 @@ test("one internal transaction performs both inserts and rethrows uniqueness err
 
   assert.ok(voteInsert >= 0, "internal function must insert the MVP vote");
   assert.ok(feedbackInsert > voteInsert, "feedback insert must follow the MVP insert");
+  assertMatches(internal, /if not v_has_existing_vote then\s+insert into public\.game_mvp_votes[\s\S]*?end if;\s+insert into public\.game_feedback/i);
   assertMatches(internal, /exception\s+when unique_violation then\s+raise exception 'postgame_checkin_already_submitted'/i);
   assert.doesNotMatch(internal, /when\s+\w+\s+then\s+(?:null|return\s*;)/i);
 });

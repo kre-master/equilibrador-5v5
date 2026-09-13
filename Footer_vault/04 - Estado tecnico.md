@@ -1,5 +1,12 @@
 # Estado tecnico
 
+## 2026-09-13 - Acesso direto ao perfil do jogador
+
+- Adicionado o separador `Meu perfil` à navegação principal.
+- O separador aparece apenas quando a sessão está ligada a um jogador e abre sempre o perfil desse jogador.
+- A página e a navegação de histórico existentes são reutilizadas sem duplicar uma nova view.
+- Cache-buster de `app.js` atualizado para `20260913-myprofile1`.
+
 ## Estrutura relevante
 
 Raiz web/base:
@@ -346,6 +353,17 @@ Validacao completa:
 - `git diff --check`: passou.
 
 ## Comandos uteis
+
+## 2026-09-13 - Respostas retroativas sem repetir o voto MVP
+
+Implementacao local preparada na branch `codex/meu-perfil`:
+
+- O jogo de transicao continua pendente enquanto faltarem as duas respostas, mesmo que o jogador ja tenha votado no MVP.
+- O modal omite a escolha de MVP quando encontra um voto existente e pede apenas intensidade e energia.
+- O modo local e a RPC do Supabase preservam o voto existente e criam apenas `game_feedback` nesse caso.
+- A RPC mantem validacao de autenticacao, jogador associado, participacao, rollout e duplicados; um candidato so pode ser omitido quando ja existe voto.
+- `supabase/postgame-feedback-migration.sql` e o bloco canonico de `supabase/schema.sql` foram atualizados em conjunto.
+- Aplicacao no Supabase remoto permanece pendente; nao foi feita nesta alteracao local.
 
 Ver estado:
 

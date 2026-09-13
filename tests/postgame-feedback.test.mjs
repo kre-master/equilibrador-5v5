@@ -37,7 +37,7 @@ test("publishes the approved scale questions and anchors", () => {
   assert.equal(POSTGAME_SCALES.energy, ENERGY_SCALE);
 });
 
-test("requires the transition check-in only when the MVP vote is missing", () => {
+test("requires transition feedback even when the MVP vote already exists", () => {
   assert.equal(isCheckinRequired({
     hasVote: false,
     hasFeedback: false,
@@ -47,6 +47,12 @@ test("requires the transition check-in only when the MVP vote is missing", () =>
   assert.equal(isCheckinRequired({
     hasVote: true,
     hasFeedback: false,
+    isTransitionGame: true,
+    isAfterRollout: false,
+  }), true);
+  assert.equal(isCheckinRequired({
+    hasVote: true,
+    hasFeedback: true,
     isTransitionGame: true,
     isAfterRollout: false,
   }), false);

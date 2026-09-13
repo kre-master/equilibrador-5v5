@@ -117,6 +117,7 @@ declare
   v_finished_at timestamptz;
   v_activated_at timestamptz;
   v_transition_game_id text;
+  v_has_existing_vote boolean;
   v_feedback public.game_feedback%rowtype;
 begin
   v_user_id := auth.uid();
@@ -176,19 +177,6 @@ begin
     raise exception 'caller_did_not_participate' using errcode = '42501';
   end if;
 
-  if p_candidate_player_id is null or p_candidate_player_id = v_player_id then
-    raise exception 'candidate_must_be_another_player' using errcode = '22023';
-  end if;
-
-  if not (
-    p_candidate_player_id = any(coalesce(v_team_a, '{}'::text[]))
-    or p_candidate_player_id = any(coalesce(v_team_b, '{}'::text[]))
-    or p_candidate_player_id = any(coalesce(v_bench_a, '{}'::text[]))
-    or p_candidate_player_id = any(coalesce(v_bench_b, '{}'::text[]))
-  ) then
-    raise exception 'candidate_did_not_participate' using errcode = '22023';
-  end if;
-
   select rollout.activated_at, rollout.transition_game_id
   into v_activated_at, v_transition_game_id
   from public.feature_rollouts as rollout
@@ -205,13 +193,30 @@ begin
     raise exception 'game_predates_postgame_feedback' using errcode = 'P0001';
   end if;
 
-  if exists (
+  select exists (
     select 1
     from public.game_mvp_votes as vote
     where vote.game_id = p_game_id
       and vote.voter_player_id = v_player_id
-  ) then
-    raise exception 'mvp_vote_already_submitted' using errcode = '23505';
+  ) into v_has_existing_vote;
+
+  if v_has_existing_vote and p_candidate_player_id is not null then
+    raise exception 'existing_mvp_vote_must_be_preserved' using errcode = '22023';
+  end if;
+
+  if not v_has_existing_vote then
+    if p_candidate_player_id is null or p_candidate_player_id = v_player_id then
+      raise exception 'candidate_must_be_another_player' using errcode = '22023';
+    end if;
+
+    if not (
+      p_candidate_player_id = any(coalesce(v_team_a, '{}'::text[]))
+      or p_candidate_player_id = any(coalesce(v_team_b, '{}'::text[]))
+      or p_candidate_player_id = any(coalesce(v_bench_a, '{}'::text[]))
+      or p_candidate_player_id = any(coalesce(v_bench_b, '{}'::text[]))
+    ) then
+      raise exception 'candidate_did_not_participate' using errcode = '22023';
+    end if;
   end if;
 
   if exists (
@@ -223,18 +228,20 @@ begin
     raise exception 'postgame_feedback_already_submitted' using errcode = '23505';
   end if;
 
-  insert into public.game_mvp_votes (
-    game_id,
-    voter_player_id,
-    candidate_player_id,
-    user_id
-  )
-  values (
-    p_game_id,
-    v_player_id,
-    p_candidate_player_id,
-    v_user_id
-  );
+  if not v_has_existing_vote then
+    insert into public.game_mvp_votes (
+      game_id,
+      voter_player_id,
+      candidate_player_id,
+      user_id
+    )
+    values (
+      p_game_id,
+      v_player_id,
+      p_candidate_player_id,
+      v_user_id
+    );
+  end if;
 
   insert into public.game_feedback (
     game_id,

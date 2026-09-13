@@ -42,7 +42,7 @@
     isBeforeRollout = false,
   } = {}) {
     if (hasFeedback || isBeforeRollout) return false;
-    if (isTransitionGame) return !hasVote;
+    if (isTransitionGame) return true;
     return Boolean(isAfterRollout);
   }
 

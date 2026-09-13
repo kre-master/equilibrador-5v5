@@ -87,6 +87,7 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 ## Cartas e premios
 
 - A pagina de jogador deve comecar pela carta.
+- Uma conta ligada a um jogador deve ter o separador `Meu perfil`, que abre diretamente a pagina do proprio jogador; o separador fica oculto sem perfil ligado.
 - Templates novos vivem em `assets/new cards template`.
 - Cartas podem variar por contexto: base, forma, vitorias, MVP, premios e outros.
 - Montra de premios deve mostrar progresso desbloqueadas x/y.
@@ -144,6 +145,13 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - MVP do mes entra na montra permanente de premios quando conquistado.
 
 ## Testes preferidos
+
+## Fecho do jogo e respostas retroativas
+
+- Um participante sem voto MVP nem respostas faz o fecho completo: voto MVP e as duas perguntas.
+- Um participante que ja tenha votado no MVP, mas ainda nao tenha respondido as duas perguntas, ve apenas essas perguntas.
+- Neste segundo caso, o voto MVP existente e preservado e nao pode ser alterado pelo pedido de respostas.
+- Cada jogador continua a poder submeter apenas uma resposta de intensidade e energia por jogo.
 
 O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir testes por terminal quando possivel:
 

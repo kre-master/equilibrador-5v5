@@ -159,6 +159,7 @@ let awardRevealSessionSeenKeys = new Set();
 const els = {
   tabs: document.querySelectorAll(".tab"),
   views: document.querySelectorAll(".view"),
+  myProfileTab: document.querySelector("#my-profile-tab"),
   playerList: document.querySelector("#player-list"),
   playerSearch: document.querySelector("#player-search"),
   selectedCount: document.querySelector("#selected-count"),
@@ -795,7 +796,14 @@ function requireAdmin() {
 }
 
 function bindEvents() {
-  els.tabs.forEach((tab) => on(tab, "click", () => showView(tab.dataset.view)));
+  els.tabs.forEach((tab) => on(tab, "click", () => {
+    if (tab === els.myProfileTab) {
+      const linkedPlayer = getLinkedPlayer();
+      if (linkedPlayer) openPlayerProfile(linkedPlayer.id);
+      return;
+    }
+    showView(tab.dataset.view);
+  }));
 
   on(els.playerSearch, "input", renderPlayerList);
   on(els.clearSelection, "click", () => {
@@ -1131,6 +1139,7 @@ function updateAccessUi(message) {
   if (els.adminLogin) els.adminLogin.classList.toggle("hidden", Boolean(currentSession));
   if (els.accountSignup) els.accountSignup.classList.toggle("hidden", Boolean(currentSession) || !remoteEnabled);
   if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !currentSession);
+  if (els.myProfileTab) els.myProfileTab.classList.toggle("hidden", !linkedPlayer);
 }
 
 async function adminLogin() {
@@ -4797,8 +4806,9 @@ function getPendingPostgameCheckins() {
     return PostgameRules.isCheckinRequired({ hasVote, hasFeedback, isTransitionGame, isAfterRollout, isBeforeRollout });
   }).map((game) => {
     const participants = hydrate(getGamePlayerIds(game));
-    return { game, linkedPlayer, candidates: participants.filter((playerData) => playerData.id !== linkedPlayer.id) };
-  }).filter((item) => item.candidates.length);
+    const existingVote = getMvpVoteForPlayer(game.id, linkedPlayer.id);
+    return { game, linkedPlayer, existingVote, candidates: participants.filter((playerData) => playerData.id !== linkedPlayer.id) };
+  }).filter((item) => item.existingVote || item.candidates.length);
   return pending.sort((a, b) => new Date(a.game.date) - new Date(b.game.date) || String(a.game.id).localeCompare(String(b.game.id)));
 }
 
@@ -4815,16 +4825,16 @@ function renderMvpVoteGate() {
     return;
   }
 
-  const { game, candidates } = requirement;
+  const { game, candidates, existingVote } = requirement;
   els.mvpGate.innerHTML = `
     <div class="mvp-gate-card">
       <p class="eyebrow">Fecho do jogo · 1 de ${pendingCheckins.length}</p>
-      <h2>Vota no MVP e conta como foi o jogo</h2>
+      <h2>${existingVote ? "Conta como foi o jogo" : "Vota no MVP e conta como foi o jogo"}</h2>
       <p>${formatDate(game.date)} - ${game.scoreA} - ${game.scoreB}</p>
-      <select data-gate-mvp-candidate="${game.id}">
+      ${existingVote ? `<p class="hint">O teu voto MVP já está registado e será mantido.</p>` : `<select data-gate-mvp-candidate="${game.id}">
         <option value="">Escolher MVP</option>
         ${candidates.map((playerData) => `<option value="${playerData.id}">${escapeHtml(playerData.name)}</option>`).join("")}
-      </select>
+      </select>`}
       ${renderPostgameScale("intensity", PostgameRules.INTENSITY_SCALE)}
       ${renderPostgameScale("energy", PostgameRules.ENERGY_SCALE)}
       <button class="primary-btn" data-gate-save-postgame="${game.id}" disabled>Guardar e continuar</button>
@@ -4837,7 +4847,7 @@ function renderMvpVoteGate() {
   const updateSaveState = () => {
     const intensity = els.mvpGate.querySelector('[data-scale-button="intensity"][aria-checked="true"]');
     const energy = els.mvpGate.querySelector('[data-scale-button="energy"][aria-checked="true"]');
-    saveButton.disabled = !(select?.value && intensity && energy);
+    saveButton.disabled = !((existingVote || select?.value) && intensity && energy);
   };
   select?.addEventListener("change", updateSaveState);
   els.mvpGate.querySelectorAll("[data-scale-button]").forEach((button) => button.addEventListener("click", () => {
@@ -4849,11 +4859,11 @@ function renderMvpVoteGate() {
   }));
   els.mvpGate.querySelector("[data-gate-save-postgame]")?.addEventListener("click", async () => {
     const linkedPlayer = getLinkedPlayer();
-    const candidateId = select?.value;
+    const candidateId = existingVote ? null : select?.value;
     const intensityButton = els.mvpGate.querySelector('[data-scale-button="intensity"][aria-checked="true"]');
     const energyButton = els.mvpGate.querySelector('[data-scale-button="energy"][aria-checked="true"]');
-    if (!linkedPlayer || !candidateId || !intensityButton || !energyButton) {
-      const missingControl = !candidateId ? select : !intensityButton ? els.mvpGate.querySelector('[data-scale-button="intensity"]') : els.mvpGate.querySelector('[data-scale-button="energy"]');
+    if (!linkedPlayer || (!existingVote && !candidateId) || !intensityButton || !energyButton) {
+      const missingControl = !existingVote && !candidateId ? select : !intensityButton ? els.mvpGate.querySelector('[data-scale-button="intensity"]') : els.mvpGate.querySelector('[data-scale-button="energy"]');
       missingControl?.focus();
       return;
     }
@@ -4873,19 +4883,25 @@ function renderPostgameScale(key, scale) {
 
 async function submitPostgameCheckin(game, linkedPlayer, candidateId, gameIntensity, remainingEnergy) {
   const participants = new Set(getGamePlayerIds(game));
-  if (!linkedPlayer || !candidateId || linkedPlayer.id === candidateId || !participants.has(linkedPlayer.id) || !participants.has(candidateId)) return false;
+  const existingVote = linkedPlayer ? getMvpVoteForPlayer(game.id, linkedPlayer.id) : null;
+  if (!linkedPlayer || !participants.has(linkedPlayer.id)) return false;
+  if (!existingVote && (!candidateId || linkedPlayer.id === candidateId || !participants.has(candidateId))) return false;
   if (!PostgameRules.isScaleValue(gameIntensity) || !PostgameRules.isScaleValue(remainingEnergy)) return false;
-  if (getMvpVoteForPlayer(game.id, linkedPlayer.id) || gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id)) return false;
+  if (gameFeedback.some((item) => item.gameId === game.id && item.playerId === linkedPlayer.id)) return false;
   if (remoteEnabled && supabaseClient && currentSession?.user) {
-    const { error } = await supabaseClient.rpc("submit_postgame_checkin", { p_game_id: game.id, p_candidate_player_id: candidateId, p_game_intensity: gameIntensity, p_remaining_energy: remainingEnergy });
+    const { error } = await supabaseClient.rpc("submit_postgame_checkin", { p_game_id: game.id, p_candidate_player_id: existingVote ? null : candidateId, p_game_intensity: gameIntensity, p_remaining_energy: remainingEnergy });
     if (error) { alert(`Nao consegui guardar o fecho do jogo. Confirma a migration do Supabase. Detalhe: ${error.message}`); return false; }
     await loadRemoteState();
     return true;
   }
   const now = new Date().toISOString();
-  const vote = { id: createUuid(), gameId: game.id, voterPlayerId: linkedPlayer.id, candidatePlayerId: candidateId, userId: currentSession?.user?.id || null, createdAt: now, updatedAt: now };
   const feedback = { id: createUuid(), gameId: game.id, playerId: linkedPlayer.id, userId: currentSession?.user?.id || null, gameIntensity, remainingEnergy, calculationVersion: 1, createdAt: now };
-  gameMvpVotes.push(vote); gameFeedback.push(feedback); incrementMvpVoteCount(game.id, candidateId); saveState(); updateAccessUi(); return true;
+  if (!existingVote) {
+    const vote = { id: createUuid(), gameId: game.id, voterPlayerId: linkedPlayer.id, candidatePlayerId: candidateId, userId: currentSession?.user?.id || null, createdAt: now, updatedAt: now };
+    gameMvpVotes.push(vote);
+    incrementMvpVoteCount(game.id, candidateId);
+  }
+  gameFeedback.push(feedback); saveState(); updateAccessUi(); return true;
 }
 
 function getPendingAwardRevealRequirement() {
