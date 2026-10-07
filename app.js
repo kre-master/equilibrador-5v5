@@ -228,6 +228,7 @@ const els = {
 let pendingPhotoDataUrl = null;
 const photoCache = new Map();
 const cardAssetCache = new Map();
+const pendingGuestPlayers = new Map();
 
 window.addEventListener("error", (event) => {
   if (els.playerList) {
@@ -1475,7 +1476,7 @@ function renderAccountPanel() {
   const linkedPlayer = getLinkedPlayer();
   const pendingClaim = getMyPendingClaim();
   const availablePlayers = state.players
-    .filter((p) => !p.isGuest && !p.linkedUserId)
+    .filter((p) => !p.linkedUserId)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (linkedPlayer) {
@@ -3878,7 +3879,7 @@ function renderEventAdminAdds(eventData) {
   const isFull = getEventGoingCount(eventData.id) >= eventData.maxPlayers;
   const assignedIds = new Set(getEventResponses(eventData.id).map((response) => response.playerId));
   const availablePlayers = state.players
-    .filter((p) => !p.isGuest && !assignedIds.has(p.id))
+    .filter((p) => !assignedIds.has(p.id))
     .sort((a, b) => a.name.localeCompare(b.name));
   return `
     <div class="event-admin-adds admin-actions">
@@ -3891,9 +3892,10 @@ function renderEventAdminAdds(eventData) {
       </div>
       <div class="add-guest-row">
         <input data-event-guest-name="${eventData.id}" placeholder="Amigo novo">
-        <input data-event-guest-score="${eventData.id}" type="number" min="0" max="10" step="0.5" placeholder="0-10">
+        <input data-event-guest-score="${eventData.id}" type="number" min="0" max="10" step="0.5" placeholder="0-10" title="Nota obrigatoria para jogadores novos">
         <button class="ghost-btn" data-event-add-guest-btn="${eventData.id}" ${isFull ? "disabled" : ""}>Adicionar convidado</button>
       </div>
+      <p class="hint">O convidado fica guardado como jogador para os proximos jogos. Se ja existir, reutilizamos o perfil.</p>
       ${isFull ? `<div class="hint warn">Limite de ${eventData.maxPlayers} jogadores atingido.</div>` : ""}
     </div>
   `;
@@ -4046,43 +4048,21 @@ async function addGuestToEvent(eventId) {
   if (!requireAdmin()) return;
   const nameInput = els.eventsList?.querySelector(`[data-event-guest-name="${eventId}"]`);
   const scoreInput = els.eventsList?.querySelector(`[data-event-guest-score="${eventId}"]`);
-  const name = nameInput?.value.trim();
-  const score = Number(scoreInput?.value);
-  if (!name || Number.isNaN(score) || score < 0 || score > 10) {
-    alert("Escreve o nome do convidado e uma nota entre 0 e 10.");
-    return;
-  }
-
-  const overall = Math.round(score * 10);
-  const guest = {
-    id: `g-${Date.now()}-${slug(name)}`,
-    name,
-    pace: overall,
-    shooting: overall,
-    passing: overall,
-    dribbling: overall,
-    defending: overall,
-    physical: overall,
-    overall,
-    photoDataUrl: "",
-    linkedUserId: null,
-    isGuest: true,
-    guestScore0To10: score,
-  };
-
-  state.players.push(guest);
+  const button = els.eventsList?.querySelector(`[data-event-add-guest-btn="${eventId}"]`);
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+  let guest;
   try {
-    if (remoteEnabled && supabaseClient) {
-      const { error: playerError } = await supabaseClient.from("players").upsert(playerToRow(guest));
-      if (playerError) throw playerError;
-    }
+    guest = await createOrReuseGuestPlayer(nameInput?.value, scoreInput?.value);
     await saveEventResponseForPlayer(eventId, guest.id, "going");
     currentEventId = eventId;
     saveState();
     render();
   } catch (error) {
-    state.players = state.players.filter((p) => p.id !== guest.id);
-    alert(`Nao consegui adicionar convidado: ${formatEventResponseError(error)}`);
+    const savedMessage = guest ? `O perfil de ${guest.name} ficou guardado. ` : "";
+    alert(`${savedMessage}Nao consegui adicionar a convocatoria: ${formatEventResponseError(error)}`);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -4292,7 +4272,7 @@ function renderPlayerList() {
         <button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button>
         <button class="player-meta player-open-link" data-open-player="${p.id}" type="button">
           <strong>${escapeHtml(p.name)}</strong>
-          <span>${p.isGuest ? "Convidado" : "Fixo"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
+          <span>${p.isGuest ? "Convidado" : "Jogador"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
         </button>
         ${renderRatingBadge(p, form)}
       </label>
@@ -4331,36 +4311,88 @@ function renderPlayerList() {
   }
 }
 
-async function addGuest() {
-  const name = els.guestName.value.trim();
-  const score = Number(els.guestScore.value);
-  if (!name || Number.isNaN(score) || score < 0 || score > 10) {
-    setHint("Escreve nome do convidado e uma nota entre 0 e 10.", "warn");
-    return;
-  }
+function normalizeGuestPlayerName(name) {
+  return String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-PT").trim().replace(/\s+/g, " ");
+}
 
-  const overall = Math.round(score * 10);
-  const id = `g-${Date.now()}-${slug(name)}`;
-  const guest = {
-    id,
-    name,
-    pace: overall,
-    shooting: overall,
-    passing: overall,
-    dribbling: overall,
-    defending: overall,
-    physical: overall,
-    overall,
-    photoDataUrl: "",
-    isGuest: true,
-    guestScore0To10: score,
-  };
-  state.players.push(guest);
-  selectedIds.add(id);
-  els.guestName.value = "";
-  els.guestScore.value = "";
-  await persistState();
-  render();
+async function createOrReuseGuestPlayer(rawName, rawScore) {
+  if (!canWriteOfficialData()) throw new Error("So o admin pode guardar jogadores.");
+  const name = String(rawName || "").trim().replace(/\s+/g, " ");
+  const key = normalizeGuestPlayerName(name);
+  if (!key) throw new Error("Escreve o nome do jogador.");
+  if (pendingGuestPlayers.has(key)) return pendingGuestPlayers.get(key);
+
+  const operation = (async () => {
+    let players = state.players;
+    if (remoteEnabled) {
+      if (!supabaseClient) throw new Error("Sem ligacao ao Supabase. Tenta novamente.");
+      const { data, error } = await supabaseClient.from("players").select("*");
+      if (error) throw error;
+      players = (data || []).map(playerFromRow);
+    }
+    const matches = players.filter((p) => normalizeGuestPlayerName(p.name) === key);
+    if (matches.length > 1) {
+      throw new Error("Ha varios perfis com este nome. Seleciona o jogador existente na lista.");
+    }
+
+    let playerData = matches[0];
+    if (!playerData) {
+      const score = rawScore === null || rawScore === undefined || String(rawScore).trim() === "" ? NaN : Number(rawScore);
+      if (!Number.isFinite(score) || score < 0 || score > 10) {
+        throw new Error("Para um jogador novo, indica uma nota entre 0 e 10.");
+      }
+      const overall = Math.round(score * 10);
+      playerData = { id: `p-${createUuid()}`, name, pace: overall, shooting: overall,
+        passing: overall, dribbling: overall, defending: overall, physical: overall,
+        overall, photoDataUrl: "", linkedUserId: null, isGuest: false, guestScore0To10: score };
+      if (remoteEnabled) {
+        const { data, error } = await supabaseClient.from("players")
+          .insert(playerToRow(playerData)).select("*").single();
+        if (error) throw error;
+        playerData = playerFromRow(data);
+      }
+    } else if (playerData.isGuest) {
+      if (remoteEnabled) {
+        const { data, error } = await supabaseClient.from("players")
+          .update({ is_guest: false, updated_at: new Date().toISOString() })
+          .eq("id", playerData.id).select("*").single();
+        if (error) throw error;
+        playerData = playerFromRow(data);
+      } else {
+        playerData = { ...playerData, isGuest: false };
+      }
+    }
+    const index = state.players.findIndex((p) => p.id === playerData.id);
+    if (index < 0) state.players.push(playerData);
+    else state.players[index] = playerData;
+    saveState();
+    return playerData;
+  })();
+
+  pendingGuestPlayers.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    pendingGuestPlayers.delete(key);
+  }
+}
+
+async function addGuest() {
+  if (!requireAdmin() || els.addGuest.disabled) return;
+  els.addGuest.disabled = true;
+  try {
+    const guest = await createOrReuseGuestPlayer(els.guestName.value, els.guestScore.value);
+    selectedIds.add(guest.id);
+    els.guestName.value = "";
+    els.guestScore.value = "";
+    render();
+    setHint(`${guest.name} selecionado. Perfil guardado para os proximos jogos.`, "good");
+  } catch (error) {
+    setHint(`Nao consegui adicionar jogador: ${formatEventResponseError(error)}`, "warn");
+  } finally {
+    els.addGuest.disabled = false;
+  }
 }
 
 function setHint(message, level) {

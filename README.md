@@ -61,6 +61,8 @@ Para producao:
 - Admin lanca convocatorias com data, hora, local e limite de jogadores.
 - Jogadores com perfil associado respondem `Vou`, `Talvez` ou `Nao vou`.
 - Admin pode carregar os confirmados da convocatoria para o gerador de equipas.
+- Adicionar um convidado cria um jogador permanente no Supabase, mesmo sem conta associada. O perfil fica disponivel para jogos seguintes e pode ser reclamado por uma conta mais tarde.
+- Ao adicionar um nome que ja existe (ignorando acentos, maiusculas e espacos repetidos), a app reutiliza o perfil sem alterar a nota, foto ou conta. Se houver varios perfis com esse nome, seleciona o jogador na lista. A nota 0-10 so e obrigatoria para um jogador novo.
 - Admin pode editar jogadores/fotos, confirmar jogos, editar resultados e historico.
 - Admin pode gerir pagamentos mensais no separador `Pagamentos`: idas ajustaveis, pagamentos manuais, dividas de ajuste e export WhatsApp.
 - Votos MVP sao confidenciais: a app usa contagens agregadas e nao deve expor quem votou em quem.

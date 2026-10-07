@@ -95,9 +95,10 @@
 
               <div class="guest-row">
                 <input id="guest-name" type="text" placeholder="Convidado">
-                <input id="guest-score" type="number" min="0" max="10" step="0.5" placeholder="0-10">
+                <input id="guest-score" type="number" min="0" max="10" step="0.5" placeholder="0-10" title="Nota obrigatoria para jogadores novos">
                 <button id="add-guest" class="primary-btn">Adicionar</button>
               </div>
+              <p class="hint">O convidado fica guardado como jogador para os proximos jogos. Se ja existir, reutilizamos o perfil.</p>
 
               <div class="hint" id="selection-hint">Seleciona entre 10 e 12 jogadores.</div>
               <div class="player-list" id="player-list"></div>
@@ -321,6 +322,6 @@
     <script src="stats-calculations.js?v=20260910-monthlyrecap1"></script>
     <script src="postgame-feedback.js?v=20260913-feedbackonly1"></script>
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
-    <script src="app.js?v=20260913-feedbackonly1"></script>
+    <script src="app.js?v=20261007-guestprofiles"></script>
   </body>
 </html>
