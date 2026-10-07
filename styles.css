@@ -796,6 +796,15 @@ h3 {
   font-weight: 800;
 }
 
+.roster-player-list .roster-player-entry {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 0;
+}
+
 .roster-player-chip .avatar {
   width: 24px;
   height: 24px;

@@ -32,6 +32,9 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Admin pode alterar a data/hora de uma convocatoria depois de lancada.
 - Se a convocatoria ja tiver originado um jogo, alterar a data/hora da convocatoria deve sincronizar tambem a data/hora desse jogo.
 - Admin pode cancelar/apagar convocatorias quando necessario.
+- Admin pode confirmar jogadores com resposta Talvez/Nao vou e remover confirmados diretamente nas listas da convocatoria quando nao conseguem alterar a propria resposta.
+- Remover da convocatoria altera a resposta para Nao vou, libertando a vaga e preservando o perfil e a conta ligados a resposta. Nao altera equipas de jogos ja gerados.
+- Ajustes de respostas ficam indisponiveis em convocatorias canceladas ou concluidas; confirmar respeita o limite de jogadores na app.
 
 ## Equipas
 

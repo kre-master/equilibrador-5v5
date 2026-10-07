@@ -3754,6 +3754,9 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-response]").forEach((button) => {
     button.addEventListener("click", () => saveEventResponse(button.dataset.eventId, button.dataset.eventResponse));
   });
+  els.eventsList.querySelectorAll("[data-event-admin-response]").forEach((button) => {
+    button.addEventListener("click", () => saveAdminEventResponse(button.dataset.eventId, button.dataset.playerId, button.dataset.eventAdminResponse));
+  });
   els.eventsList.querySelectorAll("[data-event-generate]").forEach((button) => {
     button.addEventListener("click", () => {
       currentEventId = button.dataset.eventGenerate;
@@ -3818,9 +3821,9 @@ function renderEventCard(eventData) {
       </div>
       ${renderResponseActions(eventData, myResponse)}
       <div class="event-roster">
-        ${renderRosterMini("Vou", going)}
-        ${renderRosterMini("Talvez", maybe)}
-        ${renderRosterMini("Nao vou", notGoing)}
+        ${renderRosterMini("Vou", going, eventData, "going")}
+        ${renderRosterMini("Talvez", maybe, eventData, "maybe")}
+        ${renderRosterMini("Nao vou", notGoing, eventData, "not_going")}
       </div>
       ${renderEventAdminAdds(eventData)}
       <div class="actions admin-actions">
@@ -3862,13 +3865,20 @@ function renderResponseActions(eventData, myResponse) {
   `;
 }
 
-function renderRosterMini(label, players) {
+function renderRosterMini(label, players, eventData, status) {
+  const canAdjust = isAdmin && eventData && !["cancelled", "completed"].includes(eventData.status);
+  const nextStatus = status === "going" ? "not_going" : "going";
+  const actionLabel = status === "going" ? "Remover" : "Confirmar";
+  const isFull = canAdjust && getEventGoingCount(eventData.id) >= eventData.maxPlayers;
   const roster = players.length
     ? players.map((p) => `
+      <span class="roster-player-entry">
       <button class="roster-player-chip ${renderCardHaloClass(p)}" data-open-player="${p.id}" type="button">
         ${renderAvatar(p)}
         <span>${escapeHtml(p.name)}</span>
       </button>
+      ${canAdjust ? `<button class="mini-btn admin-actions" type="button" data-event-id="${eventData.id}" data-player-id="${p.id}" data-event-admin-response="${nextStatus}" aria-label="${actionLabel} ${escapeHtml(p.name)} na convocatoria" ${nextStatus === "going" && isFull ? 'disabled title="Convocatoria cheia"' : ""}>${actionLabel}</button>` : ""}
+      </span>
     `).join("")
     : `<span>-</span>`;
   return `<div><strong>${label}</strong><span class="roster-player-list">${roster}</span></div>`;
@@ -4008,7 +4018,7 @@ async function saveEventResponseForPlayer(eventId, playerId, status, userId = nu
   const row = {
     event_id: eventId,
     player_id: playerId,
-    user_id: userId,
+    user_id: userId ?? existing?.userId ?? null,
     status,
     updated_at: new Date().toISOString(),
   };
@@ -4027,6 +4037,27 @@ async function saveEventResponseForPlayer(eventId, playerId, status, userId = nu
     existing.updatedAt = row.updated_at;
   } else {
     eventResponses.unshift(responseFromRow({ ...row, id: `r-${Date.now()}-${playerId}` }));
+  }
+}
+
+async function saveAdminEventResponse(eventId, playerId, status) {
+  if (!isAdmin || !requireAdmin()) return;
+  const eventData = (state.events || []).find((item) => item.id === eventId);
+  if (!eventData || ["cancelled", "completed"].includes(eventData.status) || !findPlayer(playerId)) return;
+  if (!["going", "not_going"].includes(status)) return;
+  const buttons = [...(els.eventsList?.querySelectorAll("[data-event-admin-response]") || [])]
+    .filter((button) => button.dataset.eventId === eventId);
+  const previousDisabled = buttons.map((button) => button.disabled);
+  if (buttons.some((button) => button.dataset.busy === "true")) return;
+  buttons.forEach((button) => { button.disabled = true; button.dataset.busy = "true"; });
+  try {
+    await saveEventResponseForPlayer(eventId, playerId, status);
+    currentEventId = eventId;
+    render();
+  } catch (error) {
+    alert(`Nao consegui ajustar a convocatoria: ${formatEventResponseError(error)}`);
+  } finally {
+    buttons.forEach((button, index) => { button.disabled = previousDisabled[index]; delete button.dataset.busy; });
   }
 }
 

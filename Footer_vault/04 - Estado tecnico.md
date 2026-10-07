@@ -1,5 +1,15 @@
 # Estado tecnico
 
+## 2026-10-07 - Ajustes de convocatoria pelo admin
+
+- Botoes Confirmar nas listas Talvez/Nao vou e Remover na lista Vou; perfis continuam acessiveis pelo nome.
+- `saveAdminEventResponse` verifica permissao, evento ativo e jogador, bloqueia cliques repetidos e reutiliza `saveEventResponseForPlayer`, preservando `user_id` existente.
+- Policies remotas de `event_responses` verificadas em leitura: RLS ativa, admin autorizado a inserir/atualizar, jogador limitado ao perfil associado.
+- Limitacao preexistente identificada: o trigger `enforce_event_max_players` consta de `supabase/schema.sql`, mas nao esta instalado na base remota. A app bloqueia confirmacao quando cheia; confirmacoes simultaneas de sessoes diferentes nao tem garantia atomica no servidor. Nao foi alterado o schema remoto nesta tarefa.
+- Adicionados 11 testes em `tests/event-roster.test.mjs`; testes existentes stats/postgame/monthly e convidados tambem passaram.
+- JS/CSS usam cache-buster `20261007-adminroster1`; `www/` atualizado com `npm.cmd run build:web`.
+- Build repetido com sucesso apos EPERM da sandbox na pasta gerada; sintaxe base/www validada. `git diff --check` passou nos ficheiros desta tarefa; a verificacao global encontra linhas vazias finais preexistentes nas notas 00/05, que foram preservadas.
+
 ## 2026-09-13 - Acesso direto ao perfil do jogador
 
 - Adicionado o separador `Meu perfil` à navegação principal.
