@@ -46,10 +46,10 @@ const PLAYER_CARD_VARIANTS = {
   form_3w_5: { key: "form_3w_5", asset: "assets/new cards template/card_form_3w_5.png", label: "3 em 5", description: "Jogador venceu 3 dos ultimos 5 jogos em que participou." },
   form_4w_5: { key: "form_4w_5", asset: "assets/new cards template/card_form_4w_5.png", label: "4 em 5", description: "Jogador venceu 4 dos ultimos 5 jogos em que participou." },
   form_5w_5: { key: "form_5w_5", asset: "assets/new cards template/card_form_5w_5.png", label: "5 em 5", description: "Jogador venceu os ultimos 5 jogos em que participou." },
-  mvp: { key: "mvp", asset: "assets/new cards template/card_mvp.png", label: "MVP", description: "Jogador foi MVP oficial do jogo anterior e joga o jogo seguinte." },
+  mvp: { key: "mvp", asset: "assets/new cards template/card_mvp.png", label: "MVP", description: "Jogador foi eleito MVP oficial de um jogo. A carta fica ativa no jogo seguinte, se participar." },
   mvp_2x: { key: "mvp_2x", asset: "assets/new cards template/card_mvp_2x.png", label: "MVP 2x", description: "Jogador foi MVP oficial em dois jogos consecutivos." },
   mvp_3x: { key: "mvp_3x", asset: "assets/new cards template/card_mvp_3x.png", label: "MVP 3x", description: "Jogador foi MVP oficial em tres ou mais jogos consecutivos." },
-  mvp_month: { key: "mvp_month", asset: "assets/new cards template/card_mvp_month.png", label: "MVP do mes", description: "Jogador foi MVP do mes anterior e joga o primeiro jogo elegivel do mes seguinte." },
+  mvp_month: { key: "mvp_month", asset: "assets/new cards template/card_mvp_month.png", label: "MVP do mês", description: "Prémio de MVP de um mês fechado, por MVPs oficiais, vitórias e win rate. A carta fica ativa no primeiro jogo elegível do mês seguinte." },
   champion_spring: { key: "champion_spring", asset: "assets/new cards template/card_champion_spring.png", label: "Campeao primavera", description: "Jogador foi campeao da primavera por vitorias, com win rate como desempate." },
   champion_summer: { key: "champion_summer", asset: "assets/new cards template/card_champion_summer.png", label: "Campeao verao", description: "Jogador foi campeao do verao por vitorias, com win rate como desempate." },
   champion_autumn: { key: "champion_autumn", asset: "assets/new cards template/card_champion_autumn.png", label: "Campeao outono", description: "Jogador foi campeao do outono por vitorias, com win rate como desempate." },
@@ -1727,20 +1727,7 @@ function renderPlayerProfile() {
       renderCurrentGame();
     });
   });
-  els.playerProfile.querySelectorAll("[data-award-key]").forEach((card) => {
-    const openAward = () => {
-      const award = PLAYER_CARD_VARIANTS[card.dataset.awardKey];
-      if (!award) return;
-      showAwardDetail(playerData, award, Number(card.dataset.awardCount || 1));
-    };
-    card.addEventListener("click", openAward);
-    card.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openAward();
-      }
-    });
-  });
+  bindAwardDetailCards(els.playerProfile, playerData, awards);
   els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", async (event) => {
     const value = Number(event.target.value);
     if (value < 30 || value > 250) {
@@ -1792,12 +1779,13 @@ function renderAwardShowcaseCard(playerData, award) {
   const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
   const count = FooterMonthly.awardCount(award.count);
   return `
-    <article class="award-card" data-award-key="${variant.key}"${count == null ? "" : ` data-award-count="${count}"`} tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
+    <article class="award-card" data-award-key="${variant.key}"${award.date ? ` data-award-date="${escapeHtml(award.date)}"` : ""}${count == null ? "" : ` data-award-count="${count}"`} tabindex="0" role="button" aria-label="${escapeHtml(variant.label)}">
       <div class="award-card-preview">
         ${renderPlayerCard(playerData, { mode: "award", variant })}
         ${count == null ? "" : `<span class="award-count">x${count}</span>`}
       </div>
       <strong>${escapeHtml(variant.label)}</strong>
+      ${renderAwardContext(playerData.id, award, { compact: true })}
     </article>
   `;
 }
@@ -1806,8 +1794,25 @@ function getTotalAwardCardTypes() {
   return Object.keys(PLAYER_CARD_VARIANTS).filter(isShowcaseAwardKey).length;
 }
 
-function showAwardDetail(playerData, award, count = 1) {
+function bindAwardDetailCards(container, playerData, awards) {
+  container.querySelectorAll("[data-award-key]").forEach((card) => {
+    const openAward = () => {
+      const award = awards.find((item) => item.key === card.dataset.awardKey && (!card.dataset.awardDate || item.date === card.dataset.awardDate));
+      if (award) showAwardDetail(playerData, award);
+    };
+    card.addEventListener("click", openAward);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openAward();
+      }
+    });
+  });
+}
+
+function showAwardDetail(playerData, award) {
   const variant = PLAYER_CARD_VARIANTS[award.key] || PLAYER_CARD_VARIANTS.base;
+  const count = FooterMonthly.awardCount(award.count);
   const existing = document.querySelector(".award-modal");
   if (existing) existing.remove();
   const modal = document.createElement("div");
@@ -1818,12 +1823,13 @@ function showAwardDetail(playerData, award, count = 1) {
       <button class="award-modal-close" data-close-award type="button" aria-label="Fechar">x</button>
       <div class="award-modal-card">
         ${renderPlayerCard(playerData, { mode: "profile", variant })}
-        <span class="award-count award-count-large">x${count}</span>
+        ${count == null ? "" : `<span class="award-count award-count-large">x${count}</span>`}
       </div>
       <div class="award-modal-copy">
         <p class="eyebrow">Premio</p>
         <h3>${escapeHtml(variant.label)}</h3>
         <p>${escapeHtml(variant.description || "Carta especial obtida pelo jogador.")}</p>
+        ${renderAwardContext(playerData.id, award)}
       </div>
     </section>
   `;
@@ -1839,6 +1845,55 @@ function showAwardDetail(playerData, award, count = 1) {
   };
   modal.querySelectorAll("[data-close-award]").forEach((button) => button.addEventListener("click", close));
   window.addEventListener("keydown", handleKey);
+}
+
+function getPlayerMonthlyAwardMonths(playerId, key) {
+  return getCompletedMonthIds().filter((monthId) => {
+    if (key === "mvp_month") return getOfficialMvpWinnersByMonth(monthId).includes(playerId);
+    if (key === "ironman_month") {
+      const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
+      return games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId));
+    }
+    return false;
+  }).reverse();
+}
+
+function getPlayerAwardContext(playerId, award, game = null) {
+  if (award.key === "mvp_month" || award.key === "ironman_month") {
+    return { label: "Meses conquistados", periods: getPlayerMonthlyAwardMonths(playerId, award.key).map(formatMonthLabel) };
+  }
+  const formatAwardDate = (date) => new Intl.DateTimeFormat("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(date));
+  const date = award.date || game?.date;
+  if (date) return { label: "Conquistada em", periods: [formatAwardDate(date)] };
+  if (["mvp", "mvp_2x", "mvp_3x"].includes(award.key)) {
+    let streak = [];
+    const periods = [];
+    getFinishedGamesAsc().forEach((item) => {
+      if (!getOfficialMvpIdsForGame(item).has(playerId)) {
+        streak = [];
+        return;
+      }
+      streak.push(item);
+      if (award.key === "mvp") periods.push(formatAwardDate(item.date));
+      else if (award.key === "mvp_2x" && streak.length === 2) periods.push(`${formatAwardDate(streak[0].date)} – ${formatAwardDate(item.date)}`);
+      else if (award.key === "mvp_3x" && streak.length >= 3) periods.push(`${formatAwardDate(streak[0].date)} – ${formatAwardDate(item.date)}`);
+    });
+    return { label: award.key === "mvp" ? "Jogos MVP" : "Sequências MVP", periods: periods.reverse() };
+  }
+  if (award.key === "win_1x") {
+    const firstWin = getPlayerAppearanceRecord(playerId, Number.MAX_SAFE_INTEGER).reverse().find((item) => item.outcome === "win");
+    return { label: "Primeira vitória em", periods: firstWin ? [formatAwardDate(firstWin.game.date)] : [] };
+  }
+  return { label: "", periods: [] };
+}
+
+function renderAwardContext(playerId, award, options = {}) {
+  const { label, periods } = getPlayerAwardContext(playerId, award, options.game);
+  if (!periods.length) return "";
+  if (options.compact) {
+    return `<small class="award-context-summary" aria-label="${escapeHtml(label)}">${escapeHtml(periods.join(" · "))}</small>`;
+  }
+  return `<div class="award-context"><strong>${escapeHtml(label)}</strong><ul>${periods.map((period) => `<li>${escapeHtml(period)}</li>`).join("")}</ul></div>`;
 }
 
 function addAwardCount(counts, key, amount = 1) {
@@ -2022,10 +2077,7 @@ function countPlayerMvpAwards(playerId, counts) {
       }
     });
 
-  const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
-  months.forEach((monthId) => {
-    if (getOfficialMvpWinnersByMonth(monthId).includes(playerId)) addAwardCount(counts, "mvp_month");
-  });
+  getPlayerMonthlyAwardMonths(playerId, "mvp_month").forEach(() => addAwardCount(counts, "mvp_month"));
 }
 
 function countPlayerSeasonAwards(playerId, counts) {
@@ -2038,10 +2090,10 @@ function countPlayerSeasonAwards(playerId, counts) {
 }
 
 function countPlayerAttendanceAwards(playerId, counts) {
+  getPlayerMonthlyAwardMonths(playerId, "ironman_month").forEach(() => addAwardCount(counts, "ironman_month"));
   const months = new Set(state.games.filter((game) => isFinishedGame(game) && isMonthComplete(getMonthId(game.date))).map((game) => getMonthId(game.date)));
   months.forEach((monthId) => {
     const games = state.games.filter((game) => isFinishedGame(game) && getMonthId(game.date) === monthId);
-    if (games.length >= 2 && games.every((game) => getPlayerParticipation(game, playerId))) addAwardCount(counts, "ironman_month");
     if (games.length >= 5 && games.filter((game) => getPlayerParticipation(game, playerId)).length / games.length >= 0.8) addAwardCount(counts, "regular");
   });
 
@@ -4839,6 +4891,7 @@ function renderMonthlyRecap() {
     <section class="monthly-section"><h3>Cartas recebidas</h3><p>${data.firstAwards.length} novas pela primeira vez · ${data.repeatedAwards.length} repetidas</p><div class="award-grid">${data.awards.length ? data.awards.map((award) => renderAwardShowcaseCard(playerData, award)).join("") : `<div class="empty-state compact">Nenhuma carta este mês — ainda.</div>`}</div></section>
     <section class="monthly-section"><h3>${year} desde o primeiro jogo</h3><p>Altura da barra: presenças. Ponto: forma física percebida.</p><div class="monthly-bars">${yearMonths.map((key) => { const monthData = getMonthlyRecapData(playerData.id, key); const height = Math.min(100, monthData.games.length * 20); const energy = monthData.avgEnergy == null ? null : monthData.avgEnergy * 10; return `<button class="monthly-bar" aria-label="${formatMonthLabel(key)}: ${monthData.games.length} jogos${monthData.avgEnergy == null ? ", sem resposta de forma física" : `, forma física ${monthData.avgEnergy.toFixed(1)} em 10`}" style="--bar-height:${height}%;--energy-height:${energy ?? 0}%" data-month-select="${key}"><span></span>${energy == null ? "" : `<i aria-hidden="true"></i>`}<small>${key.slice(5)}</small></button>`; }).join("")}</div></section>`;
   els.monthlyPanel.querySelectorAll("[data-month-select]").forEach((button) => button.addEventListener("click", () => { currentMonthlyMonth = button.dataset.monthSelect; renderMonthlyRecap(); }));
+  bindAwardDetailCards(els.monthlyPanel, playerData, data.awards);
   maybeOpenMonthlyRecap(playerData.id, currentMonthlyMonth, months, data);
 }
 function maybeOpenMonthlyRecap(playerId, key, months, data) {
@@ -5013,6 +5066,7 @@ function renderOfficialMvpRevealGate() {
           <div class="award-reveal-copy">
             <strong class="award-reveal-title">${escapeHtml(variant.label)}</strong>
             <p class="award-reveal-description">Foste eleito MVP deste jogo pelos votos fechados.</p>
+            ${renderAwardContext(playerData.id, variant, { game })}
           </div>
         </article>
       </div>
@@ -5041,7 +5095,7 @@ function renderAwardRevealGate() {
       ${awards.length > 1 ? `<p class="award-reveal-count" data-award-reveal-count>${awards.length} cartas desbloqueadas</p>` : ""}
       <p>${formatDate(game.date)}</p>
       <div class="award-reveal-track" aria-label="Cartas desbloqueadas">
-        ${awards.map((award) => renderAwardRevealItem(playerData, award)).join("")}
+        ${awards.map((award) => renderAwardRevealItem(playerData, award, game)).join("")}
       </div>
       <button class="primary-btn" data-dismiss-award-reveal>Continuar</button>
     </div>
@@ -5053,13 +5107,14 @@ function renderAwardRevealGate() {
   });
 }
 
-function renderAwardRevealItem(playerData, award) {
+function renderAwardRevealItem(playerData, award, game = null) {
   return `
     <article class="award-reveal-item">
       ${renderPlayerCard(playerData, { mode: "award", variant: award })}
       <div class="award-reveal-copy">
         <strong class="award-reveal-title">${escapeHtml(award.label)}</strong>
         <p class="award-reveal-description">${escapeHtml(award.description)}</p>
+        ${renderAwardContext(playerData.id, award, { game })}
       </div>
     </article>
   `;

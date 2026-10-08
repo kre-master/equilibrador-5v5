@@ -419,3 +419,12 @@ Invoke-WebRequest http://127.0.0.1:5173/
 ## Nota sobre Supabase
 
 Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql` e aplicar o schema no SQL Editor do Supabase. O README indica que pagamentos precisam de `payments`, `attendance_overrides` e `finance_settings`.
+## 2026-10-08 - Contexto temporal das cartas de prémios
+
+- MVP do mês e Ironman mensal mostram todos os meses conquistados, com ano, na montra e no detalhe; os meses seguem os mesmos critérios usados na contagem dos prémios.
+- MVP por jogo e sequências MVP mostram datas; Primeira vitória mostra a data da conquista. Resumo mensal e revelações usam a data do prémio apresentado.
+- Cartas do resumo mensal abrem o detalhe por clique/teclado, sem inventar uma contagem quando esta não existe.
+- Modal com scroll vertical e meses em etiquetas adaptáveis; layout verificado a 375px e 950px com 24 meses, sem overflow horizontal.
+- Validações: check, stats, postgame, monthly, 8 testes de contexto das cartas, check-award-reveal-ui e sintaxe www. Build web repetido com sucesso após EPERM da sandbox.
+- Cache-buster JS/CSS: `20261008-awardperiods1`. Sem alterações remotas, commits ou publicação.
+- Diff check dos ficheiros desta tarefa passou; a verificação global mantém apenas linhas vazias finais preexistentes nas notas 00/05.

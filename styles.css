@@ -2565,6 +2565,7 @@ th.stat-col {
 
 .award-card {
   display: grid;
+  min-width: 0;
   gap: 8px;
   justify-items: center;
   border: 1px solid rgba(190, 205, 198, 0.52);
@@ -2591,6 +2592,47 @@ th.stat-col {
 
 .award-card strong {
   font-size: 13px;
+}
+
+.award-context-summary {
+  width: 100%;
+  min-width: 0;
+  max-height: 4.2em;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.award-context {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.award-context ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.award-context li {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 8px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.award-reveal-copy .award-context ul {
+  justify-content: center;
 }
 
 .award-count {
@@ -2630,6 +2672,8 @@ th.stat-col {
   gap: 20px;
   align-items: center;
   max-width: min(760px, 96vw);
+  max-height: calc(100dvh - 44px);
+  overflow-y: auto;
   border: 1px solid rgba(255,255,255,.7);
   border-radius: 24px;
   padding: 22px;
@@ -2664,6 +2708,7 @@ th.stat-col {
 .award-modal-copy {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .award-modal-copy h3 {
@@ -2671,7 +2716,7 @@ th.stat-col {
   font-size: 28px;
 }
 
-.award-modal-copy p:last-child {
+.award-modal-copy > p:not(.eyebrow) {
   margin: 0;
   color: var(--muted);
   font-weight: 750;
