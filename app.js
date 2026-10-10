@@ -831,6 +831,7 @@ function bindEvents() {
   on(els.adminLogin, "click", adminLogin);
   on(els.accountSignup, "click", createAccount);
   on(els.adminLogout, "click", adminLogout);
+  bindLoginModal();
   on(els.eventForm, "submit", saveEventFromForm);
   on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
   on(els.monthlyMonth, "change", () => { currentMonthlyMonth = els.monthlyMonth.value; renderMonthlyRecap(); });
@@ -1143,32 +1144,91 @@ function updateAccessUi(message) {
   if (els.myProfileTab) els.myProfileTab.classList.toggle("hidden", !linkedPlayer);
 }
 
-async function adminLogin() {
+function adminLogin() {
   if (!remoteEnabled || !supabaseClient) {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
-  const login = prompt("Email ou username:");
-  if (!login) {
-    alert("Escreve o email ou username da conta.");
+  openLoginModal();
+}
+
+// Formulario real (em vez de prompt) para o gestor de passwords do browser poder guardar e preencher.
+function openLoginModal() {
+  const modal = document.querySelector("#login-modal");
+  if (!modal) return;
+  setLoginError("");
+  modal.classList.remove("hidden");
+  document.body.classList.add("mvp-gate-open");
+  const user = document.querySelector("#login-user");
+  const password = document.querySelector("#login-password");
+  (user?.value ? password : user)?.focus();
+}
+
+function closeLoginModal() {
+  const modal = document.querySelector("#login-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  document.body.classList.remove("mvp-gate-open");
+  const password = document.querySelector("#login-password");
+  if (password) password.value = "";
+}
+
+function setLoginError(message) {
+  const error = document.querySelector("#login-error");
+  if (!error) return;
+  error.textContent = message;
+  error.classList.toggle("hidden", !message);
+}
+
+async function submitLoginForm(event) {
+  event.preventDefault();
+  const submit = document.querySelector("#login-submit");
+  const login = document.querySelector("#login-user")?.value.trim() || "";
+  const password = document.querySelector("#login-password")?.value || "";
+  if (!login || !password) {
+    setLoginError("Preenche o email ou username e a password.");
     return;
   }
-  const email = await resolveLoginEmail(login);
-  if (!email) {
-    alert("Nao encontrei esse email/username.");
-    return;
+  setLoginError("");
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "A entrar...";
   }
-  const password = prompt("Password:");
-  if (!password) return;
-  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) {
-    alert(`Login falhou: ${formatAuthError(error)}`);
-    return;
+  try {
+    const email = await resolveLoginEmail(login);
+    if (!email) {
+      setLoginError("Nao encontrei esse email ou username.");
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      setLoginError(`Login falhou: ${formatAuthError(error)}`);
+      return;
+    }
+    closeLoginModal();
+    await loadAccountState();
+    await loadRemoteState();
+    updateAccessUi();
+    render();
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "Entrar";
+    }
   }
-  await loadAccountState();
-  await loadRemoteState();
-  updateAccessUi();
-  render();
+}
+
+function bindLoginModal() {
+  on(document.querySelector("#login-form"), "submit", submitLoginForm);
+  document.querySelectorAll("[data-close-login]").forEach((el) => on(el, "click", closeLoginModal));
+  on(document.querySelector("#login-forgot"), "click", () => {
+    const login = document.querySelector("#login-user")?.value.trim() || "";
+    closeLoginModal();
+    requestPasswordReset(login);
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeLoginModal();
+  });
 }
 
 async function createAccount() {
@@ -1226,13 +1286,15 @@ async function resolveLoginEmail(login) {
   return data || "";
 }
 
-async function requestPasswordReset() {
+async function requestPasswordReset(prefilledLogin) {
   if (!remoteEnabled || !supabaseClient) {
     alert("Configura primeiro o Supabase.");
     return;
   }
   if (authActionBusy) return;
-  const login = prompt("Email ou username para recuperar password:");
+  const login = typeof prefilledLogin === "string" && prefilledLogin
+    ? prefilledLogin
+    : prompt("Email ou username para recuperar password:");
   if (!login) {
     alert("Escreve o email ou username da conta.");
     return;
