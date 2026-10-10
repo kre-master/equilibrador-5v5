@@ -83,3 +83,18 @@ test("team heatmap sums the dwell time of the team's players", () => {
   assert.deepEqual(tracking.teamHeatmap(r, "A").values, [3, 6, 9, 12]);
   assert.equal(tracking.teamHeatmap(r, "C"), null);
 });
+
+test("tracking table keeps RLS: members read published only, admins write", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync(new URL("../supabase/tracking-migration.sql", import.meta.url), "utf8");
+  assert.match(sql, /alter table public\.game_tracking_results enable row level security/i);
+  assert.match(sql, /revoke all on table public\.game_tracking_results from public, anon/i);
+  assert.match(sql, /using \(status = 'published' or \(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /for insert to authenticated\s+with check \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /for update to authenticated\s+using \(\(select public\.is_admin\(\)\)\)\s+with check \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /for delete to authenticated\s+using \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /references public\.games\(id\) on delete cascade/i);
+  assert.match(sql, /where status = 'published'/i);
+  const schema = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+  assert.match(schema, /create table if not exists public\.game_tracking_results/i);
+});

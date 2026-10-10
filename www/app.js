@@ -1093,6 +1093,7 @@ async function loadRemoteState() {
   financeSettings = state.financeSettings || financeSettings;
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = null;
+  await loadRemoteTracking();
   saveState();
 }
 
@@ -6077,11 +6078,97 @@ function renderGamesList() {
 }
 
 // ---- Tracking de vídeo: teste local (claude/tracking-teste) ----
-// Os resultados do tracker são importados por ficheiro e ficam só neste dispositivo (localStorage).
-// Nada é gravado no Supabase. A associação etiqueta do vídeo -> jogador é escolhida por um admin;
-// o nome só serve para pré-preencher. Cada jogador vê a sua própria análise; não há tabela de todos.
+// Com a tabela public.game_tracking_results (supabase/tracking-migration.sql) os resultados ficam no
+// Supabase: um admin importa (rascunho), associa etiquetas do vídeo a jogadores e publica; os outros só
+// leem o publicado. Sem a tabela ou sem sessão, cai no modo local de teste (localStorage).
+// O nome do vídeo só pré-preenche a associação. Cada jogador vê a sua própria análise; não há tabela de todos.
 let trackingStore = window.FooterTracking ? window.FooterTracking.loadStore(window.localStorage) : {};
+let trackingRemote = false;
 const trackingPreviewByGame = {};
+
+function trackingEntryFromRow(row) {
+  return {
+    id: row.id, revision: row.revision, status: row.status, result: row.result, mapping: row.mapping || {},
+    importedAt: row.imported_at, publishedAt: row.published_at, fileName: row.source_file,
+  };
+}
+
+async function loadRemoteTracking() {
+  if (!window.FooterTracking || !remoteEnabled || !supabaseClient || !currentSession?.user) return;
+  const statuses = isAdmin ? ["draft", "published"] : ["published"];
+  const { data, error } = await supabaseClient
+    .from("game_tracking_results")
+    .select("*")
+    .in("status", statuses)
+    .order("revision", { ascending: false });
+  if (error) {
+    console.warn("Tracking load failed. Run supabase/tracking-migration.sql.", error);
+    trackingRemote = false;
+    return;
+  }
+  trackingRemote = true;
+  const remote = {};
+  (data || []).forEach((row) => {
+    // Admins see the newest revision (draft or published); everyone else only the published one.
+    if (!remote[row.game_id]) remote[row.game_id] = trackingEntryFromRow(row);
+  });
+  trackingStore = remote;
+}
+
+async function importTrackingResult(game, result, mapping, fileName) {
+  if (!trackingRemote) {
+    trackingStore[game.id] = { result, mapping, importedAt: new Date().toISOString(), fileName, status: "local" };
+    if (!saveTrackingStore()) throw new Error("Não foi possível guardar neste dispositivo (armazenamento cheio ou bloqueado).");
+    return;
+  }
+  const { data: last, error: lastError } = await supabaseClient
+    .from("game_tracking_results").select("revision").eq("game_id", game.id).order("revision", { ascending: false }).limit(1);
+  if (lastError) throw new Error("Não foi possível ler as revisões deste jogo.");
+  const revision = (last?.[0]?.revision || 0) + 1;
+  const { data, error } = await supabaseClient.from("game_tracking_results").insert({
+    game_id: game.id, revision, schema_version: window.FooterTracking.SCHEMA, run_id: result.runId || null,
+    status: "draft", result, mapping, source_file: fileName || null,
+  }).select("*").single();
+  if (error) throw new Error(`Não foi possível guardar no servidor: ${error.message}`);
+  trackingStore[game.id] = trackingEntryFromRow(data);
+}
+
+async function saveTrackingMapping(game, entry) {
+  if (!trackingRemote || !entry.id) {
+    saveTrackingStore();
+    return;
+  }
+  const { error } = await supabaseClient.from("game_tracking_results").update({ mapping: entry.mapping }).eq("id", entry.id);
+  if (error) throw new Error(`Não foi possível guardar a associação: ${error.message}`);
+}
+
+async function publishTrackingResult(game, entry) {
+  if (!trackingRemote || !entry.id) return;
+  const { error: archiveError } = await supabaseClient.from("game_tracking_results")
+    .update({ status: "archived" }).eq("game_id", game.id).eq("status", "published");
+  if (archiveError) throw new Error(`Não foi possível arquivar a versão anterior: ${archiveError.message}`);
+  const { data, error } = await supabaseClient.from("game_tracking_results")
+    .update({ status: "published", published_at: new Date().toISOString() }).eq("id", entry.id).select("*").single();
+  if (error) throw new Error(`Não foi possível publicar: ${error.message}`);
+  trackingStore[game.id] = trackingEntryFromRow(data);
+}
+
+async function removeTrackingResult(game, entry) {
+  if (trackingRemote && entry.id) {
+    const { error } = await supabaseClient.from("game_tracking_results").delete().eq("id", entry.id);
+    if (error) throw new Error(`Não foi possível remover: ${error.message}`);
+    await loadRemoteTracking();
+    return;
+  }
+  delete trackingStore[game.id];
+  saveTrackingStore();
+}
+
+function getTrackingBadge(entry) {
+  if (!trackingRemote) return `<span class="tracking-badge">Teste local</span>`;
+  if (entry?.status === "draft") return `<span class="tracking-badge">Rascunho · só admin</span>`;
+  return `<span class="tracking-badge">Beta</span>`;
+}
 
 function saveTrackingStore() {
   return window.FooterTracking?.saveStore(window.localStorage, trackingStore);
@@ -6203,8 +6290,8 @@ function renderTrackingTestSection(game) {
   if (!entry) {
     return `
       <section class="profile-section tracking-section admin-only">
-        <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
-        <p class="tracking-note">Importa o resultado do tracker (ficheiro <code>tracking-result.json</code>) para ver distâncias, velocidades e mapas de calor deste jogo. Fica só neste dispositivo; nada é gravado na base de dados.</p>
+        <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(null)}</div>
+        <p class="tracking-note">Importa o resultado do tracker (ficheiro <code>tracking-result.json</code>) para ver distâncias, velocidades e mapas de calor deste jogo. ${trackingRemote ? "Fica como rascunho, visível só para admins, até carregares em Publicar." : "Fica só neste dispositivo; nada é gravado na base de dados."}</p>
         <label class="ghost-btn tracking-import">Importar resultado do tracker<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
         <p class="tracking-error" data-tracking-error hidden></p>
       </section>
@@ -6240,8 +6327,8 @@ function renderTrackingTestSection(game) {
   });
   return `
     <section class="profile-section tracking-section">
-      <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
-      <p class="tracking-note">${escapeHtml(result.label)} · importado neste dispositivo em ${formatDate(entry.importedAt)}. Não foi gravado na base de dados. Valores ainda por validar.</p>
+      <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(entry)}</div>
+      <p class="tracking-note">${escapeHtml(result.label)} · ${trackingRemote ? `revisão ${entry.revision}, ${entry.status === "published" ? `publicada em ${formatDate(entry.publishedAt)}` : `importada em ${formatDate(entry.importedAt)}, ainda não publicada`}` : `importado neste dispositivo em ${formatDate(entry.importedAt)}, não gravado na base de dados`}. Valores ainda por validar.</p>
       <div class="tracking-highlights">
         ${highlight("Motor do jogo", highlights.motor, "m/min", 1)}
         ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1)}
@@ -6300,8 +6387,10 @@ function renderTrackingTestSection(game) {
         </div>
         <div class="tracking-actions">
           <button class="primary-btn" type="button" data-tracking-save-map="${game.id}">Guardar associação</button>
-          <button class="danger-btn" type="button" data-tracking-remove="${game.id}">Remover tracking deste jogo</button>
+          ${trackingRemote && entry.status === "draft" ? `<button class="primary-btn" type="button" data-tracking-publish="${game.id}" ${problems.unmapped.length || problems.duplicates.length ? "disabled title=\"Associa todos os jogadores primeiro\"" : ""}>Publicar para o grupo</button>` : ""}
+          <button class="danger-btn" type="button" data-tracking-remove="${game.id}">${trackingRemote ? `Apagar a revisão ${entry.revision}` : "Remover tracking deste jogo"}</button>
         </div>
+        <p class="tracking-error" data-tracking-error hidden></p>
       </details>
     </section>
   `;
@@ -6320,10 +6409,11 @@ function bindTrackingTestSection(game, container) {
       result.players.forEach((p) => {
         if (p.playerId && findPlayer(p.playerId)) mapping[p.label] = p.playerId;
       });
-      trackingStore[game.id] = { result, mapping, importedAt: new Date().toISOString(), fileName: file.name };
-      if (!saveTrackingStore()) throw new Error("Não foi possível guardar neste dispositivo (armazenamento cheio ou bloqueado).");
+      input.disabled = true;
+      await importTrackingResult(game, result, mapping, file.name);
       renderHistoryGameDetail();
     } catch (error) {
+      input.disabled = false;
       if (errorBox) {
         errorBox.textContent = error.message || "Não foi possível ler o ficheiro.";
         errorBox.hidden = false;
@@ -6334,25 +6424,59 @@ function bindTrackingTestSection(game, container) {
     trackingPreviewByGame[game.id] = event.target.value;
     renderHistoryGameDetail();
   });
-  container.querySelector("[data-tracking-save-map]")?.addEventListener("click", () => {
+  const showTrackingError = (error) => {
+    const box = container.querySelector(".tracking-mapping [data-tracking-error]");
+    if (box) {
+      box.textContent = error.message || "Não foi possível concluir.";
+      box.hidden = false;
+    }
+  };
+  container.querySelector("[data-tracking-save-map]")?.addEventListener("click", async (event) => {
     const entry = getTrackingEntry(game.id);
     if (!entry) return;
     container.querySelectorAll("[data-tracking-map]").forEach((select) => {
       entry.mapping[select.dataset.trackingMap] = select.value || null;
     });
-    saveTrackingStore();
-    renderHistoryGameDetail();
+    event.currentTarget.disabled = true;
+    try {
+      await saveTrackingMapping(game, entry);
+      renderHistoryGameDetail();
+    } catch (error) {
+      event.currentTarget.disabled = false;
+      showTrackingError(error);
+    }
   });
-  container.querySelector("[data-tracking-remove]")?.addEventListener("click", (event) => {
+  container.querySelector("[data-tracking-publish]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (button.dataset.confirming !== "1") {
+      button.dataset.confirming = "1";
+      button.textContent = "Carrega outra vez para publicar ao grupo";
+      return;
+    }
+    button.disabled = true;
+    try {
+      await publishTrackingResult(game, getTrackingEntry(game.id));
+      renderHistoryGameDetail();
+    } catch (error) {
+      button.disabled = false;
+      showTrackingError(error);
+    }
+  });
+  container.querySelector("[data-tracking-remove]")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
     if (button.dataset.confirming !== "1") {
       button.dataset.confirming = "1";
       button.textContent = "Carrega outra vez para remover";
       return;
     }
-    delete trackingStore[game.id];
-    saveTrackingStore();
-    renderHistoryGameDetail();
+    button.disabled = true;
+    try {
+      await removeTrackingResult(game, getTrackingEntry(game.id));
+      renderHistoryGameDetail();
+    } catch (error) {
+      button.disabled = false;
+      showTrackingError(error);
+    }
   });
 }
 
@@ -6376,9 +6500,9 @@ function renderPlayerTrackingSection(playerId) {
   const gameLink = `Último jogo analisado: <button class="link-btn" type="button" data-profile-open-game="${escapeHtml(game.id)}">${formatDate(game.date)}</button>`;
   return `
     <section class="profile-section tracking-section">
-      <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
+      <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(entry)}</div>
       ${renderPlayerTrackingBlock(entry, p, { gameLink })}
-      <p class="tracking-fineprint">Valores de teste, ainda por validar; ficam só neste dispositivo.</p>
+      <p class="tracking-fineprint">Valores em teste, ainda por validar contra uma medição de referência.</p>
     </section>
   `;
 }
