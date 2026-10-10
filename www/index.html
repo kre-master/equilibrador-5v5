@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261010-login1">
+    <link rel="stylesheet" href="styles.css?v=20261010-remember1">
   </head>
   <body>
     <div class="app-shell">
@@ -328,6 +328,7 @@
           <p class="eyebrow">Bem-vindo de volta</p>
           <h2 id="login-title">Entrar</h2>
         </div>
+        <div id="login-remembered" class="auth-remembered hidden"></div>
         <label class="auth-field">
           <span>Email ou username</span>
           <input id="login-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
@@ -335,6 +336,10 @@
         <label class="auth-field">
           <span>Password</span>
           <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <label class="auth-remember">
+          <input id="login-remember" type="checkbox" checked>
+          <span>Lembrar esta conta neste dispositivo</span>
         </label>
         <p id="login-error" class="auth-error hidden" role="alert"></p>
         <button id="login-submit" class="primary-btn" type="submit">Entrar</button>
@@ -348,6 +353,6 @@
     <script src="stats-calculations.js?v=20260910-monthlyrecap1"></script>
     <script src="postgame-feedback.js?v=20260913-feedbackonly1"></script>
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
-    <script src="app.js?v=20261010-login1"></script>
+    <script src="app.js?v=20261010-remember1"></script>
   </body>
 </html>

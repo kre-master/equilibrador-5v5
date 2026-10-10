@@ -3186,6 +3186,127 @@ th.stat-col {
   box-shadow: 0 0 0 4px rgba(59, 140, 255, .18);
 }
 
+.auth-remembered {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-remembered.hidden {
+  display: none;
+}
+
+.auth-remembered-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.auth-remembered-list {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.auth-account:hover {
+  border-color: rgba(89, 176, 255, .45);
+}
+
+.auth-account.selected {
+  border-color: rgba(89, 176, 255, .75);
+  background: var(--accent-soft);
+  box-shadow: 0 0 18px rgba(59, 140, 255, .25);
+}
+
+.auth-account-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 0;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.auth-account-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #cfe0ff;
+  background: linear-gradient(160deg, #1b3363, #0f1d3a);
+  border: 1px solid rgba(89, 176, 255, .35);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-account-text {
+  display: grid;
+  min-width: 0;
+}
+
+.auth-account-text strong,
+.auth-account-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-account-text strong {
+  font-size: 14px;
+}
+
+.auth-account-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-account-forget {
+  width: 32px;
+  height: 32px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  font-size: 18px;
+}
+
+.auth-account-forget:hover {
+  color: var(--ink);
+  background: var(--surface-strong);
+}
+
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-remember input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .auth-card .primary-btn {
   min-height: 48px;
   margin-top: 4px;

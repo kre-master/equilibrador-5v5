@@ -1153,10 +1153,82 @@ function adminLogin() {
 }
 
 // Formulario real (em vez de prompt) para o gestor de passwords do browser poder guardar e preencher.
+// Contas lembradas neste dispositivo: so o login e o nome, nunca a password
+// (a password fica no gestor de passwords do browser).
+const REMEMBERED_LOGINS_KEY = "footer-remembered-logins-v1";
+const MAX_REMEMBERED_LOGINS = 5;
+
+function getRememberedLogins() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REMEMBERED_LOGINS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.login === "string") : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveRememberedLogins(list) {
+  try {
+    localStorage.setItem(REMEMBERED_LOGINS_KEY, JSON.stringify(list.slice(0, MAX_REMEMBERED_LOGINS)));
+  } catch (error) {
+    // Armazenamento indisponivel: o login continua a funcionar sem lembrar contas.
+  }
+}
+
+function rememberLogin(login) {
+  const key = login.toLowerCase();
+  const entry = {
+    login,
+    label: currentProfile?.display_name || currentProfile?.username || login,
+    admin: Boolean(isAdmin),
+  };
+  const others = getRememberedLogins().filter((item) => item.login.toLowerCase() !== key);
+  saveRememberedLogins([entry, ...others]);
+}
+
+function forgetLogin(login) {
+  const key = login.toLowerCase();
+  saveRememberedLogins(getRememberedLogins().filter((item) => item.login.toLowerCase() !== key));
+  renderRememberedLogins();
+}
+
+function renderRememberedLogins() {
+  const wrap = document.querySelector("#login-remembered");
+  if (!wrap) return;
+  const list = getRememberedLogins();
+  wrap.classList.toggle("hidden", !list.length);
+  wrap.innerHTML = list.length
+    ? `<span class="auth-remembered-title">Contas neste dispositivo</span>
+      <div class="auth-remembered-list">
+        ${list.map((item) => `
+          <div class="auth-account">
+            <button type="button" class="auth-account-pick" data-pick-login="${escapeHtml(item.login)}">
+              <span class="auth-account-avatar">${escapeHtml(initials(item.label))}</span>
+              <span class="auth-account-text">
+                <strong>${escapeHtml(item.label)}</strong>
+                <small>${escapeHtml(item.login)}${item.admin ? " · admin" : ""}</small>
+              </span>
+            </button>
+            <button type="button" class="auth-account-forget" data-forget-login="${escapeHtml(item.login)}" aria-label="Esquecer ${escapeHtml(item.label)}">&times;</button>
+          </div>`).join("")}
+      </div>`
+    : "";
+  wrap.querySelectorAll("[data-pick-login]").forEach((button) => on(button, "click", () => {
+    const user = document.querySelector("#login-user");
+    const password = document.querySelector("#login-password");
+    if (user) user.value = button.dataset.pickLogin;
+    if (password) password.value = "";
+    wrap.querySelectorAll(".auth-account").forEach((row) => row.classList.toggle("selected", row.contains(button)));
+    password?.focus();
+  }));
+  wrap.querySelectorAll("[data-forget-login]").forEach((button) => on(button, "click", () => forgetLogin(button.dataset.forgetLogin)));
+}
+
 function openLoginModal() {
   const modal = document.querySelector("#login-modal");
   if (!modal) return;
   setLoginError("");
+  renderRememberedLogins();
   modal.classList.remove("hidden");
   document.body.classList.add("mvp-gate-open");
   const user = document.querySelector("#login-user");
@@ -1207,6 +1279,11 @@ async function submitLoginForm(event) {
     }
     closeLoginModal();
     await loadAccountState();
+    if (document.querySelector("#login-remember")?.checked) {
+      rememberLogin(login);
+    } else {
+      forgetLogin(login);
+    }
     await loadRemoteState();
     updateAccessUi();
     render();
