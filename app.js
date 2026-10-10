@@ -1846,6 +1846,8 @@ function renderPlayerProfile() {
       </div>
     </section>
 
+    ${renderPlayerTrackingSection(playerData.id)}
+
     <section class="profile-section">
       <h3>Auditoria de cartas</h3>
       <div class="award-audit-grid">
@@ -6074,6 +6076,313 @@ function renderGamesList() {
   });
 }
 
+// ---- Tracking de vídeo: teste local (claude/tracking-teste) ----
+// Os resultados do tracker são importados por ficheiro e ficam só neste dispositivo (localStorage).
+// Nada é gravado no Supabase. A associação etiqueta do vídeo -> jogador é escolhida por um admin;
+// o nome só serve para pré-preencher. Cada jogador vê a sua própria análise; não há tabela de todos.
+let trackingStore = window.FooterTracking ? window.FooterTracking.loadStore(window.localStorage) : {};
+const trackingPreviewByGame = {};
+
+function saveTrackingStore() {
+  return window.FooterTracking?.saveStore(window.localStorage, trackingStore);
+}
+
+function getTrackingEntry(gameId) {
+  return trackingStore[gameId] || null;
+}
+
+function getTrackingPlayerName(entry, label) {
+  const id = entry.mapping?.[label];
+  const playerData = id ? findPlayer(id) : null;
+  return playerData ? playerData.name : `${label} (por associar)`;
+}
+
+function getTrackingLabelFor(entry, playerId) {
+  return Object.entries(entry.mapping || {}).find(([, id]) => id === playerId)?.[0] || null;
+}
+
+function formatTrackingNumber(value, digits = 0) {
+  if (value == null || !Number.isFinite(Number(value))) return "–";
+  return Number(value).toLocaleString("pt-PT", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatVideoClock(seconds) {
+  if (seconds == null) return "";
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+let trackingHeatmapSeq = 0;
+
+function renderTrackingHeatmap(heatmap, { label = "Mapa de calor", color = "var(--accent-2)" } = {}) {
+  if (!heatmap?.values?.length) return "";
+  const { rows, cols, values } = heatmap;
+  const positive = values.filter((v) => v > 0).sort((x, y) => x - y);
+  if (!positive.length) return "";
+  // Scale against the 98th percentile so a few busy cells do not wash out the rest; soft blur for a heat look.
+  const cap = positive[Math.min(positive.length - 1, Math.floor(positive.length * 0.98))] || positive[positive.length - 1];
+  const id = `tracking-heat-${trackingHeatmapSeq += 1}`;
+  let cells = "";
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const v = values[r * cols + c];
+      if (v <= 0) continue;
+      const level = Math.pow(Math.min(1, v / cap), 0.75);
+      if (level < 0.04) continue;
+      cells += `<rect x="${c}" y="${rows - r - 1}" width="1" height="1" fill="${color}" fill-opacity="${(0.05 + 0.95 * level).toFixed(2)}"/>`;
+    }
+  }
+  const lines = `<g fill="none" stroke="var(--line-strong)" stroke-width="0.15"><rect x="0" y="0" width="${cols}" height="${rows}"/><line x1="${cols / 2}" x2="${cols / 2}" y1="0" y2="${rows}"/><circle cx="${cols / 2}" cy="${rows / 2}" r="3"/><rect x="0" y="${rows / 2 - 3}" width="1.2" height="6"/><rect x="${cols - 1.2}" y="${rows / 2 - 3}" width="1.2" height="6"/></g>`;
+  return `<svg class="tracking-heatmap" viewBox="-0.5 -0.5 ${cols + 1} ${rows + 1}" role="img" aria-label="${escapeHtml(label)}; câmara do lado de baixo">
+    <defs><filter id="${id}-blur" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="0.6"/></filter><clipPath id="${id}-clip"><rect x="0" y="0" width="${cols}" height="${rows}"/></clipPath></defs>
+    <rect x="0" y="0" width="${cols}" height="${rows}" fill="var(--surface-opaque)"/>
+    <g clip-path="url(#${id}-clip)"><g filter="url(#${id}-blur)">${cells}</g></g>${lines}</svg>`;
+}
+
+function renderTrackingBands(p) {
+  const bands = window.FooterTracking?.speedBands(p);
+  if (!bands) return "";
+  const colors = ["rgba(89,176,255,.28)", "rgba(89,176,255,.45)", "rgba(89,176,255,.65)", "var(--accent)", "var(--orange)"];
+  return `
+    <div class="tracking-bands" aria-label="Tempo por velocidade">
+      <div class="tracking-bands-bar">${bands.map((b, i) => b.pct > 0.2 ? `<i style="flex:${b.pct};background:${colors[i]}" title="${b.name}: ${formatTrackingNumber(b.pct, 1)}%"></i>` : "").join("")}</div>
+      <div class="tracking-bands-key">${bands.map((b, i) => `<span><i style="background:${colors[i]}"></i>${b.name} ${formatTrackingNumber(b.pct, 0)}%</span>`).join("")}</div>
+    </div>
+  `;
+}
+
+function getTrackingVideoTeamName(entry, game, videoTeam) {
+  // The video teams are labelled A/B by the tracker; show them by the Footer side of their mapped players.
+  const sides = entry.result.players
+    .filter((p) => p.team === videoTeam && entry.mapping?.[p.label])
+    .map((p) => getPlayerParticipation(game, entry.mapping[p.label])?.side)
+    .filter(Boolean);
+  const counts = sides.reduce((acc, side) => ({ ...acc, [side]: (acc[side] || 0) + 1 }), {});
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best ? `Equipa ${best[0]}` : `Equipa do vídeo ${videoTeam}`;
+}
+
+function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
+  const tracking = window.FooterTracking;
+  const others = entry.result.players;
+  const rank = (key) => {
+    const r = tracking.rankIn(others, p.label, key);
+    return r ? `${r.position}.º de ${r.of} no jogo` : "";
+  };
+  const partner = p.partner ? escapeHtml(getTrackingPlayerName(entry, p.partner.label)) : null;
+  const rival = p.rival ? escapeHtml(getTrackingPlayerName(entry, p.rival.label)) : null;
+  const late = p.lateRatio != null ? Math.round((p.lateRatio - 1) * 100) : null;
+  return `
+    <div class="tracking-player">
+      <p class="tracking-note">${gameLink ? `${gameLink} · ` : ""}${formatTrackingNumber(p.validMinutes, 1)} min vistos pela câmara (não são minutos jogados).</p>
+      <div class="tracking-highlights">
+        <article class="tracking-highlight"><span>Distância</span><strong>${formatTrackingNumber((p.distanceM ?? 0) / 1000, 2)} <small>km</small></strong><em>${rank("distanceM")}</em></article>
+        <article class="tracking-highlight"><span>Ritmo</span><strong>${formatTrackingNumber(p.metersPerMin, 1)} <small>m/min</small></strong><em>${rank("metersPerMin")}</em></article>
+        <article class="tracking-highlight"><span>Mais rápido (1 s)</span><strong>${formatTrackingNumber(p.maxSustainedKmh, 1)} <small>km/h</small></strong><em>${p.maxSustainedAtS != null ? `aos ${formatVideoClock(p.maxSustainedAtS)} do vídeo` : ""}</em></article>
+        <article class="tracking-highlight"><span>Sprints ≥20 km/h</span><strong>${formatTrackingNumber(p.sprints)}</strong><em>${formatTrackingNumber(p.highRuns)} arranques ≥15 km/h</em></article>
+      </div>
+      ${renderTrackingBands(p)}
+      <div class="tracking-profile-map">
+        ${renderTrackingHeatmap(p.heatmap, { label: "Mapa de calor do jogador" })}
+        <dl>
+          <dt>Papel em campo</dt><dd>${escapeHtml(tracking.roleLabel(p) || "–")}</dd>
+          ${p.zoneSharePct ? `<dt>Defesa / meio / ataque</dt><dd>${formatTrackingNumber(p.zoneSharePct.defensiva, 0)} / ${formatTrackingNumber(p.zoneSharePct.media, 0)} / ${formatTrackingNumber(p.zoneSharePct.ofensiva, 0)}%</dd>` : ""}
+          ${p.goalkeeperMin ? `<dt>Na baliza</dt><dd>${formatTrackingNumber(p.goalkeeperMin, 1)} min</dd>` : ""}
+          ${late != null ? `<dt>Ritmo no fim vs início</dt><dd>${late > 0 ? "+" : ""}${late}%</dd>` : ""}
+          ${partner ? `<dt>Parceiro de jogo</dt><dd>${partner} · ${formatTrackingNumber(p.partner.sharePct, 0)}% do tempo a &lt;5 m</dd>` : ""}
+          ${rival ? `<dt>Rival do jogo</dt><dd>${rival} · ${formatTrackingNumber(p.rival.seconds / 60, 1)} min a &lt;3 m</dd>` : ""}
+        </dl>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrackingTestSection(game) {
+  if (!window.FooterTracking) return "";
+  const entry = getTrackingEntry(game.id);
+  if (!entry) {
+    return `
+      <section class="profile-section tracking-section admin-only">
+        <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
+        <p class="tracking-note">Importa o resultado do tracker (ficheiro <code>tracking-result.json</code>) para ver distâncias, velocidades e mapas de calor deste jogo. Fica só neste dispositivo; nada é gravado na base de dados.</p>
+        <label class="ghost-btn tracking-import">Importar resultado do tracker<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
+        <p class="tracking-error" data-tracking-error hidden></p>
+      </section>
+    `;
+  }
+  const { result, mapping } = entry;
+  const tracking = window.FooterTracking;
+  const problems = tracking.mappingProblems(mapping);
+  const roster = new Set(getGamePlayerIds(game));
+  const outsideRoster = Object.entries(mapping).filter(([, id]) => id && !roster.has(id)).map(([label]) => label);
+  const highlights = tracking.gameHighlights(result);
+  const name = (label) => escapeHtml(getTrackingPlayerName(entry, label));
+  const highlight = (title, h, unit, digits = 0) => `
+    <article class="tracking-highlight">
+      <span>${title}</span>
+      <strong>${h ? formatTrackingNumber(h.value, digits) : "–"} <small>${unit}</small></strong>
+      <em>${h ? h.labels.map(name).join(", ") : "Sem dados suficientes"}</em>
+    </article>
+  `;
+  // Whose analysis is shown: the signed-in player's own; an admin can preview any associated player.
+  const linked = getLinkedPlayer();
+  const mappedPlayers = result.players.filter((p) => mapping[p.label]);
+  const linkedMapped = linked && getTrackingLabelFor(entry, linked.id) ? linked.id : null;
+  const previewId = isAdmin ? (trackingPreviewByGame[game.id] || linkedMapped || (mappedPlayers[0] ? mapping[mappedPlayers[0].label] : null)) : linked?.id;
+  const viewLabel = previewId ? getTrackingLabelFor(entry, previewId) : null;
+  const viewP = viewLabel ? result.players.find((p) => p.label === viewLabel) : null;
+  const viewName = previewId ? findPlayer(previewId)?.name : null;
+  const isOwn = linked && previewId === linked.id;
+  const allPlayers = [...state.players].sort((a, b) => {
+    const inA = roster.has(a.id) ? 0 : 1;
+    const inB = roster.has(b.id) ? 0 : 1;
+    return inA - inB || a.name.localeCompare(b.name, "pt");
+  });
+  return `
+    <section class="profile-section tracking-section">
+      <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
+      <p class="tracking-note">${escapeHtml(result.label)} · importado neste dispositivo em ${formatDate(entry.importedAt)}. Não foi gravado na base de dados. Valores ainda por validar.</p>
+      <div class="tracking-highlights">
+        ${highlight("Motor do jogo", highlights.motor, "m/min", 1)}
+        ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1)}
+        ${highlight("Mais sprints", highlights.sprinter, "sprints")}
+        ${highlight("Mais metros", highlights.distance, "m")}
+      </div>
+      <p class="tracking-fineprint">Destaques entre quem teve pelo menos ${tracking.MIN_MINUTES_FOR_HIGHLIGHT} min observados e não esteve na baliza a maior parte do tempo.</p>
+    </section>
+
+    <section class="profile-section tracking-section">
+      <div class="tracking-head">
+        <h3>${isOwn ? "A tua análise" : viewName ? `Análise de ${escapeHtml(viewName)}` : "A tua análise"}</h3>
+        ${isAdmin && mappedPlayers.length ? `
+          <label class="tracking-preview admin-only">Ver como
+            <select data-tracking-preview="${game.id}">
+              ${mappedPlayers.map((p) => `<option value="${escapeHtml(mapping[p.label])}" ${mapping[p.label] === previewId ? "selected" : ""}>${name(p.label)}</option>`).join("")}
+            </select>
+          </label>` : ""}
+      </div>
+      ${viewP ? renderPlayerTrackingBlock(entry, viewP) : `<p class="tracking-note">${linked ? "Não estás associado a nenhum jogador neste vídeo." : "Entra com uma conta ligada a um jogador para veres a tua análise."}</p>`}
+    </section>
+
+    <section class="profile-section tracking-section">
+      <div class="tracking-head"><h3>Equipas no vídeo</h3></div>
+      <div class="tracking-teams">
+        ${Object.entries(result.teams).map(([key, t]) => `
+          <article class="tracking-team">
+            <strong>${escapeHtml(getTrackingVideoTeamName(entry, game, key))}</strong>
+            ${renderTrackingHeatmap(tracking.teamHeatmap(result, key), { label: `Mapa de calor da equipa ${key}`, color: key === "A" ? "var(--accent-2)" : "var(--orange)" })}
+            <dl>
+              <dt>Centro da equipa no meio-campo adversário</dt><dd>${formatTrackingNumber(t.attackingHalfPct, 0)}% do tempo</dd>
+              <dt>Distância média à própria baliza</dt><dd>${formatTrackingNumber(t.fromOwnGoalM, 1)} m</dd>
+              <dt>Largura / compactação</dt><dd>${formatTrackingNumber(t.widthM, 1)} / ${formatTrackingNumber(t.compactnessM, 1)} m</dd>
+            </dl>
+          </article>
+        `).join("")}
+      </div>
+      <p class="tracking-fineprint">Mapas por tempo passado em cada metro quadrado; a câmara está do lado de baixo.</p>
+    </section>
+
+    <section class="profile-section tracking-section admin-only">
+      <details class="tracking-mapping" ${problems.unmapped.length ? "open" : ""}>
+        <summary>Associação vídeo → jogadores (${result.players.length - problems.unmapped.length}/${result.players.length}) · só admin</summary>
+        ${problems.duplicates.length || outsideRoster.length ? `<p class="tracking-warning">${problems.duplicates.length ? "Há jogadores associados a duas etiquetas do vídeo. " : ""}${outsideRoster.length ? `${outsideRoster.map(escapeHtml).join(", ")} associado(s) a quem não está neste jogo.` : ""}</p>` : ""}
+        <p class="tracking-fineprint">O nome do vídeo só pré-preenche a escolha. Confirma cada linha; jogadores deste jogo aparecem primeiro.</p>
+        <div class="tracking-mapping-grid">
+          ${result.players.map((p) => `
+            <label>
+              <span>${escapeHtml(p.label)}${p.automaticSharePct != null ? ` <small>${formatTrackingNumber(p.automaticSharePct, 0)}% nome automático</small>` : ""}</span>
+              <select data-tracking-map="${escapeHtml(p.label)}">
+                <option value="">— por associar —</option>
+                ${allPlayers.map((pl) => `<option value="${escapeHtml(pl.id)}" ${mapping[p.label] === pl.id ? "selected" : ""}>${escapeHtml(pl.name)}${roster.has(pl.id) ? "" : " (fora deste jogo)"}</option>`).join("")}
+              </select>
+            </label>
+          `).join("")}
+        </div>
+        <div class="tracking-actions">
+          <button class="primary-btn" type="button" data-tracking-save-map="${game.id}">Guardar associação</button>
+          <button class="danger-btn" type="button" data-tracking-remove="${game.id}">Remover tracking deste jogo</button>
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+function bindTrackingTestSection(game, container) {
+  if (!window.FooterTracking || !container) return;
+  const input = container.querySelector("[data-tracking-import]");
+  input?.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    const errorBox = container.querySelector("[data-tracking-error]");
+    if (!file) return;
+    try {
+      const result = window.FooterTracking.parseResult(await file.text());
+      const mapping = window.FooterTracking.proposeMapping(result.players.map((p) => p.label), state.players);
+      result.players.forEach((p) => {
+        if (p.playerId && findPlayer(p.playerId)) mapping[p.label] = p.playerId;
+      });
+      trackingStore[game.id] = { result, mapping, importedAt: new Date().toISOString(), fileName: file.name };
+      if (!saveTrackingStore()) throw new Error("Não foi possível guardar neste dispositivo (armazenamento cheio ou bloqueado).");
+      renderHistoryGameDetail();
+    } catch (error) {
+      if (errorBox) {
+        errorBox.textContent = error.message || "Não foi possível ler o ficheiro.";
+        errorBox.hidden = false;
+      }
+    }
+  });
+  container.querySelector("[data-tracking-preview]")?.addEventListener("change", (event) => {
+    trackingPreviewByGame[game.id] = event.target.value;
+    renderHistoryGameDetail();
+  });
+  container.querySelector("[data-tracking-save-map]")?.addEventListener("click", () => {
+    const entry = getTrackingEntry(game.id);
+    if (!entry) return;
+    container.querySelectorAll("[data-tracking-map]").forEach((select) => {
+      entry.mapping[select.dataset.trackingMap] = select.value || null;
+    });
+    saveTrackingStore();
+    renderHistoryGameDetail();
+  });
+  container.querySelector("[data-tracking-remove]")?.addEventListener("click", (event) => {
+    const button = event.currentTarget;
+    if (button.dataset.confirming !== "1") {
+      button.dataset.confirming = "1";
+      button.textContent = "Carrega outra vez para remover";
+      return;
+    }
+    delete trackingStore[game.id];
+    saveTrackingStore();
+    renderHistoryGameDetail();
+  });
+}
+
+function getPlayerTrackingGames(playerId) {
+  return Object.entries(trackingStore)
+    .map(([gameId, entry]) => {
+      const label = getTrackingLabelFor(entry, playerId);
+      const game = state.games.find((item) => item.id === gameId);
+      const p = label ? entry.result.players.find((item) => item.label === label) : null;
+      return p && game ? { game, entry, p } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.game.date) - new Date(a.game.date));
+}
+
+function renderPlayerTrackingSection(playerId) {
+  if (!window.FooterTracking) return "";
+  const items = getPlayerTrackingGames(playerId);
+  if (!items.length) return "";
+  const { game, entry, p } = items[0];
+  const gameLink = `Último jogo analisado: <button class="link-btn" type="button" data-profile-open-game="${escapeHtml(game.id)}">${formatDate(game.date)}</button>`;
+  return `
+    <section class="profile-section tracking-section">
+      <div class="tracking-head"><h3>Tracking de vídeo</h3><span class="tracking-badge">Teste local</span></div>
+      ${renderPlayerTrackingBlock(entry, p, { gameLink })}
+      <p class="tracking-fineprint">Valores de teste, ainda por validar; ficam só neste dispositivo.</p>
+    </section>
+  `;
+}
+
 function renderHistoryGameDetail() {
   if (!els.historyGameDetail) return;
   const game = state.games.find((item) => item.id === currentHistoryGameId);
@@ -6095,9 +6404,14 @@ function renderHistoryGameDetail() {
       </div>
     </div>
     <div class="field-card history-field-card">
-      ${renderField(game, { radarPosition: "bottom", clickablePlayers: true, radarInlineOdds: true })}
+      ${renderField(game, { radarPosition: "none", clickablePlayers: true })}
     </div>
+    <section class="profile-section history-radar-section">
+      <h3>Equipas em comparação</h3>
+      ${renderTeamRadarChart([...hydrate(game.teamA), ...hydrate(getBenchA(game))], [...hydrate(game.teamB), ...hydrate(getBenchB(game))], { inlineOdds: true })}
+    </section>
     ${renderHistoryRosterEditor(game)}
+    ${renderTrackingTestSection(game)}
   `;
   els.historyGameDetail.querySelector("[data-save-history-game-date]")?.addEventListener("click", async (buttonEvent) => {
     const gameId = buttonEvent.currentTarget.dataset.saveHistoryGameDate;
@@ -6121,6 +6435,7 @@ function renderHistoryGameDetail() {
   });
   bindHistoryRosterEditorActions(game);
   bindMvpPanelActions(game, els.historyGameDetail);
+  bindTrackingTestSection(game, els.historyGameDetail);
 }
 
 function renderHistoryRosterEditor(game) {

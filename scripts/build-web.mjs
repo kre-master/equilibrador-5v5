@@ -8,6 +8,7 @@ const files = [
   "app.js",
   "postgame-feedback.js",
   "monthly-recap.js",
+  "tracking-metrics.js",
   "app-config.js",
   "manifest.webmanifest"
 ];

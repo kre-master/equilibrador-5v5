@@ -3615,3 +3615,74 @@ th.stat-col {
     max-width: 15ch;
   }
 }
+
+/* Tracking de vídeo (teste local, claude/tracking-teste) */
+.tracking-section { gap: 14px; }
+.tracking-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tracking-head h3 { margin: 0; }
+.tracking-badge { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); border: 1px solid rgba(243, 179, 64, .45); border-radius: 999px; padding: 4px 10px; }
+.tracking-note, .tracking-fineprint { margin: 0; color: var(--muted); line-height: 1.5; }
+.tracking-fineprint { font-size: .82rem; }
+.tracking-warning { margin: 0; color: var(--amber); font-size: .9rem; }
+.tracking-error { margin: 0; color: var(--red); }
+.tracking-import { position: relative; overflow: hidden; justify-self: start; cursor: pointer; }
+.tracking-import input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.tracking-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tracking-highlight { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); min-width: 0; }
+.tracking-highlight span { color: var(--muted); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
+.tracking-highlight strong { font-family: var(--font-display); font-size: 2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.tracking-highlight strong small { font-family: var(--font-body); font-size: .8rem; color: var(--muted); font-weight: 500; }
+.tracking-highlight em { font-style: normal; font-weight: 600; overflow-wrap: anywhere; }
+.tracking-evidence { color: var(--muted); font-size: .78rem; }
+.tracking-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.tracking-team { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.tracking-team dl, .tracking-profile-map dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: .88rem; }
+.tracking-team dt, .tracking-profile-map dt { color: var(--muted); }
+.tracking-team dd, .tracking-profile-map dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.tracking-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
+.tracking-table { width: 100%; min-width: 560px; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; }
+.tracking-table th, .tracking-table td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tracking-table th { color: var(--muted); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+.tracking-table th:first-child, .tracking-table td:first-child, .tracking-table td:last-child, .tracking-table th:last-child { text-align: left; }
+.tracking-table tbody tr:last-child td { border-bottom: 0; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent-2); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tracking-mapping summary { cursor: pointer; font-weight: 600; }
+.tracking-mapping[open] { display: grid; gap: 10px; }
+.tracking-mapping-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; }
+.tracking-mapping-grid label { display: grid; gap: 4px; font-size: .88rem; }
+.tracking-mapping-grid small { color: var(--muted); font-weight: 400; }
+.tracking-mapping-grid select { width: 100%; min-width: 0; }
+.tracking-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tracking-bands { display: grid; gap: 8px; }
+.tracking-bands-bar { display: flex; gap: 2px; height: 14px; }
+.tracking-bands-bar i { display: block; height: 100%; }
+.tracking-bands-bar i:first-child { border-radius: 4px 0 0 4px; }
+.tracking-bands-bar i:last-child { border-radius: 0 4px 4px 0; }
+.tracking-bands-key { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: .8rem; }
+.tracking-bands-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.tracking-profile-map { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: center; }
+.tracking-heatmap { width: 100%; height: auto; display: block; border-radius: 10px; }
+@media (max-width: 640px) { .tracking-profile-map { grid-template-columns: 1fr; } }
+.tracking-preview { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .85rem; }
+.tracking-preview select { min-width: 0; }
+.tracking-player { display: grid; gap: 14px; }
+.tracking-team .tracking-heatmap { border-radius: 8px; }
+
+/* Radar das equipas no histórico: estilo escuro da app, fora do relvado */
+.history-radar-section .team-radar { margin: 0; border-color: var(--line); background: var(--surface-2); }
+.history-radar-section .team-radar-legend { color: var(--ink); justify-content: flex-start; }
+.history-radar-section .team-radar-legend em { border-color: var(--line); background: var(--surface); }
+.history-radar-section .team-radar-legend .team-a { color: var(--accent-2); }
+.history-radar-section .team-radar-legend .team-b { color: var(--orange); }
+.history-radar-section .team-radar-grid polygon,
+.history-radar-section .team-radar-grid line { stroke: var(--line-strong); }
+.history-radar-section .team-radar-area.team-a { fill: rgba(89, 176, 255, .28); stroke: var(--accent-2); }
+.history-radar-section .team-radar-area.team-b { fill: rgba(255, 154, 77, .26); stroke: var(--orange); }
+.history-radar-section .team-radar-labels { color: var(--muted); fill: var(--muted); }
+.history-radar-section .team-radar-axis-label .team-a-value { fill: var(--accent-2); stroke: var(--bg-solid); }
+.history-radar-section .team-radar-axis-label .team-b-value { fill: var(--orange); stroke: var(--bg-solid); }
+.history-radar-section .team-radar svg { max-height: 240px; }
+.tracking-profile-map dl { grid-template-columns: max-content minmax(0, 1fr); }
+.tracking-profile-map dt { white-space: nowrap; }
+.tracking-team dl { grid-template-columns: minmax(0, 1fr) max-content; }
