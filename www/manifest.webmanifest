@@ -3,7 +3,7 @@
   "short_name": "Footer",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#eef5f1",
-  "theme_color": "#1f7a4d",
+  "background_color": "#05080f",
+  "theme_color": "#05080f",
   "icons": []
 }
