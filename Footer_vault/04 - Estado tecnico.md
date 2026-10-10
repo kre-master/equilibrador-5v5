@@ -428,3 +428,12 @@ Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql`
 - Validações: check, stats, postgame, monthly, 8 testes de contexto das cartas, check-award-reveal-ui e sintaxe www. Build web repetido com sucesso após EPERM da sandbox.
 - Cache-buster JS/CSS: `20261008-awardperiods1`. Sem alterações remotas, commits ou publicação.
 - Diff check dos ficheiros desta tarefa passou; a verificação global mantém apenas linhas vazias finais preexistentes nas notas 00/05.
+
+## 2026-10-10 - Tema visual "Holofote"
+
+- Substituido o visual claro verde/vidro por um tema escuro de estadio a noite: fundo azul-escuro com luz de projetores, destaque azul igual a chama do logo (`--accent: #3b8cff`), verde reservado a estados positivos.
+- Tipografia: Big Shoulders Display (titulos e numeros de destaque) e Archivo (texto), carregadas do Google Fonts em `index.html`; sem rede ficam as fontes de recurso.
+- Tokens em `:root` de `styles.css` (`--accent`, `--accent-2`, `--accent-glow`, `--surface-opaque`, `--font-display`, `--font-body`). Campo e cartas FIFA mantem cores proprias.
+- PNG exportado (`drawGameCanvas` em `app.js`) segue o mesmo tema: fundo escuro, placard azul e fontes do tema.
+- `theme-color` e manifest passaram a `#05080f`. Barra de estado Android/iOS nao foi alterada.
+- Cache-buster JS/CSS: `20261010-holofote1`.

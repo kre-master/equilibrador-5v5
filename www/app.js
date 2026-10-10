@@ -6111,29 +6111,42 @@ async function drawGameCanvas(game) {
   const squadB = [...teamB, ...benchB];
   const result = game.scoreA == null || game.scoreB == null ? "vs" : `${game.scoreA} - ${game.scoreB}`;
 
+  await loadExportFonts();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#eef2f1";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawExportBackground(ctx, canvas.width, canvas.height);
 
-  ctx.fillStyle = "#16201d";
-  ctx.font = "800 64px Segoe UI, Arial";
-  ctx.fillText("Jogo 5v5", 90, 105);
-  ctx.font = "500 32px Segoe UI, Arial";
-  ctx.fillStyle = "#697571";
-  ctx.fillText(formatDate(game.date), 90, 150);
+  ctx.fillStyle = "#eef4ff";
+  ctx.font = `900 76px ${EXPORT_DISPLAY_FONT}`;
+  ctx.fillText("JOGO 5V5", 90, 112);
+  ctx.font = `500 32px ${EXPORT_BODY_FONT}`;
+  ctx.fillStyle = "#8a9bbb";
+  ctx.fillText(formatDate(game.date), 90, 158);
 
-  ctx.fillStyle = "#ffffff";
+  ctx.save();
+  ctx.shadowColor = "rgba(59, 140, 255, .35)";
+  ctx.shadowBlur = 40;
+  ctx.fillStyle = "#0d1a33";
   roundRect(ctx, 90, 200, 1420, 170, 24);
   ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = "rgba(130, 175, 255, .3)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 90, 200, 1420, 170, 24);
+  ctx.stroke();
 
-  drawTeamHeader(ctx, "Equipa A", 140, 300, "#1f7a4d");
-  drawTeamHeader(ctx, "Equipa B", 1460, 300, "#c86422", "right");
+  drawTeamHeader(ctx, "EQUIPA A", 140, 305, "#34c78a");
+  drawTeamHeader(ctx, "EQUIPA B", 1460, 305, "#ff9a4d", "right");
   ctx.textAlign = "center";
-  ctx.fillStyle = "#16201d";
-  ctx.font = "800 28px Segoe UI, Arial";
-  ctx.fillText(formatDate(game.date), 800, 270);
-  ctx.font = "900 62px Segoe UI, Arial";
-  ctx.fillText(result, 800, 330);
+  ctx.fillStyle = "#8a9bbb";
+  ctx.font = `600 28px ${EXPORT_BODY_FONT}`;
+  ctx.fillText(formatDate(game.date), 800, 262);
+  ctx.save();
+  ctx.fillStyle = "#8cc4ff";
+  ctx.shadowColor = "rgba(89, 176, 255, .7)";
+  ctx.shadowBlur = 28;
+  ctx.font = `900 84px ${EXPORT_DISPLAY_FONT}`;
+  ctx.fillText(result.toUpperCase(), 800, 340);
+  ctx.restore();
   ctx.textAlign = "left";
 
   const pitch = { x: 90, y: 410, w: 1420, h: 1230 };
@@ -6146,16 +6159,41 @@ async function drawGameCanvas(game) {
   }
 }
 
+const EXPORT_DISPLAY_FONT = '"Big Shoulders Display", "Bahnschrift Condensed", "Arial Narrow", Arial';
+const EXPORT_BODY_FONT = 'Archivo, "Segoe UI", Arial';
+
+async function loadExportFonts() {
+  if (!document.fonts?.load) return;
+  try {
+    await Promise.all([
+      document.fonts.load(`900 76px "Big Shoulders Display"`),
+      document.fonts.load(`600 28px Archivo`),
+    ]);
+  } catch (error) {
+    // Sem rede, o canvas usa as fontes de recurso.
+  }
+}
+
+function drawExportBackground(ctx, width, height) {
+  ctx.fillStyle = "#05080f";
+  ctx.fillRect(0, 0, width, height);
+  const glow = ctx.createRadialGradient(width / 2, -height * 0.08, 0, width / 2, -height * 0.08, height * 0.6);
+  glow.addColorStop(0, "rgba(40, 92, 190, .7)");
+  glow.addColorStop(1, "rgba(40, 92, 190, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+}
+
 function drawTeamHeader(ctx, label, x, y, color, align = "left") {
   ctx.fillStyle = color;
-  ctx.font = "900 38px Segoe UI, Arial";
+  ctx.font = `900 48px ${EXPORT_DISPLAY_FONT}`;
   ctx.textAlign = align;
   ctx.fillText(label, x, y);
   ctx.textAlign = "left";
 }
 
 function drawPitch(ctx, pitch) {
-  ctx.fillStyle = "#1f7a4d";
+  ctx.fillStyle = "#17603c";
   roundRect(ctx, pitch.x, pitch.y, pitch.w, pitch.h, 18);
   ctx.fill();
 

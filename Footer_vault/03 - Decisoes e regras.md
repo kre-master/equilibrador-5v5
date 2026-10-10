@@ -163,3 +163,9 @@ O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir t
 - `npm.cmd run build:web`
 - `node --check www\app.js`
 - smoke test com `Invoke-WebRequest http://127.0.0.1:5173/`
+
+## Identidade visual
+
+- Tema oficial desde 2026-10-10: "Holofote" (escuro, estadio a noite, azul da chama do logo como cor de destaque). Escolhido entre seis propostas.
+- Novas cores devem usar os tokens de `:root` em `styles.css`; azul para accao/seleccao, verde so para estados positivos, laranja/vermelho para alertas e equipa B.
+- Campo e cartas FIFA mantem as cores proprias.
