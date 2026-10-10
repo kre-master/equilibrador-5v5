@@ -3323,6 +3323,28 @@ th.stat-col {
   font-size: 13px;
 }
 
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.auth-links:has(> :only-child) {
+  justify-content: center;
+}
+
+.auth-error.auth-success {
+  border-color: rgba(52, 199, 138, .35);
+  color: #7fe6b8;
+  background: rgba(52, 199, 138, .12);
+}
+
+.auth-card {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
 .auth-link {
   justify-self: center;
   border: 0;

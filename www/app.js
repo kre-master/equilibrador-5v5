@@ -832,6 +832,7 @@ function bindEvents() {
   on(els.accountSignup, "click", createAccount);
   on(els.adminLogout, "click", adminLogout);
   bindLoginModal();
+  bindSignupModal();
   on(els.eventForm, "submit", saveEventFromForm);
   on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
   on(els.monthlyMonth, "change", () => { currentMonthlyMonth = els.monthlyMonth.value; renderMonthlyRecap(); });
@@ -1308,23 +1309,62 @@ function bindLoginModal() {
   });
 }
 
-async function createAccount() {
+function createAccount() {
   if (!remoteEnabled || !supabaseClient) {
     alert("Configura primeiro o Supabase em app-config.js.");
     return;
   }
   if (authActionBusy) return;
-  const email = prompt("Email:");
-  if (!email) return;
-  const username = normalizeUsername(prompt("Username:", email.split("@")[0]) || "");
-  if (!username) {
-    alert("Escolhe um username valido.");
+  closeLoginModal();
+  const modal = document.querySelector("#signup-modal");
+  if (!modal) return;
+  setSignupMessage("");
+  modal.classList.remove("hidden");
+  document.body.classList.add("mvp-gate-open");
+  document.querySelector("#signup-name")?.focus();
+}
+
+function closeSignupModal() {
+  const modal = document.querySelector("#signup-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  document.body.classList.remove("mvp-gate-open");
+  const password = document.querySelector("#signup-password");
+  if (password) password.value = "";
+}
+
+function setSignupMessage(message, tone = "error") {
+  const box = document.querySelector("#signup-message");
+  if (!box) return;
+  box.textContent = message;
+  box.classList.toggle("hidden", !message);
+  box.classList.toggle("auth-success", tone === "success");
+}
+
+async function submitSignupForm(event) {
+  event.preventDefault();
+  if (authActionBusy) return;
+  const submit = document.querySelector("#signup-submit");
+  const email = document.querySelector("#signup-email")?.value.trim() || "";
+  const usernameInput = document.querySelector("#signup-username");
+  const username = normalizeUsername(usernameInput?.value || email.split("@")[0] || "");
+  const password = document.querySelector("#signup-password")?.value || "";
+  const displayName = document.querySelector("#signup-name")?.value.trim() || email.split("@")[0];
+  if (!email || !password) {
+    setSignupMessage("Preenche o email e a password.");
     return;
   }
-  const password = prompt("Password:");
-  if (!password) return;
-  const displayName = prompt("Nome a mostrar:", email.split("@")[0]) || email.split("@")[0];
+  if (!username) {
+    setSignupMessage("Escolhe um username valido.");
+    usernameInput?.focus();
+    return;
+  }
+  setSignupMessage("");
   setAuthActionBusy(true);
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "A criar conta...";
+  }
   let data;
   let error;
   try {
@@ -1335,20 +1375,46 @@ async function createAccount() {
     }));
   } finally {
     setAuthActionBusy(false);
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "Criar conta";
+    }
   }
   if (error) {
-    alert(`Nao consegui criar conta: ${formatAuthError(error)}`);
+    setSignupMessage(`Nao consegui criar conta: ${formatAuthError(error)}`);
     return;
   }
   if (!data.session) {
-    alert("Conta criada. Se o Supabase pedir confirmacao, confirma o email e depois entra na app.");
+    setSignupMessage("Conta criada. Confirma o email que te enviamos e depois entra na app.", "success");
     return;
   }
+  closeSignupModal();
   await loadAccountState();
+  rememberLogin(username);
   await loadRemoteState();
   showView("account");
   updateAccessUi();
   render();
+}
+
+function bindSignupModal() {
+  on(document.querySelector("#signup-form"), "submit", submitSignupForm);
+  document.querySelectorAll("[data-close-signup]").forEach((el) => on(el, "click", closeSignupModal));
+  on(document.querySelector("#signup-to-login"), "click", () => {
+    closeSignupModal();
+    openLoginModal();
+  });
+  on(document.querySelector("#login-to-signup"), "click", createAccount);
+  const email = document.querySelector("#signup-email");
+  const username = document.querySelector("#signup-username");
+  // Sugere o username a partir do email enquanto o utilizador nao o escrever.
+  on(email, "input", () => {
+    if (username && !username.dataset.touched) username.value = normalizeUsername(email.value.split("@")[0] || "");
+  });
+  on(username, "input", () => { username.dataset.touched = "1"; });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSignupModal();
+  });
 }
 
 async function resolveLoginEmail(login) {
