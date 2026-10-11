@@ -6285,6 +6285,32 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
   `;
 }
 
+function renderBallZones(entry, game) {
+  // "Onde se jogou": share of ball time in 3 thirds x 3 corridors, camera side at the bottom (as the heatmaps).
+  const zones = entry.result.ball?.zonesPct;
+  if (!zones) return "";
+  const max = Math.max(...zones) || 1;
+  const w = 39.5 / 3, h = 19.5 / 3;
+  let cells = "";
+  for (let r = 0; r < 3; r += 1) {
+    for (let c = 0; c < 3; c += 1) {
+      const pct = zones[r * 3 + c];
+      const x = c * w, y = (2 - r) * h;
+      cells += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="var(--accent)" fill-opacity="${(0.08 + 0.8 * pct / max).toFixed(2)}"/>`;
+      cells += `<text x="${(x + w / 2).toFixed(2)}" y="${(y + h / 2 + 1).toFixed(2)}" text-anchor="middle" font-size="3" font-weight="700" fill="var(--ink)">${formatTrackingNumber(pct, 0)}%</text>`;
+    }
+  }
+  const lines = `<g fill="none" stroke="var(--line-strong)" stroke-width="0.15"><rect x="0" y="0" width="39.5" height="19.5"/><line x1="19.75" x2="19.75" y1="0" y2="19.5"/><circle cx="19.75" cy="9.75" r="3"/></g>`;
+  return `
+    <div class="tracking-zones">
+      <strong>Onde se jogou</strong>
+      <svg class="tracking-heatmap" viewBox="-0.5 -0.5 40.5 20.5" role="img" aria-label="Percentagem do tempo da bola em cada zona do campo; câmara do lado de baixo">
+        <rect x="0" y="0" width="39.5" height="19.5" fill="var(--surface-opaque)"/>${cells}${lines}</svg>
+      <div class="tracking-zones-key"><span>← ${escapeHtml(getTrackingVideoTeamName(entry, game, "A"))} ataca</span><span>${escapeHtml(getTrackingVideoTeamName(entry, game, "B"))} ataca →</span></div>
+    </div>
+  `;
+}
+
 function renderPlayerPassBlock(entry, p, rank) {
   // Ball metrics exist from revision 2 on; only passes passed the human audit.
   if (p.passesMade == null) return "";
@@ -6383,10 +6409,13 @@ function renderTrackingTestSection(game) {
               <dt>Distância média à própria baliza</dt><dd>${formatTrackingNumber(t.fromOwnGoalM, 1)} m</dd>
               <dt>Largura / compactação</dt><dd>${formatTrackingNumber(t.widthM, 1)} / ${formatTrackingNumber(t.compactnessM, 1)} m</dd>
               ${t.ballAttackingThirdPct != null ? `<dt>Bola no terço de ataque</dt><dd>${formatTrackingNumber(t.ballAttackingThirdPct, 0)}% do tempo</dd>` : ""}
+              ${t.attacks ? `<dt>Ataques (perigosos)</dt><dd>${formatTrackingNumber(t.attacks.count)} (${formatTrackingNumber(t.attacks.dangerous)})</dd>` : ""}
+              ${tracking.preferredLane(t.attacks?.lanePct) ? `<dt>Ataca mais pela</dt><dd>${tracking.preferredLane(t.attacks.lanePct).name} · ${formatTrackingNumber(tracking.preferredLane(t.attacks.lanePct).pct, 0)}%</dd>` : ""}
             </dl>
           </article>
         `).join("")}
       </div>
+      ${renderBallZones(entry, game)}
       <p class="tracking-fineprint">Mapas por tempo passado em cada metro quadrado; a câmara está do lado de baixo.${result.ball?.middleThirdPct != null ? ` A bola esteve ${formatTrackingNumber(result.ball.middleThirdPct, 0)}% do tempo no terço do meio.` : ""}</p>
     </section>
 

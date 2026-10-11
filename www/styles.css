@@ -3670,6 +3670,9 @@ th.stat-col {
 .tracking-ball { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tracking-ball h4 { margin: 0; font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .tracking-team .tracking-heatmap { border-radius: 8px; }
+.tracking-zones { display: grid; gap: 8px; margin-top: 12px; }
+.tracking-zones .tracking-heatmap { border-radius: 8px; }
+.tracking-zones-key { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .82rem; }
 
 /* Radar das equipas no histórico: estilo escuro da app, fora do relvado */
 .history-radar-section .team-radar { margin: 0; border-color: var(--line); background: var(--surface-2); }

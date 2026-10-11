@@ -84,6 +84,10 @@
         fromOwnGoalM: finite(t.centroid_distance_from_own_goal_m),
         attackingHalfPct: finite(t.territory_attacking_half_pct),
         ballAttackingThirdPct: finite(t.ball_attacking_third_pct),
+        attacks: t.attacks && finite(t.attacks.count) != null ? {
+          count: t.attacks.count, dangerous: finite(t.attacks.dangerous), meanDurationS: finite(t.attacks.mean_duration_s),
+          lanePct: t.attacks.lane_pct || null,
+        } : null,
         perMinute: Array.isArray(t.per_minute) ? t.per_minute.map((r) => ({ minute: r.minute, fromOwnGoalM: r.centroid_from_own_goal_m, seconds: r.seconds })) : [],
       };
     });
@@ -93,6 +97,8 @@
       middleThirdPct: finite(b.middle_third_pct),
       passesTotal: finite(b.passes_detected_total),
       passAudit: b.audit?.passes ? { correct: finite(b.audit.passes.correct), judged: finite(b.audit.passes.judged) } : null,
+      // 3 x 3 grid of ball time: rows from the camera side outwards, columns from x = 0 (B's goal) to A's goal.
+      zonesPct: Array.isArray(b.zones?.pct_row_major) && b.zones.pct_row_major.length === 9 ? b.zones.pct_row_major.map(Number) : null,
     } : null;
     return {
       schema: SCHEMA,
@@ -188,6 +194,13 @@
     return "Box-to-box";
   }
 
+  function preferredLane(lanePct) {
+    if (!lanePct) return null;
+    const names = { esquerda: "Esquerda", centro: "Centro", direita: "Direita" };
+    const best = Object.entries(lanePct).filter(([k]) => names[k]).sort((a, b) => b[1] - a[1])[0];
+    return best ? { name: names[best[0]], pct: best[1] } : null;
+  }
+
   function speedBands(p) {
     if (!p.bandTimeS) return null;
     const total = p.bandTimeS.reduce((a, b) => a + b, 0);
@@ -223,7 +236,7 @@
 
   return {
     STORAGE_KEY, SCHEMA, MIN_MINUTES_FOR_HIGHLIGHT,
-    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn,
+    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, preferredLane,
     loadStore, saveStore,
   };
 });
