@@ -116,7 +116,7 @@ test("ball pass metrics are read when present and stay absent in older results",
   data.ball = { coverage_of_video_pct: 77.2, middle_third_pct: 42.7, passes_detected_total: 16,
     audit: { passes: { correct: 23, judged: 24 } } };
   const result = tracking.parseResult(data);
-  assert.deepEqual(result.ball, { coveragePct: 77.2, middleThirdPct: 42.7, passesTotal: 16, passAudit: { correct: 23, judged: 24 }, zonesPct: null });
+  assert.deepEqual(result.ball, { coveragePct: 77.2, middleThirdPct: 42.7, passesTotal: 16, passAudit: { correct: 23, judged: 24 }, zonesPct: null, passLinks: [] });
   assert.equal(result.players[0].passesMade, 7);
   assert.equal(result.players[0].passesReceived, 5);
   assert.deepEqual(result.players[0].passPartner, { label: "MARQUES", passes: 4 });
@@ -133,16 +133,45 @@ test("a new revision inherits confirmed associations for the same video labels",
 test("ball zones and team attacks are read only when complete", () => {
   const data = sample();
   data.ball = { zones: { pct_row_major: [7.5, 9.9, 6.6, 14.6, 22.3, 11.2, 6.6, 12.5, 8.8] } };
-  data.teams.A.attacks = { count: 23, dangerous: 16, mean_duration_s: 12.9, lane_pct: { esquerda: 9, centro: 57, direita: 35 } };
+  data.teams.A.attacks = { count: 11, status: "estimate", lane_pct: { centro: 57 } };
   const result = tracking.parseResult(data);
   assert.equal(result.ball.zonesPct.length, 9);
-  assert.deepEqual(result.teams.A.attacks, { count: 23, dangerous: 16, meanDurationS: 12.9, lanePct: { esquerda: 9, centro: 57, direita: 35 } });
-  assert.deepEqual(tracking.preferredLane(result.teams.A.attacks.lanePct), { name: "Centro", pct: 57 });
-  assert.equal(tracking.preferredLane(null), null);
+  assert.deepEqual(result.teams.A.attacks, { count: 11, status: "estimate" }); // only the count is kept
 
   data.ball = { zones: { pct_row_major: [1, 2, 3] } };
   delete data.teams.A.attacks;
   const partial = tracking.parseResult(data);
   assert.equal(partial.ball.zonesPct, null);
   assert.equal(partial.teams.A.attacks, null);
+});
+
+test("status tags are specific and absent for unknown or measured metrics", () => {
+  const data = sample();
+  data.metric_status = { distance: "preliminary", max_speed: "indicative", passes: "detected", attacks: "estimate", ball_zones: "measured" };
+  const result = tracking.parseResult(data);
+  assert.equal(tracking.statusTag(result, "distance"), "preliminar");
+  assert.equal(tracking.statusTag(result, "max_speed"), "indicativa");
+  assert.equal(tracking.statusTag(result, "passes"), "contagem incompleta");
+  assert.equal(tracking.statusTag(result, "attacks"), "estimativa");
+  assert.equal(tracking.statusTag(result, "ball_zones"), null);
+  assert.equal(tracking.statusTag(tracking.parseResult(sample()), "distance"), null);
+});
+
+test("pass partners add both directions and the face-off never turns missing data into 0", () => {
+  const data = sample();
+  data.players[0].metrics.mean_position_m = [10, 5];
+  data.players[0].metrics.passes_made_detected = 3;
+  data.players[1].metrics.passes_made_detected = 2;
+  data.teams.B = { team_width_m: 8, team_compactness_m: 5 };
+  data.ball = { pass_links: [{ from: "Zé", to: "MARQUES", count: 3 }, { from: "MARQUES", to: "Zé", count: 2 }, { from: "MIGO", to: "MARQUES", count: 1 }, { from: "bad" }] };
+  const result = tracking.parseResult(data);
+  assert.deepEqual(result.players[0].meanPosition, { x: 10, y: 5 });
+  assert.equal(result.players[1].meanPosition, null);
+  assert.deepEqual(tracking.passPartners(result, "Zé"), [{ label: "MARQUES", made: 3, received: 2, total: 5 }]);
+  assert.deepEqual(tracking.passPartners(result, "MARQUES").map((r) => [r.label, r.total]), [["Zé", 5], ["MIGO", 1]]);
+  const f = tracking.teamFaceOff(result);
+  assert.equal(f.A.passes, 5);           // team A: 3 + 2 (MIGO has no pass data)
+  assert.equal(f.A.attacks, null);       // no attacks in this file: "sem dados", not 0
+  assert.equal(Math.round(f.A.metersPerPlayerMin), 80);  // 3 x 1600 m / 3 x 20 min
+  assert.equal(f.B.passes, null);
 });

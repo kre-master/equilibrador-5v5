@@ -6266,19 +6266,23 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
   const partner = p.partner ? escapeHtml(getTrackingPlayerName(entry, p.partner.label)) : null;
   const rival = p.rival ? escapeHtml(getTrackingPlayerName(entry, p.rival.label)) : null;
   const late = p.lateRatio != null ? Math.round((p.lateRatio - 1) * 100) : null;
+  const tag = (key) => tracking.statusTag(entry.result, key);
   return `
     <div class="tracking-player">
       <p class="tracking-note">${gameLink ? `${gameLink} · ` : ""}${formatTrackingNumber(p.validMinutes, 1)} min vistos pela câmara (não são minutos jogados).</p>
       <div class="tracking-highlights">
-        <article class="tracking-highlight"><span>Distância</span><strong>${formatTrackingNumber((p.distanceM ?? 0) / 1000, 2)} <small>km</small></strong><em>${rank("distanceM")}</em></article>
-        <article class="tracking-highlight"><span>Ritmo</span><strong>${formatTrackingNumber(p.metersPerMin, 1)} <small>m/min</small></strong><em>${rank("metersPerMin")}</em></article>
-        <article class="tracking-highlight"><span>Mais rápido (1 s)</span><strong>${formatTrackingNumber(p.maxSustainedKmh, 1)} <small>km/h</small></strong><em>${p.maxSustainedAtS != null ? `aos ${formatVideoClock(p.maxSustainedAtS)} do vídeo` : ""}</em></article>
-        <article class="tracking-highlight"><span>Sprints ≥20 km/h</span><strong>${formatTrackingNumber(p.sprints)}</strong><em>${formatTrackingNumber(p.highRuns)} arranques ≥15 km/h</em></article>
+        ${trackingCard("Distância observada", p.distanceM == null ? null : p.distanceM / 1000, "km", { digits: 2, note: rank("distanceM"), tag: tag("distance") })}
+        ${trackingCard("Mais rápido (1 s)", p.maxSustainedKmh, "km/h", { digits: 1, note: p.maxSustainedAtS != null ? `aos ${formatVideoClock(p.maxSustainedAtS)} do vídeo` : "", tag: tag("max_speed") })}
+        ${trackingCard("Sprints ≥20 km/h", p.sprints, "", { note: p.highRuns != null ? `${formatTrackingNumber(p.highRuns)} arranques ≥15 km/h` : "", tag: tag("sprints") })}
+        ${p.passesMade != null
+          ? trackingCard("Passes detetados", p.passesMade, "", { note: rank("passesMade"), tag: tag("passes") })
+          : trackingCard("Ritmo", p.metersPerMin, "m/min", { digits: 1, note: rank("metersPerMin"), tag: tag("pace") })}
       </div>
       ${renderTrackingBands(p)}
       <div class="tracking-profile-map">
-        ${renderTrackingHeatmap(p.heatmap, { label: "Mapa de calor do jogador" })}
+        ${renderPlayerPitch(entry, p)}
         <dl>
+          ${p.passesMade != null ? `<dt>Ritmo</dt><dd>${formatTrackingNumber(p.metersPerMin, 1)} m/min · ${rank("metersPerMin")}</dd>` : ""}
           <dt>Papel em campo</dt><dd>${escapeHtml(tracking.roleLabel(p) || "–")}</dd>
           ${p.zoneSharePct ? `<dt>Defesa / meio / ataque</dt><dd>${formatTrackingNumber(p.zoneSharePct.defensiva, 0)} / ${formatTrackingNumber(p.zoneSharePct.media, 0)} / ${formatTrackingNumber(p.zoneSharePct.ofensiva, 0)}%</dd>` : ""}
           ${p.goalkeeperMin ? `<dt>Na baliza</dt><dd>${formatTrackingNumber(p.goalkeeperMin, 1)} min</dd>` : ""}
@@ -6318,8 +6322,103 @@ function renderBallZones(entry, game) {
   `;
 }
 
+function renderTeamFaceOff(entry, game) {
+  // Paired bars, each row scaled to its larger value; "sem dados" instead of 0.
+  const tracking = window.FooterTracking;
+  const f = tracking.teamFaceOff(entry.result);
+  if (!f.A || !f.B) return "";
+  const rows = [
+    ["Metros por jogador-minuto", "metersPerPlayerMin", 1, "", tracking.statusTag(entry.result, "distance")],
+    ["Passes detetados", "passes", 0, "", tracking.statusTag(entry.result, "passes")],
+    ["Ataques", "attacks", 0, "", tracking.statusTag(entry.result, "attacks")],
+    ["Largura média", "widthM", 1, " m", null],
+    ["Compactação (menor = mais junta)", "compactnessM", 1, " m", null],
+  ].filter(([, key]) => f.A[key] != null || f.B[key] != null);
+  const bar = (v, max, side) => v == null
+    ? `<span class="tf-bar tf-${side} tf-empty">sem dados</span>`
+    : `<span class="tf-bar tf-${side}"><i style="width:${max ? (100 * v / max).toFixed(1) : 0}%"></i></span>`;
+  return `
+    <div class="tracking-faceoff">
+      <div class="tf-head"><strong class="tf-a">${escapeHtml(getTrackingVideoTeamName(entry, game, "A"))}</strong><strong class="tf-b">${escapeHtml(getTrackingVideoTeamName(entry, game, "B"))}</strong></div>
+      ${rows.map(([label, key, digits, unit, tag]) => {
+        const a = f.A[key], b = f.B[key], max = Math.max(a ?? 0, b ?? 0);
+        return `
+          <div class="tf-row">
+            <div class="tf-label">${escapeHtml(label)}${tag ? ` <i class="tracking-tag">${escapeHtml(tag)}</i>` : ""}</div>
+            <div class="tf-values">
+              <b class="tf-a">${a == null ? "–" : formatTrackingNumber(a, digits) + unit}</b>
+              ${bar(a, max, "a")}${bar(b, max, "b")}
+              <b class="tf-b">${b == null ? "–" : formatTrackingNumber(b, digits) + unit}</b>
+            </div>
+          </div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function trackingCard(title, value, unit, { digits = 0, note = "", tag = null } = {}) {
+  // A missing value reads "sem dados", never 0.
+  const has = value != null && Number.isFinite(Number(value));
+  return `
+    <article class="tracking-highlight">
+      <span>${escapeHtml(title)}</span>
+      <strong>${has ? `${formatTrackingNumber(value, digits)}${unit ? ` <small>${escapeHtml(unit)}</small>` : ""}` : `<small>sem dados</small>`}</strong>
+      ${note ? `<em>${note}</em>` : ""}
+      ${tag && has ? `<i class="tracking-tag">${escapeHtml(tag)}</i>` : ""}
+    </article>
+  `;
+}
+
+let trackingPitchSeq = 0;
+
+function renderPlayerPitch(entry, p) {
+  // One pitch, two modes (CSS-only tabs): heatmap, and detected passes with each teammate.
+  const heat = renderTrackingHeatmap(p.heatmap, { label: "Mapa de calor do jogador" });
+  const passes = renderPassMap(entry, p);
+  if (!passes) return heat;
+  const id = `tracking-pitch-${trackingPitchSeq += 1}`;
+  return `
+    <div class="tracking-pitch">
+      <input type="radio" class="pm-heat-in" name="${id}" id="${id}-heat" checked>
+      <input type="radio" class="pm-pass-in" name="${id}" id="${id}-pass">
+      <div class="tracking-pitch-tabs" role="group" aria-label="Modo do campo">
+        <label for="${id}-heat" class="pm-heat-tab">Mapa de calor</label>
+        <label for="${id}-pass" class="pm-pass-tab">Passes</label>
+      </div>
+      <div class="pm-heat">${heat}</div>
+      <div class="pm-pass">${passes}</div>
+    </div>
+  `;
+}
+
+function renderPassMap(entry, p) {
+  // Pass network: the player in the centre, teammates around, thicker lines with more detected passes (both ways).
+  // Mean positions over a whole game all sit near the halfway line, so they made an unreadable map.
+  const partners = window.FooterTracking.passPartners(entry.result, p.label);
+  if (!partners.length) return "";
+  const max = Math.max(...partners.map((r) => r.total));
+  const cx = 20, cy = 10, rx = 13, ry = 5.6;
+  const short = (label) => escapeHtml(getTrackingPlayerName(entry, label).split(" ")[0]);
+  let lines = "", dots = "";
+  partners.forEach((r, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / partners.length;
+    const x = cx + rx * Math.cos(a), y = cy + ry * Math.sin(a);
+    lines += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}" stroke="var(--accent)" stroke-opacity="0.85" stroke-linecap="round" stroke-width="${(0.3 + 1.4 * r.total / max).toFixed(2)}"/>`;
+    dots += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="1.3" fill="var(--surface-opaque)" stroke="var(--accent)" stroke-width="0.3"/>`;
+    const below = y > cy;
+    dots += `<text x="${x.toFixed(2)}" y="${(below ? y + 3.2 : y - 2).toFixed(2)}" text-anchor="middle" font-size="1.8" fill="var(--ink)">${short(r.label)} <tspan font-weight="700">${r.total}</tspan></text>`;
+  });
+  dots += `<circle cx="${cx}" cy="${cy}" r="2.4" fill="var(--accent)"/><text x="${cx}" y="${cy + 0.4}" text-anchor="middle" font-size="1.05" font-weight="700" fill="var(--bg, #05080f)">${short(p.label)}</text>`;
+  return `
+    <svg class="tracking-heatmap tracking-passnet" viewBox="0 0 40 20" role="img" aria-label="Rede de passes detetados com cada colega">
+      <rect x="0" y="0" width="40" height="20" rx="1" fill="var(--surface-opaque)"/>${lines}${dots}
+    </svg>
+    <p class="tracking-fineprint">Passes detetados com cada colega (dados + recebidos); a linha é mais grossa com mais passes.</p>
+  `;
+}
+
 function renderPlayerPassBlock(entry, p, rank) {
-  // Ball metrics exist from revision 2 on; only passes passed the human audit.
+  // Ball metrics exist from revision 2 on; only passes passed the human audit. Passes made are in the top cards.
   if (p.passesMade == null) return "";
   const audit = entry.result.ball?.passAudit;
   const partner = p.passPartner ? escapeHtml(getTrackingPlayerName(entry, p.passPartner.label)) : null;
@@ -6327,8 +6426,7 @@ function renderPlayerPassBlock(entry, p, rank) {
     <div class="tracking-ball">
       <h4>Com bola</h4>
       <div class="tracking-highlights">
-        <article class="tracking-highlight"><span>Passes detetados</span><strong>${formatTrackingNumber(p.passesMade)}</strong><em>${rank("passesMade")}</em></article>
-        <article class="tracking-highlight"><span>Passes recebidos</span><strong>${formatTrackingNumber(p.passesReceived)}</strong><em>${rank("passesReceived")}</em></article>
+        ${trackingCard("Passes recebidos", p.passesReceived, "", { note: rank("passesReceived"), tag: window.FooterTracking.statusTag(entry.result, "passes") })}
         ${partner ? `<article class="tracking-highlight"><span>Parceiro de passe</span><strong>${formatTrackingNumber(p.passPartner.passes)} <small>passes</small></strong><em>trocados com ${partner}</em></article>` : ""}
       </div>
       <p class="tracking-fineprint">Contados automaticamente pela bola no vídeo${audit ? ` (${audit.correct} de ${audit.judged} certos numa verificação)` : ""}. O número real é maior: a bola nem sempre é vista.</p>
@@ -6358,13 +6456,16 @@ function renderTrackingTestSection(game) {
   const outsideRoster = Object.entries(mapping).filter(([, id]) => id && !roster.has(id)).map(([label]) => label);
   const highlights = tracking.gameHighlights(result);
   const name = (label) => escapeHtml(getTrackingPlayerName(entry, label));
-  const highlight = (title, h, unit, digits = 0) => `
+  const highlight = (title, h, unit, digits = 0, tag = null) => `
     <article class="tracking-highlight">
       <span>${title}</span>
-      <strong>${h ? formatTrackingNumber(h.value, digits) : "–"} <small>${unit}</small></strong>
+      <strong>${h ? `${formatTrackingNumber(h.value, digits)} <small>${unit}</small>` : "<small>sem dados</small>"}</strong>
       <em>${h ? h.labels.map(name).join(", ") : "Sem dados suficientes"}</em>
+      ${tag && h ? `<i class="tracking-tag">${escapeHtml(tag)}</i>` : ""}
     </article>
   `;
+  const teamName = (key) => escapeHtml(getTrackingVideoTeamName(entry, game, key));
+  const attacksA = result.teams.A?.attacks, attacksB = result.teams.B?.attacks;
   // Whose analysis is shown: the signed-in player's own; an admin can preview any associated player.
   const linked = getLinkedPlayer();
   const mappedPlayers = result.players.filter((p) => mapping[p.label]);
@@ -6383,9 +6484,21 @@ function renderTrackingTestSection(game) {
     <section class="profile-section tracking-section">
       <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(entry)}</div>
       <p class="tracking-note">${escapeHtml(result.label)} · ${trackingRemote ? (entry.status === "published" ? `versão ${entry.revision}, publicada a ${formatDate(entry.publishedAt)}` : `estás a ver o rascunho da versão ${entry.revision} (só os admins o veem)`) : `carregado neste dispositivo a ${formatDate(entry.importedAt)}, não gravado na base de dados`}. Valores ainda por validar.</p>
+      ${result.ball ? `
+        <div class="tracking-summary">
+          ${trackingCard("Passes detetados", result.ball.passesTotal, "", { note: "no jogo todo", tag: tracking.statusTag(result, "passes") })}
+          ${trackingCard("Bola localizada", result.ball.coveragePct, "% do vídeo", { note: "o resto do tempo não conta" })}
+          ${attacksA || attacksB ? `
+            <article class="tracking-highlight">
+              <span>Ataques</span>
+              <strong>${attacksA ? attacksA.count : "–"} <small>·</small> ${attacksB ? attacksB.count : "–"}</strong>
+              <em>${teamName("A")} · ${teamName("B")}</em>
+              <i class="tracking-tag">${escapeHtml(tracking.statusTag(result, "attacks") || "estimativa")}</i>
+            </article>` : ""}
+        </div>` : ""}
       <div class="tracking-highlights">
-        ${highlight("Motor do jogo", highlights.motor, "m/min", 1)}
-        ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1)}
+        ${highlight("Motor do jogo", highlights.motor, "m/min", 1, tracking.statusTag(result, "pace"))}
+        ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1, tracking.statusTag(result, "max_speed"))}
         ${highlight("Mais sprints", highlights.sprinter, "sprints")}
         ${highlight("Mais metros", highlights.distance, "m")}
         ${result.ball ? highlight("Mais passes", highlights.passer, "passes") : ""}
@@ -6408,6 +6521,7 @@ function renderTrackingTestSection(game) {
 
     <section class="profile-section tracking-section">
       <div class="tracking-head"><h3>Equipas no vídeo</h3></div>
+      ${renderTeamFaceOff(entry, game)}
       <div class="tracking-teams">
         ${Object.entries(result.teams).map(([key, t]) => `
           <article class="tracking-team">
@@ -6416,10 +6530,7 @@ function renderTrackingTestSection(game) {
             <dl>
               <dt>Centro da equipa no meio-campo adversário</dt><dd>${formatTrackingNumber(t.attackingHalfPct, 0)}% do tempo</dd>
               <dt>Distância média à própria baliza</dt><dd>${formatTrackingNumber(t.fromOwnGoalM, 1)} m</dd>
-              <dt>Largura / compactação</dt><dd>${formatTrackingNumber(t.widthM, 1)} / ${formatTrackingNumber(t.compactnessM, 1)} m</dd>
               ${t.ballAttackingThirdPct != null ? `<dt>Bola no terço de ataque</dt><dd>${formatTrackingNumber(t.ballAttackingThirdPct, 0)}% do tempo</dd>` : ""}
-              ${t.attacks ? `<dt>Ataques (perigosos)</dt><dd>${formatTrackingNumber(t.attacks.count)} (${formatTrackingNumber(t.attacks.dangerous)})</dd>` : ""}
-              ${tracking.preferredLane(t.attacks?.lanePct) ? `<dt>Ataca mais pela</dt><dd>${tracking.preferredLane(t.attacks.lanePct).name} · ${formatTrackingNumber(tracking.preferredLane(t.attacks.lanePct).pct, 0)}%</dd>` : ""}
             </dl>
           </article>
         `).join("")}

@@ -65,6 +65,8 @@
         passesMade: finite(m.passes_made_detected),
         passesReceived: finite(m.passes_received_detected),
         passPartner: m.top_pass_partner?.label ? { label: String(m.top_pass_partner.label), passes: finite(m.top_pass_partner.passes) } : null,
+        meanPosition: Array.isArray(m.mean_position_m) && m.mean_position_m.length === 2 && m.mean_position_m.every((v) => finite(v) != null)
+          ? { x: m.mean_position_m[0], y: m.mean_position_m[1] } : null,
       };
     });
     const closest = data.closest_opponents || {};
@@ -84,10 +86,8 @@
         fromOwnGoalM: finite(t.centroid_distance_from_own_goal_m),
         attackingHalfPct: finite(t.territory_attacking_half_pct),
         ballAttackingThirdPct: finite(t.ball_attacking_third_pct),
-        attacks: t.attacks && finite(t.attacks.count) != null ? {
-          count: t.attacks.count, dangerous: finite(t.attacks.dangerous), meanDurationS: finite(t.attacks.mean_duration_s),
-          lanePct: t.attacks.lane_pct || null,
-        } : null,
+        // Attacks are shown as a count estimate only (blind audit 7/11); lanes and "dangerous" are not shown.
+        attacks: t.attacks && finite(t.attacks.count) != null ? { count: t.attacks.count, status: t.attacks.status || "estimate" } : null,
         perMinute: Array.isArray(t.per_minute) ? t.per_minute.map((r) => ({ minute: r.minute, fromOwnGoalM: r.centroid_from_own_goal_m, seconds: r.seconds })) : [],
       };
     });
@@ -99,10 +99,14 @@
       passAudit: b.audit?.passes ? { correct: finite(b.audit.passes.correct), judged: finite(b.audit.passes.judged) } : null,
       // 3 x 3 grid of ball time: rows from the camera side outwards, columns from x = 0 (B's goal) to A's goal.
       zonesPct: Array.isArray(b.zones?.pct_row_major) && b.zones.pct_row_major.length === 9 ? b.zones.pct_row_major.map(Number) : null,
+      passLinks: Array.isArray(b.pass_links)
+        ? b.pass_links.filter((l) => l && l.from && l.to && finite(l.count) != null).map((l) => ({ from: String(l.from), to: String(l.to), count: l.count }))
+        : [],
     } : null;
     return {
       schema: SCHEMA,
       ball,
+      metricStatus: data.metric_status && typeof data.metric_status === "object" ? data.metric_status : {},
       test: data.test === true || data.status !== "published",
       label: data.game_label || data.game_id || "jogo analisado",
       runId: data.run_id || null,
@@ -194,11 +198,48 @@
     return "Box-to-box";
   }
 
-  function preferredLane(lanePct) {
-    if (!lanePct) return null;
-    const names = { esquerda: "Esquerda", centro: "Centro", direita: "Direita" };
-    const best = Object.entries(lanePct).filter(([k]) => names[k]).sort((a, b) => b[1] - a[1])[0];
-    return best ? { name: names[best[0]], pct: best[1] } : null;
+  // Short, specific quality tags shown next to a metric (never one generic banner).
+  const STATUS_TAGS = {
+    preliminary: "preliminar", indicative: "indicativa", detected: "contagem incompleta",
+    estimate: "estimativa",
+  };
+
+  function statusTag(result, key) {
+    return STATUS_TAGS[result?.metricStatus?.[key]] || null;
+  }
+
+  // Passes between one player and each teammate, from the detected pass links (both directions).
+  function passPartners(result, label) {
+    const byPartner = new Map();
+    (result?.ball?.passLinks || []).forEach((l) => {
+      if (l.from !== label && l.to !== label) return;
+      const other = l.from === label ? l.to : l.from;
+      const row = byPartner.get(other) || { label: other, made: 0, received: 0, total: 0 };
+      if (l.from === label) row.made += l.count; else row.received += l.count;
+      row.total += l.count;
+      byPartner.set(other, row);
+    });
+    return [...byPartner.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+  }
+
+  // Team comparison: values are null when there is nothing to compare ("sem dados", never 0).
+  function teamFaceOff(result) {
+    const out = {};
+    Object.keys(result?.teams || {}).forEach((key) => {
+      const team = result.teams[key];
+      const mine = (result.players || []).filter((p) => p.team === key);
+      const minutes = mine.reduce((s, p) => s + (p.validMinutes ?? 0), 0);
+      const metres = mine.reduce((s, p) => s + (p.distanceM ?? 0), 0);
+      const withPasses = mine.filter((p) => p.passesMade != null);
+      out[key] = {
+        metersPerPlayerMin: minutes > 0 ? metres / minutes : null,
+        passes: withPasses.length ? withPasses.reduce((s, p) => s + p.passesMade, 0) : null,
+        attacks: team.attacks ? team.attacks.count : null,
+        widthM: team.widthM,
+        compactnessM: team.compactnessM,
+      };
+    });
+    return out;
   }
 
   function speedBands(p) {
@@ -236,7 +277,7 @@
 
   return {
     STORAGE_KEY, SCHEMA, MIN_MINUTES_FOR_HIGHLIGHT,
-    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, preferredLane,
+    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, statusTag, passPartners, teamFaceOff,
     loadStore, saveStore,
   };
 });
