@@ -61,6 +61,10 @@
         lateRatio: finite(m.late_activity_ratio),
         periodMetersPerMin: Array.isArray(m.period_metrics) ? m.period_metrics.map((t) => finite(t.m_per_min)) : null,
         heatmap: heat ? { rows: heat.rows_y, cols: heat.cols_x, values: heat.values_row_major.map(Number) } : null,
+        // Ball (revision 2+): only the audited pass metrics; absent in older results.
+        passesMade: finite(m.passes_made_detected),
+        passesReceived: finite(m.passes_received_detected),
+        passPartner: m.top_pass_partner?.label ? { label: String(m.top_pass_partner.label), passes: finite(m.top_pass_partner.passes) } : null,
       };
     });
     const closest = data.closest_opponents || {};
@@ -79,11 +83,20 @@
         compactnessM: finite(t.team_compactness_m),
         fromOwnGoalM: finite(t.centroid_distance_from_own_goal_m),
         attackingHalfPct: finite(t.territory_attacking_half_pct),
+        ballAttackingThirdPct: finite(t.ball_attacking_third_pct),
         perMinute: Array.isArray(t.per_minute) ? t.per_minute.map((r) => ({ minute: r.minute, fromOwnGoalM: r.centroid_from_own_goal_m, seconds: r.seconds })) : [],
       };
     });
+    const b = data.ball;
+    const ball = b && typeof b === "object" ? {
+      coveragePct: finite(b.coverage_of_video_pct),
+      middleThirdPct: finite(b.middle_third_pct),
+      passesTotal: finite(b.passes_detected_total),
+      passAudit: b.audit?.passes ? { correct: finite(b.audit.passes.correct), judged: finite(b.audit.passes.judged) } : null,
+    } : null;
     return {
       schema: SCHEMA,
+      ball,
       test: data.test === true || data.status !== "published",
       label: data.game_label || data.game_id || "jogo analisado",
       runId: data.run_id || null,
@@ -105,6 +118,15 @@
     labels.forEach((label) => {
       const ids = byName.get(normalizeLabel(label)) || [];
       mapping[label] = ids.length === 1 ? ids[0] : null;
+    });
+    return mapping;
+  }
+
+  // A new revision keeps the associations already confirmed for the same video labels.
+  function inheritMapping(labels, previous, proposed) {
+    const mapping = { ...(proposed || {}) };
+    labels.forEach((label) => {
+      if (previous && previous[label]) mapping[label] = previous[label];
     });
     return mapping;
   }
@@ -140,6 +162,7 @@
       lightning: topBy(players, "maxSustainedKmh", eligibleForHighlights),
       sprinter: topBy(players, "sprints", eligibleForHighlights),
       distance: topBy(players, "distanceM", eligibleForHighlights),
+      passer: topBy(players, "passesMade", eligibleForHighlights),
       keepers: keeper.map((p) => ({ label: p.label, minutes: p.goalkeeperMin })),
     };
   }
@@ -200,7 +223,7 @@
 
   return {
     STORAGE_KEY, SCHEMA, MIN_MINUTES_FOR_HIGHLIGHT,
-    normalizeLabel, parseResult, proposeMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn,
+    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn,
     loadStore, saveStore,
   };
 });

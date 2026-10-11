@@ -98,3 +98,34 @@ test("tracking table keeps RLS: members read published only, admins write", asyn
   const schema = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
   assert.match(schema, /create table if not exists public\.game_tracking_results/i);
 });
+
+test("ball pass metrics are read when present and stay absent in older results", () => {
+  const old = tracking.parseResult(sample());
+  assert.equal(old.ball, null);
+  assert.equal(old.players[0].passesMade, null);
+  assert.equal(old.players[0].passPartner, null);
+  assert.equal(tracking.gameHighlights(old).passer, null);
+
+  const data = sample();
+  data.players[0].metrics.passes_made_detected = 7;
+  data.players[0].metrics.passes_received_detected = 5;
+  data.players[0].metrics.top_pass_partner = { label: "MARQUES", passes: 4 };
+  data.players[1].metrics.passes_made_detected = 9;
+  data.players[2].metrics.passes_made_detected = 30; // goalkeeper: no highlight
+  data.teams.A.ball_attacking_third_pct = 28.2;
+  data.ball = { coverage_of_video_pct: 77.2, middle_third_pct: 42.7, passes_detected_total: 16,
+    audit: { passes: { correct: 23, judged: 24 } } };
+  const result = tracking.parseResult(data);
+  assert.deepEqual(result.ball, { coveragePct: 77.2, middleThirdPct: 42.7, passesTotal: 16, passAudit: { correct: 23, judged: 24 } });
+  assert.equal(result.players[0].passesMade, 7);
+  assert.equal(result.players[0].passesReceived, 5);
+  assert.deepEqual(result.players[0].passPartner, { label: "MARQUES", passes: 4 });
+  assert.equal(result.teams.A.ballAttackingThirdPct, 28.2);
+  assert.deepEqual(tracking.gameHighlights(result).passer, { value: 9, labels: ["MARQUES"] });
+});
+
+test("a new revision inherits confirmed associations for the same video labels", () => {
+  const mapping = tracking.inheritMapping(["Zé", "MARQUES", "NOVO"], { "Zé": "p-ze", MARQUES: null }, { MARQUES: "p-marques", NOVO: null });
+  assert.deepEqual(mapping, { "Zé": "p-ze", MARQUES: "p-marques", NOVO: null });
+  assert.deepEqual(tracking.inheritMapping(["A"], undefined, { A: "p-a" }), { A: "p-a" });
+});

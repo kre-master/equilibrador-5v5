@@ -6280,6 +6280,25 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
           ${rival ? `<dt>Rival do jogo</dt><dd>${rival} · ${formatTrackingNumber(p.rival.seconds / 60, 1)} min a &lt;3 m</dd>` : ""}
         </dl>
       </div>
+      ${renderPlayerPassBlock(entry, p, rank)}
+    </div>
+  `;
+}
+
+function renderPlayerPassBlock(entry, p, rank) {
+  // Ball metrics exist from revision 2 on; only passes passed the human audit.
+  if (p.passesMade == null) return "";
+  const audit = entry.result.ball?.passAudit;
+  const partner = p.passPartner ? escapeHtml(getTrackingPlayerName(entry, p.passPartner.label)) : null;
+  return `
+    <div class="tracking-ball">
+      <h4>Com bola</h4>
+      <div class="tracking-highlights">
+        <article class="tracking-highlight"><span>Passes detetados</span><strong>${formatTrackingNumber(p.passesMade)}</strong><em>${rank("passesMade")}</em></article>
+        <article class="tracking-highlight"><span>Passes recebidos</span><strong>${formatTrackingNumber(p.passesReceived)}</strong><em>${rank("passesReceived")}</em></article>
+        ${partner ? `<article class="tracking-highlight"><span>Parceiro de passe</span><strong>${formatTrackingNumber(p.passPartner.passes)} <small>passes</small></strong><em>trocados com ${partner}</em></article>` : ""}
+      </div>
+      <p class="tracking-fineprint">Contados automaticamente pela bola no vídeo${audit ? ` (${audit.correct} de ${audit.judged} certos numa verificação)` : ""}. O número real é maior: a bola nem sempre é vista.</p>
     </div>
   `;
 }
@@ -6334,8 +6353,9 @@ function renderTrackingTestSection(game) {
         ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1)}
         ${highlight("Mais sprints", highlights.sprinter, "sprints")}
         ${highlight("Mais metros", highlights.distance, "m")}
+        ${result.ball ? highlight("Mais passes", highlights.passer, "passes") : ""}
       </div>
-      <p class="tracking-fineprint">Destaques entre quem teve pelo menos ${tracking.MIN_MINUTES_FOR_HIGHLIGHT} min observados e não esteve na baliza a maior parte do tempo.</p>
+      <p class="tracking-fineprint">Destaques entre quem teve pelo menos ${tracking.MIN_MINUTES_FOR_HIGHLIGHT} min observados e não esteve na baliza a maior parte do tempo.${result.ball ? " Passes detetados automaticamente; o total real é maior." : ""}</p>
     </section>
 
     <section class="profile-section tracking-section">
@@ -6362,11 +6382,12 @@ function renderTrackingTestSection(game) {
               <dt>Centro da equipa no meio-campo adversário</dt><dd>${formatTrackingNumber(t.attackingHalfPct, 0)}% do tempo</dd>
               <dt>Distância média à própria baliza</dt><dd>${formatTrackingNumber(t.fromOwnGoalM, 1)} m</dd>
               <dt>Largura / compactação</dt><dd>${formatTrackingNumber(t.widthM, 1)} / ${formatTrackingNumber(t.compactnessM, 1)} m</dd>
+              ${t.ballAttackingThirdPct != null ? `<dt>Bola no terço de ataque</dt><dd>${formatTrackingNumber(t.ballAttackingThirdPct, 0)}% do tempo</dd>` : ""}
             </dl>
           </article>
         `).join("")}
       </div>
-      <p class="tracking-fineprint">Mapas por tempo passado em cada metro quadrado; a câmara está do lado de baixo.</p>
+      <p class="tracking-fineprint">Mapas por tempo passado em cada metro quadrado; a câmara está do lado de baixo.${result.ball?.middleThirdPct != null ? ` A bola esteve ${formatTrackingNumber(result.ball.middleThirdPct, 0)}% do tempo no terço do meio.` : ""}</p>
     </section>
 
     <section class="profile-section tracking-section admin-only">
@@ -6389,7 +6410,9 @@ function renderTrackingTestSection(game) {
           <button class="primary-btn" type="button" data-tracking-save-map="${game.id}">Guardar associação</button>
           ${trackingRemote && entry.status === "draft" ? `<button class="primary-btn" type="button" data-tracking-publish="${game.id}" ${problems.unmapped.length || problems.duplicates.length ? "disabled title=\"Associa todos os jogadores primeiro\"" : ""}>Publicar para o grupo</button>` : ""}
           <button class="danger-btn" type="button" data-tracking-remove="${game.id}">${trackingRemote ? `Apagar a revisão ${entry.revision}` : "Remover tracking deste jogo"}</button>
+          <label class="ghost-btn tracking-import">Importar nova revisão<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
         </div>
+        <p class="tracking-fineprint">Uma nova revisão mantém as associações já feitas para os mesmos nomes do vídeo${trackingRemote ? " e fica em rascunho até ser publicada" : ""}.</p>
         <p class="tracking-error" data-tracking-error hidden></p>
       </details>
     </section>
@@ -6405,10 +6428,12 @@ function bindTrackingTestSection(game, container) {
     if (!file) return;
     try {
       const result = window.FooterTracking.parseResult(await file.text());
-      const mapping = window.FooterTracking.proposeMapping(result.players.map((p) => p.label), state.players);
+      const labels = result.players.map((p) => p.label);
+      const proposed = window.FooterTracking.proposeMapping(labels, state.players);
       result.players.forEach((p) => {
-        if (p.playerId && findPlayer(p.playerId)) mapping[p.label] = p.playerId;
+        if (p.playerId && findPlayer(p.playerId)) proposed[p.label] = p.playerId;
       });
+      const mapping = window.FooterTracking.inheritMapping(labels, getTrackingEntry(game.id)?.mapping, proposed);
       input.disabled = true;
       await importTrackingResult(game, result, mapping, file.name);
       renderHistoryGameDetail();
