@@ -6108,10 +6108,14 @@ async function loadRemoteTracking() {
   }
   trackingRemote = true;
   const remote = {};
+  const live = {};
   (data || []).forEach((row) => {
     // Admins see the newest revision (draft or published); everyone else only the published one.
     if (!remote[row.game_id]) remote[row.game_id] = trackingEntryFromRow(row);
+    if (row.status === "published" && !live[row.game_id]) live[row.game_id] = { revision: row.revision, publishedAt: row.published_at };
   });
+  // What the group sees, even while an admin looks at a newer draft.
+  Object.entries(remote).forEach(([gameId, entry]) => { entry.live = live[gameId] || null; });
   trackingStore = remote;
 }
 
@@ -6130,7 +6134,10 @@ async function importTrackingResult(game, result, mapping, fileName) {
     status: "draft", result, mapping, source_file: fileName || null,
   }).select("*").single();
   if (error) throw new Error(`Não foi possível guardar no servidor: ${error.message}`);
-  trackingStore[game.id] = trackingEntryFromRow(data);
+  const live = trackingStore[game.id]?.status === "published"
+    ? { revision: trackingStore[game.id].revision, publishedAt: trackingStore[game.id].publishedAt }
+    : trackingStore[game.id]?.live || null;
+  trackingStore[game.id] = { ...trackingEntryFromRow(data), live };
 }
 
 async function saveTrackingMapping(game, entry) {
@@ -6150,7 +6157,7 @@ async function publishTrackingResult(game, entry) {
   const { data, error } = await supabaseClient.from("game_tracking_results")
     .update({ status: "published", published_at: new Date().toISOString() }).eq("id", entry.id).select("*").single();
   if (error) throw new Error(`Não foi possível publicar: ${error.message}`);
-  trackingStore[game.id] = trackingEntryFromRow(data);
+  trackingStore[game.id] = { ...trackingEntryFromRow(data), live: { revision: data.revision, publishedAt: data.published_at } };
 }
 
 async function removeTrackingResult(game, entry) {
@@ -6166,7 +6173,7 @@ async function removeTrackingResult(game, entry) {
 
 function getTrackingBadge(entry) {
   if (!trackingRemote) return `<span class="tracking-badge">Teste local</span>`;
-  if (entry?.status === "draft") return `<span class="tracking-badge">Rascunho · só admin</span>`;
+  if (entry?.status === "draft") return `<span class="tracking-badge">Rascunho · só admins veem</span>`;
   return `<span class="tracking-badge">Beta</span>`;
 }
 
@@ -6336,8 +6343,8 @@ function renderTrackingTestSection(game) {
     return `
       <section class="profile-section tracking-section admin-only">
         <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(null)}</div>
-        <p class="tracking-note">Importa o resultado do tracker (ficheiro <code>tracking-result.json</code>) para ver distâncias, velocidades e mapas de calor deste jogo. ${trackingRemote ? "Fica como rascunho, visível só para admins, até carregares em Publicar." : "Fica só neste dispositivo; nada é gravado na base de dados."}</p>
-        <label class="ghost-btn tracking-import">Importar resultado do tracker<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
+        <p class="tracking-note">Escolhe o ficheiro do tracker (<code>tracking-result.json</code>) para ver distâncias, velocidades e mapas deste jogo. ${trackingRemote ? "Fica em rascunho, só os admins o veem, até carregares em Publicar." : "Fica só neste dispositivo; nada é gravado na base de dados."}</p>
+        <label class="primary-btn tracking-import">Escolher ficheiro do tracker<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
         <p class="tracking-error" data-tracking-error hidden></p>
       </section>
     `;
@@ -6345,6 +6352,8 @@ function renderTrackingTestSection(game) {
   const { result, mapping } = entry;
   const tracking = window.FooterTracking;
   const problems = tracking.mappingProblems(mapping);
+  const isDraft = trackingRemote && entry.status === "draft";
+  const live = entry.live || null;
   const roster = new Set(getGamePlayerIds(game));
   const outsideRoster = Object.entries(mapping).filter(([, id]) => id && !roster.has(id)).map(([label]) => label);
   const highlights = tracking.gameHighlights(result);
@@ -6373,7 +6382,7 @@ function renderTrackingTestSection(game) {
   return `
     <section class="profile-section tracking-section">
       <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(entry)}</div>
-      <p class="tracking-note">${escapeHtml(result.label)} · ${trackingRemote ? `revisão ${entry.revision}, ${entry.status === "published" ? `publicada em ${formatDate(entry.publishedAt)}` : `importada em ${formatDate(entry.importedAt)}, ainda não publicada`}` : `importado neste dispositivo em ${formatDate(entry.importedAt)}, não gravado na base de dados`}. Valores ainda por validar.</p>
+      <p class="tracking-note">${escapeHtml(result.label)} · ${trackingRemote ? (entry.status === "published" ? `versão ${entry.revision}, publicada a ${formatDate(entry.publishedAt)}` : `estás a ver o rascunho da versão ${entry.revision} (só os admins o veem)`) : `carregado neste dispositivo a ${formatDate(entry.importedAt)}, não gravado na base de dados`}. Valores ainda por validar.</p>
       <div class="tracking-highlights">
         ${highlight("Motor do jogo", highlights.motor, "m/min", 1)}
         ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1)}
@@ -6420,9 +6429,23 @@ function renderTrackingTestSection(game) {
     </section>
 
     <section class="profile-section tracking-section admin-only">
-      <details class="tracking-mapping" ${problems.unmapped.length ? "open" : ""}>
-        <summary>Associação vídeo → jogadores (${result.players.length - problems.unmapped.length}/${result.players.length}) · só admin</summary>
-        ${problems.duplicates.length || outsideRoster.length ? `<p class="tracking-warning">${problems.duplicates.length ? "Há jogadores associados a duas etiquetas do vídeo. " : ""}${outsideRoster.length ? `${outsideRoster.map(escapeHtml).join(", ")} associado(s) a quem não está neste jogo.` : ""}</p>` : ""}
+      <details class="tracking-mapping tracking-admin" ${isDraft || problems.unmapped.length ? "open" : ""}>
+        <summary>Atualizar a análise de vídeo · só admin</summary>
+        <dl class="tracking-admin-status">
+          <dt>Os jogadores veem</dt><dd>${!trackingRemote ? "nada (modo local, sem base de dados)" : live ? `versão ${live.revision}, publicada a ${formatDate(live.publishedAt)}` : "nada publicado ainda"}</dd>
+          <dt>Por publicar</dt><dd>${isDraft ? `<strong>versão ${entry.revision}</strong>, carregada a ${formatDate(entry.importedAt)} — é o que estás a ver nesta página` : "nada"}</dd>
+        </dl>
+        <ol class="tracking-admin-steps">
+          <li>
+            <strong>1. Carregar o ficheiro novo</strong>
+            <p class="tracking-fineprint">O ficheiro <code>tracking-result.json</code> que recebeste do tracker. Fica em rascunho: ninguém o vê até publicares, e os jogadores já associados mantêm-se.</p>
+            <label class="ghost-btn tracking-import">Escolher ficheiro do tracker<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
+          </li>
+          <li>
+            <strong>2. Confirmar os jogadores</strong> <span class="tracking-fineprint">(${result.players.length - problems.unmapped.length} de ${result.players.length} associados)</span>
+            <details ${problems.unmapped.length || problems.duplicates.length ? "open" : ""}>
+              <summary>Ver nomes do vídeo → jogadores</summary>
+        ${problems.duplicates.length || outsideRoster.length ? `<p class="tracking-warning">${problems.duplicates.length ? "Há jogadores associados a dois nomes do vídeo. " : ""}${outsideRoster.length ? `${outsideRoster.map(escapeHtml).join(", ")} associado(s) a quem não está neste jogo.` : ""}</p>` : ""}
         <p class="tracking-fineprint">O nome do vídeo só pré-preenche a escolha. Confirma cada linha; jogadores deste jogo aparecem primeiro.</p>
         <div class="tracking-mapping-grid">
           ${result.players.map((p) => `
@@ -6436,12 +6459,26 @@ function renderTrackingTestSection(game) {
           `).join("")}
         </div>
         <div class="tracking-actions">
-          <button class="primary-btn" type="button" data-tracking-save-map="${game.id}">Guardar associação</button>
-          ${trackingRemote && entry.status === "draft" ? `<button class="primary-btn" type="button" data-tracking-publish="${game.id}" ${problems.unmapped.length || problems.duplicates.length ? "disabled title=\"Associa todos os jogadores primeiro\"" : ""}>Publicar para o grupo</button>` : ""}
-          <button class="danger-btn" type="button" data-tracking-remove="${game.id}">${trackingRemote ? `Apagar a revisão ${entry.revision}` : "Remover tracking deste jogo"}</button>
-          <label class="ghost-btn tracking-import">Importar nova revisão<input type="file" accept=".json,application/json" data-tracking-import="${game.id}"></label>
+          <button class="ghost-btn" type="button" data-tracking-save-map="${game.id}">Guardar jogadores</button>
         </div>
-        <p class="tracking-fineprint">Uma nova revisão mantém as associações já feitas para os mesmos nomes do vídeo${trackingRemote ? " e fica em rascunho até ser publicada" : ""}.</p>
+            </details>
+          </li>
+          <li>
+            <strong>3. Publicar</strong>
+            ${isDraft ? `
+              <p class="tracking-fineprint">Os jogadores passam a ver a versão ${entry.revision}${live ? ` em vez da versão ${live.revision}` : ""}.</p>
+              <div class="tracking-actions">
+                <button class="primary-btn" type="button" data-tracking-publish="${game.id}" ${problems.unmapped.length || problems.duplicates.length ? "disabled title=\"Associa todos os jogadores primeiro\"" : ""}>Publicar a versão ${entry.revision} para o grupo</button>
+                <button class="danger-btn" type="button" data-tracking-remove="${game.id}">Descartar este rascunho</button>
+              </div>` : `<p class="tracking-fineprint">${trackingRemote ? "Nada por publicar. Carrega um ficheiro novo no passo 1." : "No modo local nada é publicado."}</p>`}
+          </li>
+        </ol>
+        ${!isDraft ? `
+          <details class="tracking-danger-zone">
+            <summary>Mais opções</summary>
+            <p class="tracking-fineprint">${trackingRemote ? `Apagar a versão ${entry.revision} publicada: os jogadores deixam de ver a análise deste jogo.` : "Remover a análise guardada neste dispositivo."}</p>
+            <button class="danger-btn" type="button" data-tracking-remove="${game.id}">${trackingRemote ? `Apagar a versão ${entry.revision} publicada` : "Remover deste dispositivo"}</button>
+          </details>` : ""}
         <p class="tracking-error" data-tracking-error hidden></p>
       </details>
     </section>

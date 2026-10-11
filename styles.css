@@ -3671,6 +3671,15 @@ th.stat-col {
 .tracking-ball h4 { margin: 0; font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .tracking-team .tracking-heatmap { border-radius: 8px; }
 .tracking-zones { display: grid; gap: 8px; margin-top: 12px; }
+.tracking-admin > summary { font-weight: 700; cursor: pointer; }
+.tracking-admin-status { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; margin: 12px 0; font-size: .9rem; }
+.tracking-admin-status dt { color: var(--muted); }
+.tracking-admin-status dd { margin: 0; }
+.tracking-admin-steps { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.tracking-admin-steps > li { display: grid; gap: 6px; }
+.tracking-admin-steps details > summary, .tracking-danger-zone > summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
+.tracking-danger-zone { margin-top: 14px; display: grid; gap: 8px; }
+@media (max-width: 640px) { .tracking-admin-status { grid-template-columns: 1fr; } }
 .tracking-zones .tracking-heatmap { border-radius: 8px; }
 .tracking-zones-key { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .82rem; }
 
