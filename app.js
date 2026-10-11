@@ -6278,7 +6278,9 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
           ? trackingCard("Passes detetados", p.passesMade, "", { note: rank("passesMade"), tag: tag("passes") })
           : trackingCard("Ritmo", p.metersPerMin, "m/min", { digits: 1, note: rank("metersPerMin"), tag: tag("pace") })}
       </div>
+      ${renderTrackingStories(entry, p)}
       ${renderTrackingBands(p)}
+      ${renderPlayerTimeline(entry, p)}
       <div class="tracking-profile-map">
         ${renderPlayerPitch(entry, p)}
         <dl>
@@ -6319,6 +6321,105 @@ function renderBallZones(entry, game) {
         <rect x="0" y="0" width="39.5" height="19.5" fill="var(--surface-opaque)"/>${cells}${lines}</svg>
       <div class="tracking-zones-key"><span>← ${escapeHtml(getTrackingVideoTeamName(entry, game, "A"))} ataca</span><span>${escapeHtml(getTrackingVideoTeamName(entry, game, "B"))} ataca →</span></div>
     </div>
+  `;
+}
+
+function renderTrackingStories(entry, p) {
+  // Short sentences, each only when the data support it; neutral wording (admins also preview other players).
+  const f = window.FooterTracking.storyFacts(entry.result, p);
+  const lines = [];
+  if (f.bestMinute) lines.push(`Minuto mais intenso: o ${f.bestMinute.minute}.º, a ${formatTrackingNumber(f.bestMinute.metersPerMin, 0)} m/min.`);
+  if (f.peakAtS != null) lines.push(`Pico de velocidade aos ${formatVideoClock(f.peakAtS)} do vídeo.`);
+  if (f.lane) lines.push(`Mais tempo no corredor ${f.lane.name} (${formatTrackingNumber(f.lane.pct, 0)}% do tempo).`);
+  if (f.lateChangePct != null) {
+    lines.push(f.lateChangePct <= -15 ? `O ritmo caiu ${-f.lateChangePct}% no último terço do jogo.`
+      : f.lateChangePct >= 10 ? `Acabou mais forte: +${f.lateChangePct}% no último terço.`
+      : `Ritmo mantido até ao fim (${f.lateChangePct > 0 ? "+" : ""}${f.lateChangePct}%).`);
+  }
+  if (f.passPartner) lines.push(`Mais passes trocados com ${escapeHtml(getTrackingPlayerName(entry, f.passPartner.label))} (${formatTrackingNumber(f.passPartner.passes)}).`);
+  if (!lines.length) return "";
+  return `<ul class="tracking-stories">${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
+}
+
+let trackingTimelineSeq = 0;
+
+function renderPlayerTimeline(entry, p) {
+  // "Ao longo do jogo": one period filter drives the period totals, the per-minute chart and the path (CSS-only).
+  const tracking = window.FooterTracking;
+  const tl = p.timeline;
+  const periods = tracking.gamePeriods(entry.result);
+  if (!tl || !periods.length) return "";
+  const id = `tracking-time-${trackingTimelineSeq += 1}`;
+  const n = tl.distanceM.length;
+  const rates = tl.distanceM.map((d, i) => (tl.seenS[i] >= 20 ? d / (tl.seenS[i] / 60) : null));
+  const maxRate = Math.max(...rates.filter((r) => r != null), 1);
+  const inPeriod = (sec) => periods.slice(1).filter((q) => sec >= q.from && sec < q.to).map((q) => `tp-m-${q.key}`).join(" ");
+  let bars = "";
+  rates.forEach((r, i) => {
+    const h = r == null ? 0.8 : Math.max(0.8, (30 * r) / maxRate);
+    bars += `<rect class="tp-bar ${inPeriod(i * 60 + 30)} ${r == null ? "tp-none" : ""}" x="${i * 4 + 0.5}" y="${(34 - h).toFixed(2)}" width="3" height="${h.toFixed(2)}" rx="0.4"><title>Minuto ${i + 1}: ${r == null ? "pouco visto pela câmara" : `${formatTrackingNumber(r, 0)} m/min`}</title></rect>`;
+  });
+  tl.sprints.forEach((s) => {
+    const x = (s.start / 60) * 4;
+    bars += `<circle class="tp-bar ${inPeriod(s.start)}" cx="${x.toFixed(2)}" cy="2.2" r="1.1" fill="var(--orange)"><title>Sprint aos ${formatVideoClock(s.start)} · ${formatTrackingNumber(s.kmh, 1)} km/h</title></circle>`;
+  });
+  let ticks = "";
+  for (let m = 0; m <= n; m += 5) ticks += `<text x="${m * 4}" y="39" font-size="3" text-anchor="middle" fill="var(--muted)">${m}′</text>`;
+  const chart = `<svg class="tracking-rhythm" viewBox="-2 0 ${n * 4 + 4} 40" role="img" aria-label="Metros por minuto observado em cada minuto do jogo; pontos laranja são sprints">${bars}${ticks}</svg>`;
+  const variants = periods.map((q) => {
+    const st = tracking.periodStats(p, q.from, q.to, entry.result.durationS ?? Infinity);
+    return `
+      <div class="tp-v tp-v-${q.key}">
+        <p class="tracking-period-stats">${st ? `<b>${formatTrackingNumber(st.metres / 1000, 2)} km</b> em ${formatTrackingNumber(st.seenMin, 1)} min vistos · <b>${st.metersPerMin == null ? "sem dados" : `${formatTrackingNumber(st.metersPerMin, 0)} m/min`}</b> · <b>${st.sprints}</b> sprint${st.sprints === 1 ? "" : "s"}` : "sem dados"}</p>
+        ${renderPlayerPath(tl, q.from, q.to)}
+      </div>`;
+  }).join("");
+  return `
+    <div class="tracking-timeline">
+      <h4>Ao longo do jogo</h4>
+      ${periods.map((q) => `<input type="radio" class="tp-in tp-in-${q.key}" name="${id}" id="${id}-${q.key}" ${q.key === 0 ? "checked" : ""}>`).join("")}
+      <div class="tracking-pitch-tabs tp-tabs" role="group" aria-label="Período do jogo">
+        ${periods.map((q) => `<label for="${id}-${q.key}" class="tp-tab-${q.key}">${escapeHtml(q.label)}</label>`).join("")}
+      </div>
+      <div class="tp-body">
+        ${chart}
+        ${variants}
+      </div>
+      <p class="tracking-fineprint">Barras: metros por minuto visto pela câmara (barras rasas = minuto pouco visto). Pontos laranja: sprints. No campo, o percurso com os sprints a laranja.</p>
+    </div>
+  `;
+}
+
+function renderPlayerPath(tl, from, to) {
+  // Path sampled every 2 s; a gap > 4 s is a stretch not seen by the camera and stays unlinked.
+  const pts = tl.path.filter(([t]) => t >= from && t < to);
+  if (pts.length < 2) return `<p class="tracking-fineprint">Sem percurso neste período.</p>`;
+  const H = 19.5;
+  const inSprint = (t) => tl.sprints.some((s) => t >= s.start - 1 && t <= s.end + 1);
+  let walk = "", fast = "", segWalk = [], segFast = [];
+  const closeFast = () => {
+    if (segFast.length > 1) fast += `<polyline points="${segFast.join(" ")}"/>`;
+    segFast = [];
+  };
+  const flush = () => {
+    if (segWalk.length > 1) walk += `<polyline points="${segWalk.join(" ")}"/>`;
+    segWalk = [];
+    closeFast();
+  };
+  pts.forEach(([t, x, y], i) => {
+    if (i && t - pts[i - 1][0] > 4) flush();
+    const pt = `${x.toFixed(1)},${(H - y).toFixed(1)}`;
+    segWalk.push(pt);
+    if (inSprint(t)) segFast.push(pt); else closeFast();
+  });
+  flush();
+  return `
+    <svg class="tracking-heatmap" viewBox="-0.5 -0.5 40.5 20.5" role="img" aria-label="Percurso no campo neste período; câmara do lado de baixo">
+      <rect x="0" y="0" width="39.5" height="19.5" fill="var(--surface-opaque)"/>
+      <g fill="none" stroke="var(--line-strong)" stroke-width="0.15"><rect x="0" y="0" width="39.5" height="19.5"/><line x1="19.75" x2="19.75" y1="0" y2="19.5"/><circle cx="19.75" cy="9.75" r="3"/></g>
+      <g fill="none" stroke="var(--accent)" stroke-opacity="0.55" stroke-width="0.18" stroke-linejoin="round">${walk}</g>
+      <g fill="none" stroke="var(--orange)" stroke-width="0.5" stroke-linecap="round">${fast}</g>
+    </svg>
   `;
 }
 

@@ -24,6 +24,23 @@
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   }
 
+  // Time series per player (version 5+): metres and seen seconds per game minute, sprints with their moment,
+  // and a path sampled every 2 s (tenths of a second and of a metre in the file).
+  function parseTimeline(t) {
+    if (!t || !Array.isArray(t.distance_m) || !Array.isArray(t.seen_s) || t.distance_m.length !== t.seen_s.length) return null;
+    const points = Array.isArray(t.path?.points)
+      ? t.path.points.filter((q) => Array.isArray(q) && q.length === 3 && q.every((v) => finite(v) != null)).map(([ts, x, y]) => [ts / 10, x / 10, y / 10])
+      : [];
+    return {
+      distanceM: t.distance_m.map((v) => finite(v) ?? 0),
+      seenS: t.seen_s.map((v) => finite(v) ?? 0),
+      sprints: Array.isArray(t.sprints)
+        ? t.sprints.filter((s) => Array.isArray(s) && s.length === 3).map(([start, end, kmh]) => ({ start, end, kmh }))
+        : [],
+      path: points,
+    };
+  }
+
   function parseResult(text) {
     let data;
     try {
@@ -67,6 +84,7 @@
         passPartner: m.top_pass_partner?.label ? { label: String(m.top_pass_partner.label), passes: finite(m.top_pass_partner.passes) } : null,
         meanPosition: Array.isArray(m.mean_position_m) && m.mean_position_m.length === 2 && m.mean_position_m.every((v) => finite(v) != null)
           ? { x: m.mean_position_m[0], y: m.mean_position_m[1] } : null,
+        timeline: parseTimeline(p.timeline),
       };
     });
     const closest = data.closest_opponents || {};
@@ -107,6 +125,9 @@
       schema: SCHEMA,
       ball,
       metricStatus: data.metric_status && typeof data.metric_status === "object" ? data.metric_status : {},
+      durationS: finite(data.source?.video_duration_s),
+      // Which goal each video team defends (x = 0 or x = 39.5), to name corridors from the attacker's side.
+      ownGoalX: data.attack_direction ? { A: finite(data.attack_direction.team_A_own_goal_x_m), B: finite(data.attack_direction.team_B_own_goal_x_m) } : null,
       test: data.test === true || data.status !== "published",
       label: data.game_label || data.game_id || "jogo analisado",
       runId: data.run_id || null,
@@ -222,6 +243,68 @@
     return [...byPartner.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
   }
 
+  // The game in thirds (same split as the tracker's period metrics), plus the whole game.
+  function gamePeriods(result) {
+    const total = result?.durationS;
+    if (!total) return [];
+    const third = total / 3;
+    const mm = (s) => `${Math.round(s / 60)}′`;
+    return [
+      { key: 0, label: "Jogo todo", from: 0, to: total },
+      { key: 1, label: `0–${mm(third)}`, from: 0, to: third },
+      { key: 2, label: `${mm(third)}–${mm(2 * third)}`, from: third, to: 2 * third },
+      { key: 3, label: `${mm(2 * third)}–${mm(total)}`, from: 2 * third, to: total },
+    ];
+  }
+
+  // Totals of one period from the per-minute series; minutes are split pro rata at the period edges.
+  function periodStats(p, from, to, totalS = Infinity) {
+    const tl = p?.timeline;
+    if (!tl) return null;
+    let metres = 0, seen = 0;
+    tl.distanceM.forEach((d, i) => {
+      // The last minute of the game is shorter (e.g. 29 s): share by the minute's real length.
+      const start = i * 60, end = Math.min((i + 1) * 60, totalS);
+      const share = end > start ? Math.max(0, Math.min(to, end) - Math.max(from, start)) / (end - start) : 0;
+      metres += d * share;
+      seen += tl.seenS[i] * share;
+    });
+    const sprints = tl.sprints.filter((s) => s.start >= from && s.start < to);
+    return {
+      metres, seenMin: seen / 60, metersPerMin: seen >= 30 ? metres / (seen / 60) : null,
+      sprints: sprints.length, peakKmh: sprints.length ? Math.max(...sprints.map((s) => s.kmh)) : null,
+    };
+  }
+
+  // Facts behind the short automatic sentences; each one is null when the data do not support it.
+  function storyFacts(result, p) {
+    const facts = {};
+    const tl = p?.timeline;
+    if (tl) {
+      let best = null;
+      tl.distanceM.forEach((d, i) => {
+        if (tl.seenS[i] >= 45) {
+          const rate = d / (tl.seenS[i] / 60);
+          if (!best || rate > best.metersPerMin) best = { minute: i + 1, metersPerMin: rate };
+        }
+      });
+      facts.bestMinute = best;
+    }
+    facts.peakAtS = p?.maxSustainedAtS ?? null;
+    const z = p?.zoneSharePct;
+    const own = result?.ownGoalX?.[p?.team];
+    if (z && own != null && z.corredor_perto != null && z.corredor_longe != null) {
+      // Attacking towards x = 0, the camera side (y = 0) is on the left; towards x = 39.5 it is on the right.
+      const near = own > 0 ? "esquerdo" : "direito";
+      const far = own > 0 ? "direito" : "esquerdo";
+      const lanes = [["central", z.corredor_centro ?? 0], [near, z.corredor_perto], [far, z.corredor_longe]].sort((a, b) => b[1] - a[1]);
+      facts.lane = lanes[0][1] >= 40 ? { name: lanes[0][0], pct: lanes[0][1] } : null;
+    }
+    facts.lateChangePct = p?.lateRatio != null ? Math.round((p.lateRatio - 1) * 100) : null;
+    facts.passPartner = p?.passPartner || null;
+    return facts;
+  }
+
   // Team comparison: values are null when there is nothing to compare ("sem dados", never 0).
   function teamFaceOff(result) {
     const out = {};
@@ -277,7 +360,7 @@
 
   return {
     STORAGE_KEY, SCHEMA, MIN_MINUTES_FOR_HIGHLIGHT,
-    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, statusTag, passPartners, teamFaceOff,
+    normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, statusTag, passPartners, teamFaceOff, gamePeriods, periodStats, storyFacts,
     loadStore, saveStore,
   };
 });

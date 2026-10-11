@@ -175,3 +175,45 @@ test("pass partners add both directions and the face-off never turns missing dat
   assert.equal(Math.round(f.A.metersPerPlayerMin), 80);  // 3 x 1600 m / 3 x 20 min
   assert.equal(f.B.passes, null);
 });
+
+test("timelines: periods, period totals and story facts come only from the data", () => {
+  const old = tracking.parseResult(sample());
+  assert.equal(old.players[0].timeline, null);
+  assert.deepEqual(tracking.gamePeriods(old), []);  // no duration: no period filter
+  assert.equal(tracking.periodStats(old.players[0], 0, 60), null);
+
+  const data = sample();
+  data.source = { video_duration_s: 180 };
+  data.attack_direction = { team_A_own_goal_x_m: 39.5, team_B_own_goal_x_m: 0 };
+  data.players[0].metrics.zone_share_pct = { corredor_perto: 50, corredor_centro: 30, corredor_longe: 20 };
+  data.players[0].timeline = {
+    distance_m: [60, 120, 30], seen_s: [60, 60, 10],
+    sprints: [[70.5, 72, 22.1], [130, 131.5, 20.4]],
+    path: { step_s: 2, points: [[0, 100, 50], [20, 120, 60], "bad"] },
+  };
+  const result = tracking.parseResult(data);
+  const p = result.players[0];
+  assert.deepEqual(p.timeline.path, [[0, 10, 5], [2, 12, 6]]);
+  const periods = tracking.gamePeriods(result);
+  assert.deepEqual(periods.map((q) => [q.key, q.from, q.to]), [[0, 0, 180], [1, 0, 60], [2, 60, 120], [3, 120, 180]]);
+  const whole = tracking.periodStats(p, 0, 180, 180);
+  assert.equal(whole.metres, 210);
+  assert.equal(whole.sprints, 2);
+  assert.equal(whole.peakKmh, 22.1);
+  const last = tracking.periodStats(p, 120, 180, 180);
+  assert.equal(last.metersPerMin, null);  // only 10 s seen: "sem dados", not a made-up rate
+  const f = tracking.storyFacts(result, p);
+  assert.deepEqual(f.bestMinute, { minute: 2, metersPerMin: 120 });  // minute 3 seen < 45 s is ignored
+  assert.deepEqual(f.lane, { name: "esquerdo", pct: 50 });           // team A attacks towards x = 0
+  data.players[0].team = "B";
+  assert.equal(tracking.storyFacts(tracking.parseResult(data), tracking.parseResult(data).players[0]).lane.name, "direito");
+});
+
+test("a short last minute counts whole in the last period", () => {
+  const data = sample();
+  data.source = { video_duration_s: 90 };  // minute 2 lasts only 30 s
+  data.players[0].timeline = { distance_m: [60, 40], seen_s: [60, 30], sprints: [], path: { points: [] } };
+  const p = tracking.parseResult(data).players[0];
+  assert.equal(tracking.periodStats(p, 0, 90, 90).metres, 100);
+  assert.equal(tracking.periodStats(p, 60, 90, 90).metres, 40);
+});
