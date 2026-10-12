@@ -276,3 +276,10 @@ test("a part with an end has no video after it", () => {
   assert.equal(tracking.videoSeekTarget(parts, 1589.3), null);
   assert.equal(tracking.videoSeekTarget(parts, 2000), null);
 });
+
+test("top speed window is read from the result and is 1 s in older results", () => {
+  assert.equal(tracking.parseResult(sample()).players[0].maxSustainedWindowS, 1);
+  const data = sample();
+  data.players.forEach((p) => { p.metrics.max_speed_sustained_window_s = 2; });
+  assert.equal(tracking.parseResult(data).players[0].maxSustainedWindowS, 2);
+});

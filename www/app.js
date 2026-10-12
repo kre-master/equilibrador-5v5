@@ -6273,7 +6273,7 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null, videoGameId = nu
       <p class="tracking-note">${gameLink ? `${gameLink} · ` : ""}${formatTrackingNumber(p.validMinutes, 1)} min vistos pela câmara (não são minutos jogados).</p>
       <div class="tracking-highlights">
         ${trackingCard("Distância observada", p.distanceM == null ? null : p.distanceM / 1000, "km", { digits: 2, note: rank("distanceM"), tag: tag("distance") })}
-        ${trackingCard("Mais rápido (1 s)", p.maxSustainedKmh, "km/h", { digits: 1, note: p.maxSustainedAtS != null ? `aos ${videoClockLink(videoGameId, p.maxSustainedAtS)} do vídeo` : "", tag: tag("max_speed") })}
+        ${trackingCard(`Mais rápido (${formatTrackingNumber(p.maxSustainedWindowS, 0)} s)`, p.maxSustainedKmh, "km/h", { digits: 1, note: p.maxSustainedAtS != null ? `aos ${videoClockLink(videoGameId, p.maxSustainedAtS)} do vídeo` : "", tag: tag("max_speed") })}
         ${trackingCard("Sprints ≥20 km/h", p.sprints, "", { note: p.highRuns != null ? `${formatTrackingNumber(p.highRuns)} arranques ≥15 km/h` : "", tag: tag("sprints") })}
         ${p.passesMade != null
           ? trackingCard("Passes detetados", p.passesMade, "", { note: rank("passesMade"), tag: tag("passes") })
@@ -6613,7 +6613,7 @@ function renderTrackingTestSection(game) {
         </div>` : ""}
       <div class="tracking-highlights">
         ${highlight("Motor do jogo", highlights.motor, "m/min", 1, tracking.statusTag(result, "pace"))}
-        ${highlight("Mais rápido (1 s)", highlights.lightning, "km/h", 1, tracking.statusTag(result, "max_speed"))}
+        ${highlight(`Mais rápido (${formatTrackingNumber(result.players[0]?.maxSustainedWindowS ?? 1, 0)} s)`, highlights.lightning, "km/h", 1, tracking.statusTag(result, "max_speed"))}
         ${highlight("Mais sprints", highlights.sprinter, "sprints")}
         ${highlight("Mais metros", highlights.distance, "m")}
         ${result.ball ? highlight("Mais passes", highlights.passer, "passes") : ""}

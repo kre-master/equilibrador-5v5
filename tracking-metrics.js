@@ -68,6 +68,8 @@
         meanSpeedKmh: finite(m.mean_speed_kmh),
         maxSustainedKmh: finite(m.max_speed_sustained_kmh),
         maxSustainedAtS: Array.isArray(m.max_speed_sustained_interval_s) ? m.max_speed_sustained_interval_s[0] : null,
+        // Window of the top speed: 1 s in results before 2026-10-12, 2 s after (short box jumps read too fast).
+        maxSustainedWindowS: finite(m.max_speed_sustained_window_s) ?? 1,
         p95Kmh: finite(m.speed_p95_kmh),
         above15M: finite(m.distance_above_15_kmh_m),
         sprints: finite(m.sprint?.count),
