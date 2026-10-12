@@ -3750,3 +3750,21 @@ th.stat-col {
 .tracking-profile-map dl { grid-template-columns: max-content minmax(0, 1fr); }
 .tracking-profile-map dt { white-space: nowrap; }
 .tracking-team dl { grid-template-columns: minmax(0, 1fr) max-content; }
+
+/* Vídeo do jogo (YouTube não listado) */
+.game-video-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
+.game-video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.game-video-parts button { cursor: pointer; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font: inherit; font-size: .82rem; color: var(--muted); background: none; }
+.game-video-parts button.active { background: var(--accent); border-color: var(--accent); color: var(--bg, #0b1220); font-weight: 700; }
+.game-video-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.game-video-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: .88rem; }
+.game-video-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 12px; margin-top: 8px; }
+.game-video-form label { display: grid; gap: 4px; font-size: .88rem; }
+.game-video-form label small { color: var(--muted); font-weight: 400; }
+.game-video-form input { width: 100%; min-width: 0; }
+.game-video-form .tracking-fineprint, .game-video-form .tracking-actions { grid-column: 1 / -1; }
+.video-seek { white-space: nowrap; }
+.tracking-sprint-links { margin: 6px 0; font-size: .86rem; line-height: 1.9; }
+.tracking-sprint-links small { color: var(--muted); }
+.tracking-rhythm [data-video-seek] { cursor: pointer; }
+.tracking-rhythm rect[data-video-seek]:hover { fill-opacity: .7; }

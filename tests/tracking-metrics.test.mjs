@@ -217,3 +217,62 @@ test("a short last minute counts whole in the last period", () => {
   assert.equal(tracking.periodStats(p, 0, 90, 90).metres, 100);
   assert.equal(tracking.periodStats(p, 60, 90, 90).metres, 40);
 });
+
+test("YouTube links of every common form give the 11-character video id", () => {
+  const id = "dQw4w9WgXcQ";
+  [
+    id,
+    `https://www.youtube.com/watch?v=${id}&t=42s`,
+    `https://youtu.be/${id}?si=abc`,
+    `youtube.com/watch?v=${id}`,
+    `https://m.youtube.com/watch?v=${id}`,
+    `https://www.youtube.com/embed/${id}`,
+    `https://www.youtube-nocookie.com/embed/${id}?start=5`,
+    `https://www.youtube.com/shorts/${id}`,
+    `https://www.youtube.com/live/${id}`,
+  ].forEach((text) => assert.equal(tracking.parseYoutubeId(text), id, text));
+  ["", null, "https://vimeo.com/123", "https://www.youtube.com/watch?v=short", "https://evil.com/watch?v=dQw4w9WgXcQ", "não é um link"]
+    .forEach((text) => assert.equal(tracking.parseYoutubeId(text), null, String(text)));
+});
+
+test("video seek picks the part that covers the tracker time and applies its offsets", () => {
+  const parts = [
+    { youtubeId: "BBBBBBBBBBB", gameStartS: 1589.4, videoStartS: 0 },
+    { youtubeId: "AAAAAAAAAAA", gameStartS: 0, videoStartS: 12 },
+  ];
+  assert.deepEqual(tracking.videoSeekTarget(parts, 100), { part: parts[1], seconds: 112 });
+  assert.equal(tracking.videoSeekTarget(parts, 1600).part.youtubeId, "BBBBBBBBBBB");
+  assert.equal(tracking.videoSeekTarget(parts, 1600).seconds, 10);
+  assert.equal(tracking.videoSeekTarget(parts, 0).seconds, 12);
+  assert.equal(tracking.videoSeekTarget([], 10), null);
+  assert.equal(tracking.videoSeekTarget(parts, null), null);
+});
+
+test("video table keeps RLS: members read, only admins write", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync(new URL("../supabase/video-migration.sql", import.meta.url), "utf8");
+  assert.match(sql, /alter table public\.game_videos enable row level security/i);
+  assert.match(sql, /revoke all on table public\.game_videos from public, anon/i);
+  assert.match(sql, /for insert to authenticated\s+with check \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /for update to authenticated\s+using \(\(select public\.is_admin\(\)\)\)\s+with check \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /for delete to authenticated\s+using \(\(select public\.is_admin\(\)\)\)/i);
+  assert.match(sql, /youtube_id text not null check \(youtube_id ~ '\^\[A-Za-z0-9_-\]\{11\}\$'\)/i);
+  const schema = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+  assert.match(schema, /create table if not exists public\.game_videos/i);
+});
+
+test("clock text becomes seconds; anything else is rejected", () => {
+  assert.equal(tracking.parseClock(""), 0);
+  assert.equal(tracking.parseClock("95"), 95);
+  assert.equal(tracking.parseClock("26:29"), 1589);
+  assert.equal(tracking.parseClock("1:02:03"), 3723);
+  assert.equal(tracking.parseClock("12,5"), 12.5);
+  ["abc", "1:75", "-3", "1::2"].forEach((s) => assert.equal(tracking.parseClock(s), null, s));
+});
+
+test("a part with an end has no video after it", () => {
+  const parts = [{ youtubeId: "AAAAAAAAAAA", gameStartS: 0, videoStartS: 0, gameEndS: 1589.3 }];
+  assert.equal(tracking.videoSeekTarget(parts, 1500).seconds, 1500);
+  assert.equal(tracking.videoSeekTarget(parts, 1589.3), null);
+  assert.equal(tracking.videoSeekTarget(parts, 2000), null);
+});

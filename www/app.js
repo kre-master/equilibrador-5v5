@@ -1094,6 +1094,7 @@ async function loadRemoteState() {
   currentEventId = getNextEvent()?.id || state.events[0]?.id || null;
   currentGameId = null;
   await loadRemoteTracking();
+  await loadRemoteVideos();
   saveState();
 }
 
@@ -6256,7 +6257,7 @@ function getTrackingVideoTeamName(entry, game, videoTeam) {
   return best ? `Equipa ${best[0]}` : `Equipa do vídeo ${videoTeam}`;
 }
 
-function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
+function renderPlayerTrackingBlock(entry, p, { gameLink = null, videoGameId = null } = {}) {
   const tracking = window.FooterTracking;
   const others = entry.result.players;
   const rank = (key) => {
@@ -6272,15 +6273,15 @@ function renderPlayerTrackingBlock(entry, p, { gameLink = null } = {}) {
       <p class="tracking-note">${gameLink ? `${gameLink} · ` : ""}${formatTrackingNumber(p.validMinutes, 1)} min vistos pela câmara (não são minutos jogados).</p>
       <div class="tracking-highlights">
         ${trackingCard("Distância observada", p.distanceM == null ? null : p.distanceM / 1000, "km", { digits: 2, note: rank("distanceM"), tag: tag("distance") })}
-        ${trackingCard("Mais rápido (1 s)", p.maxSustainedKmh, "km/h", { digits: 1, note: p.maxSustainedAtS != null ? `aos ${formatVideoClock(p.maxSustainedAtS)} do vídeo` : "", tag: tag("max_speed") })}
+        ${trackingCard("Mais rápido (1 s)", p.maxSustainedKmh, "km/h", { digits: 1, note: p.maxSustainedAtS != null ? `aos ${videoClockLink(videoGameId, p.maxSustainedAtS)} do vídeo` : "", tag: tag("max_speed") })}
         ${trackingCard("Sprints ≥20 km/h", p.sprints, "", { note: p.highRuns != null ? `${formatTrackingNumber(p.highRuns)} arranques ≥15 km/h` : "", tag: tag("sprints") })}
         ${p.passesMade != null
           ? trackingCard("Passes detetados", p.passesMade, "", { note: rank("passesMade"), tag: tag("passes") })
           : trackingCard("Ritmo", p.metersPerMin, "m/min", { digits: 1, note: rank("metersPerMin"), tag: tag("pace") })}
       </div>
-      ${renderTrackingStories(entry, p)}
+      ${renderTrackingStories(entry, p, videoGameId)}
       ${renderTrackingBands(p)}
-      ${renderPlayerTimeline(entry, p)}
+      ${renderPlayerTimeline(entry, p, videoGameId)}
       <div class="tracking-profile-map">
         ${renderPlayerPitch(entry, p)}
         <dl>
@@ -6324,12 +6325,12 @@ function renderBallZones(entry, game) {
   `;
 }
 
-function renderTrackingStories(entry, p) {
+function renderTrackingStories(entry, p, videoGameId = null) {
   // Short sentences, each only when the data support it; neutral wording (admins also preview other players).
   const f = window.FooterTracking.storyFacts(entry.result, p);
   const lines = [];
   if (f.bestMinute) lines.push(`Minuto mais intenso: o ${f.bestMinute.minute}.º, a ${formatTrackingNumber(f.bestMinute.metersPerMin, 0)} m/min.`);
-  if (f.peakAtS != null) lines.push(`Pico de velocidade aos ${formatVideoClock(f.peakAtS)} do vídeo.`);
+  if (f.peakAtS != null) lines.push(`Pico de velocidade aos ${videoClockLink(videoGameId, f.peakAtS)} do vídeo.`);
   if (f.lane) lines.push(`Mais tempo no corredor ${f.lane.name} (${formatTrackingNumber(f.lane.pct, 0)}% do tempo).`);
   if (f.lateChangePct != null) {
     lines.push(f.lateChangePct <= -15 ? `O ritmo caiu ${-f.lateChangePct}% no último terço do jogo.`
@@ -6343,7 +6344,7 @@ function renderTrackingStories(entry, p) {
 
 let trackingTimelineSeq = 0;
 
-function renderPlayerTimeline(entry, p) {
+function renderPlayerTimeline(entry, p, videoGameId = null) {
   // "Ao longo do jogo": one period filter drives the period totals, the per-minute chart and the path (CSS-only).
   const tracking = window.FooterTracking;
   const tl = p.timeline;
@@ -6353,15 +6354,18 @@ function renderPlayerTimeline(entry, p) {
   const n = tl.distanceM.length;
   const rates = tl.distanceM.map((d, i) => (tl.seenS[i] >= 20 ? d / (tl.seenS[i] / 60) : null));
   const maxRate = Math.max(...rates.filter((r) => r != null), 1);
+  const hasVideo = Boolean(videoGameId && getGameVideoParts(videoGameId).length);
+  const canSeek = (sec) => hasVideo && Boolean(tracking.videoSeekTarget(getGameVideoParts(videoGameId), sec));
+  const seekAttr = (sec) => (canSeek(sec) ? ` data-video-seek="${sec.toFixed(1)}"` : "");
   const inPeriod = (sec) => periods.slice(1).filter((q) => sec >= q.from && sec < q.to).map((q) => `tp-m-${q.key}`).join(" ");
   let bars = "";
   rates.forEach((r, i) => {
     const h = r == null ? 0.8 : Math.max(0.8, (30 * r) / maxRate);
-    bars += `<rect class="tp-bar ${inPeriod(i * 60 + 30)} ${r == null ? "tp-none" : ""}" x="${i * 4 + 0.5}" y="${(34 - h).toFixed(2)}" width="3" height="${h.toFixed(2)}" rx="0.4"><title>Minuto ${i + 1}: ${r == null ? "pouco visto pela câmara" : `${formatTrackingNumber(r, 0)} m/min`}</title></rect>`;
+    bars += `<rect class="tp-bar ${inPeriod(i * 60 + 30)} ${r == null ? "tp-none" : ""}"${seekAttr(i * 60)} x="${i * 4 + 0.5}" y="${(34 - h).toFixed(2)}" width="3" height="${h.toFixed(2)}" rx="0.4"><title>Minuto ${i + 1}: ${r == null ? "pouco visto pela câmara" : `${formatTrackingNumber(r, 0)} m/min`}</title></rect>`;
   });
   tl.sprints.forEach((s) => {
     const x = (s.start / 60) * 4;
-    bars += `<circle class="tp-bar ${inPeriod(s.start)}" cx="${x.toFixed(2)}" cy="2.2" r="1.1" fill="var(--orange)"><title>Sprint aos ${formatVideoClock(s.start)} · ${formatTrackingNumber(s.kmh, 1)} km/h</title></circle>`;
+    bars += `<circle class="tp-bar ${inPeriod(s.start)}"${seekAttr(Math.max(0, s.start - 3))} cx="${x.toFixed(2)}" cy="2.2" r="1.1" fill="var(--orange)"><title>Sprint aos ${formatVideoClock(s.start)} · ${formatTrackingNumber(s.kmh, 1)} km/h</title></circle>`;
   });
   let ticks = "";
   for (let m = 0; m <= n; m += 5) ticks += `<text x="${m * 4}" y="39" font-size="3" text-anchor="middle" fill="var(--muted)">${m}′</text>`;
@@ -6371,6 +6375,7 @@ function renderPlayerTimeline(entry, p) {
     return `
       <div class="tp-v tp-v-${q.key}">
         <p class="tracking-period-stats">${st ? `<b>${formatTrackingNumber(st.metres / 1000, 2)} km</b> em ${formatTrackingNumber(st.seenMin, 1)} min vistos · <b>${st.metersPerMin == null ? "sem dados" : `${formatTrackingNumber(st.metersPerMin, 0)} m/min`}</b> · <b>${st.sprints}</b> sprint${st.sprints === 1 ? "" : "s"}` : "sem dados"}</p>
+        ${renderSprintVideoLinks(tl, q.from, q.to, videoGameId)}
         ${renderPlayerPath(tl, q.from, q.to)}
       </div>`;
   }).join("");
@@ -6385,9 +6390,18 @@ function renderPlayerTimeline(entry, p) {
         ${chart}
         ${variants}
       </div>
-      <p class="tracking-fineprint">Barras: metros por minuto visto pela câmara (barras rasas = minuto pouco visto). Pontos laranja: sprints. No campo, o percurso com os sprints a laranja.</p>
+      <p class="tracking-fineprint">Barras: metros por minuto visto pela câmara (barras rasas = minuto pouco visto). Pontos laranja: sprints. No campo, o percurso com os sprints a laranja.${hasVideo ? " Carrega numa barra ou num sprint para o ver no vídeo." : ""}</p>
     </div>
   `;
+}
+
+function renderSprintVideoLinks(tl, from, to, videoGameId) {
+  // With a game video: each sprint of the period as a jump to 3 s before it, to see the run start.
+  if (!videoGameId || !getGameVideoParts(videoGameId).length) return "";
+  const parts = getGameVideoParts(videoGameId);
+  const sprints = tl.sprints.filter((s) => s.start >= from && s.start < to && window.FooterTracking.videoSeekTarget(parts, s.start));
+  if (!sprints.length) return "";
+  return `<p class="tracking-sprint-links">Ver sprints: ${sprints.map((s) => `<button type="button" class="link-btn video-seek" data-video-seek="${Math.max(0, s.start - 3).toFixed(1)}" title="Ver no vídeo">▶ ${formatVideoClock(s.start)}</button> <small>${formatTrackingNumber(s.kmh, 1)} km/h</small>`).join(" · ")}</p>`;
 }
 
 function renderPlayerPath(tl, from, to) {
@@ -6617,7 +6631,7 @@ function renderTrackingTestSection(game) {
             </select>
           </label>` : ""}
       </div>
-      ${viewP ? renderPlayerTrackingBlock(entry, viewP) : `<p class="tracking-note">${linked ? "Não estás associado a nenhum jogador neste vídeo." : "Entra com uma conta ligada a um jogador para veres a tua análise."}</p>`}
+      ${viewP ? renderPlayerTrackingBlock(entry, viewP, { videoGameId: game.id }) : `<p class="tracking-note">${linked ? "Não estás associado a nenhum jogador neste vídeo." : "Entra com uma conta ligada a um jogador para veres a tua análise."}</p>`}
     </section>
 
     <section class="profile-section tracking-section">
@@ -6783,6 +6797,239 @@ function bindTrackingTestSection(game, container) {
   });
 }
 
+// ---- Vídeo do jogo (YouTube «não listado», supabase/video-migration.sql) ----
+// Só o ID do vídeo fica guardado. Cada parte diz em que segundo do tracker começa (gameStartS) e que segundo
+// do vídeo lhe corresponde (videoStartS), para os tempos da análise saltarem para o momento certo.
+// Sem a tabela ou sem sessão, fica neste dispositivo (localStorage), como o tracking.
+const GAME_VIDEOS_KEY = "footer-game-videos-v1";
+let gameVideos = (() => {
+  try {
+    return JSON.parse(window.localStorage.getItem(GAME_VIDEOS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+})();
+let gameVideosRemote = false;
+
+function gameVideoPartFromRow(row) {
+  return {
+    id: row.id, position: row.position, youtubeId: row.youtube_id, label: row.label || "",
+    gameStartS: Number(row.game_start_s) || 0, videoStartS: Number(row.video_start_s) || 0,
+    gameEndS: row.game_end_s == null ? null : Number(row.game_end_s),
+  };
+}
+
+async function loadRemoteVideos() {
+  if (!remoteEnabled || !supabaseClient || !currentSession?.user) return;
+  const { data, error } = await supabaseClient.from("game_videos").select("*").order("position");
+  if (error) {
+    console.warn("Game videos load failed. Run supabase/video-migration.sql.", error);
+    gameVideosRemote = false;
+    return;
+  }
+  gameVideosRemote = true;
+  const byGame = {};
+  (data || []).forEach((row) => { (byGame[row.game_id] ||= []).push(gameVideoPartFromRow(row)); });
+  gameVideos = byGame;
+}
+
+function saveLocalVideos() {
+  try {
+    window.localStorage.setItem(GAME_VIDEOS_KEY, JSON.stringify(gameVideos));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getGameVideoParts(gameId) {
+  return [...(gameVideos[gameId] || [])].sort((a, b) => a.position - b.position);
+}
+
+async function addGameVideoPart(game, part) {
+  const parts = getGameVideoParts(game.id);
+  const position = (parts.length ? Math.max(...parts.map((v) => v.position)) : 0) + 1;
+  if (!gameVideosRemote) {
+    gameVideos[game.id] = [...parts, { ...part, id: `local-${Date.now()}`, position }];
+    if (!saveLocalVideos()) throw new Error("Não foi possível guardar neste dispositivo.");
+    return;
+  }
+  const { data, error } = await supabaseClient.from("game_videos").insert({
+    game_id: game.id, position, youtube_id: part.youtubeId, label: part.label || null,
+    game_start_s: part.gameStartS, video_start_s: part.videoStartS, game_end_s: part.gameEndS,
+  }).select("*").single();
+  if (error) throw new Error(`Não foi possível guardar o vídeo: ${error.message}`);
+  gameVideos[game.id] = [...parts, gameVideoPartFromRow(data)];
+}
+
+async function removeGameVideoPart(game, partId) {
+  if (gameVideosRemote) {
+    const { error } = await supabaseClient.from("game_videos").delete().eq("id", partId);
+    if (error) throw new Error(`Não foi possível remover o vídeo: ${error.message}`);
+  }
+  gameVideos[game.id] = getGameVideoParts(game.id).filter((v) => v.id !== partId);
+  if (!gameVideosRemote) saveLocalVideos();
+}
+
+function gameVideoEmbedUrl(youtubeId, start = 0, autoplay = false) {
+  const params = new URLSearchParams({ enablejsapi: "1", playsinline: "1", rel: "0" });
+  if (start > 0) params.set("start", String(Math.floor(start)));
+  if (autoplay) params.set("autoplay", "1");
+  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}?${params}`;
+}
+
+// A tracker time as a button that jumps the game video there; plain text when the game has no video.
+function videoClockLink(gameId, seconds) {
+  const text = formatVideoClock(seconds);
+  if (!gameId || !window.FooterTracking.videoSeekTarget(getGameVideoParts(gameId), seconds)) return text;
+  return `<button type="button" class="link-btn video-seek" data-video-seek="${Number(seconds).toFixed(1)}" title="Ver no vídeo">▶ ${text}</button>`;
+}
+
+function renderGameVideoSection(game) {
+  const parts = getGameVideoParts(game.id);
+  if (!parts.length && !isAdmin) return "";
+  const first = parts[0];
+  const timeText = (s) => formatVideoClock(s);
+  return `
+    <section class="profile-section tracking-section game-video-section${parts.length ? "" : " admin-only"}" data-game-video-section>
+      <div class="tracking-head"><h3>Vídeo do jogo</h3>${parts.length ? "" : `<span class="tracking-badge">Só admins veem</span>`}</div>
+      ${parts.length ? `
+        ${parts.length > 1 ? `
+          <div class="tracking-pitch-tabs game-video-parts" role="group" aria-label="Parte do vídeo">
+            ${parts.map((v, i) => `<button type="button" class="${i === 0 ? "active" : ""}" data-video-part="${escapeHtml(v.youtubeId)}" aria-pressed="${i === 0}">${escapeHtml(v.label || `Parte ${i + 1}`)}</button>`).join("")}
+          </div>` : ""}
+        <div class="game-video-frame">
+          <iframe data-game-video data-youtube-id="${escapeHtml(first.youtubeId)}" src="${gameVideoEmbedUrl(first.youtubeId, first.videoStartS)}"
+            title="Vídeo do jogo" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+        </div>
+        <p class="tracking-fineprint">Vídeo não listado no YouTube: só quem tem a ligação o encontra.${getTrackingEntry(game.id) ? " Os tempos com ▶ na análise abaixo saltam para esse momento." : ""}</p>` : `
+        <p class="tracking-note">Ainda sem vídeo. Envia o jogo para o YouTube como <strong>não listado</strong> e cola aqui a ligação.</p>`}
+      ${isAdmin ? `
+        <details class="tracking-admin admin-only" ${parts.length ? "" : "open"}>
+          <summary>${parts.length ? "Gerir vídeo · só admin" : "Juntar vídeo · só admin"}</summary>
+          ${parts.length ? `
+            <ul class="game-video-list">
+              ${parts.map((v, i) => `
+                <li>
+                  <span><strong>${escapeHtml(v.label || `Parte ${i + 1}`)}</strong> · <code>${escapeHtml(v.youtubeId)}</code> · começa aos ${timeText(v.gameStartS)} da análise${v.videoStartS ? `, que no vídeo é ${timeText(v.videoStartS)}` : ""}${v.gameEndS != null ? `, acaba aos ${timeText(v.gameEndS)}` : ""}</span>
+                  <button class="danger-btn" type="button" data-video-remove="${escapeHtml(v.id)}">Remover</button>
+                </li>`).join("")}
+            </ul>` : ""}
+          <form class="game-video-form" data-video-form>
+            <label>Ligação do YouTube<input type="text" name="url" required placeholder="https://youtu.be/…" autocomplete="off"></label>
+            <label>Nome da parte <small>(opcional)</small><input type="text" name="label" maxlength="60" placeholder="${parts.length ? `Parte ${parts.length + 1}` : "Jogo todo"}"></label>
+            <label>Começa aos … da análise<input type="text" name="gameStart" inputmode="numeric" value="${parts.length ? "" : "0:00"}" placeholder="mm:ss" ${parts.length ? "required" : ""}></label>
+            <label>Esse momento no vídeo é aos<input type="text" name="videoStart" inputmode="numeric" value="0:00" placeholder="mm:ss"></label>
+            <label>Acaba aos … da análise <small>(opcional)</small><input type="text" name="gameEnd" inputmode="numeric" placeholder="mm:ss"></label>
+            <p class="tracking-fineprint">Se enviaste para o YouTube o mesmo ficheiro que foi analisado, deixa 0:00 nos dois. Num vídeo com outro início, indica onde está no vídeo o primeiro momento analisado. Com o jogo em duas gravações, junta uma parte de cada vez; a 2.ª começa onde a 1.ª acabou na análise.</p>
+            <div class="tracking-actions"><button class="primary-btn" type="submit">Guardar vídeo</button></div>
+          </form>
+          <p class="tracking-error" data-video-error hidden></p>
+        </details>` : ""}
+    </section>
+  `;
+}
+
+function seekGameVideo(container, game, seconds) {
+  const target = window.FooterTracking.videoSeekTarget(getGameVideoParts(game.id), seconds);
+  const frame = container.querySelector("[data-game-video]");
+  if (!target || !frame) return;
+  showGameVideoPart(container, target.part.youtubeId);
+  if (frame.dataset.youtubeId === target.part.youtubeId && frame.dataset.ready === "1") {
+    // Same video already loaded: move it without reloading (YouTube iframe API by postMessage).
+    const send = (func, args = []) => frame.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+    send("seekTo", [target.seconds, true]);
+    send("playVideo");
+  } else {
+    frame.dataset.ready = "0";
+    frame.dataset.youtubeId = target.part.youtubeId;
+    frame.src = gameVideoEmbedUrl(target.part.youtubeId, target.seconds, true);
+  }
+  frame.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function showGameVideoPart(container, youtubeId) {
+  container.querySelectorAll("[data-video-part]").forEach((button) => {
+    const on = button.dataset.videoPart === youtubeId;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+}
+
+function bindGameVideoSection(game, container) {
+  const section = container?.querySelector("[data-game-video-section]");
+  if (!section) return;
+  const frame = section.querySelector("[data-game-video]");
+  frame?.addEventListener("load", () => { frame.dataset.ready = "1"; });
+  // Time links live in the tracking sections below, so listen on the whole game page. The page element
+  // outlives each render, so the listener is added once and reads the game shown at click time.
+  if (container.dataset.videoSeekBound !== "1") {
+    container.dataset.videoSeekBound = "1";
+    container.addEventListener("click", (event) => {
+      const seek = event.target.closest?.("[data-video-seek]");
+      const shown = state.games.find((item) => item.id === currentHistoryGameId);
+      if (seek && shown) seekGameVideo(container, shown, Number(seek.dataset.videoSeek));
+    });
+  }
+  section.querySelectorAll("[data-video-part]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const part = getGameVideoParts(game.id).find((v) => v.youtubeId === button.dataset.videoPart);
+      if (!part || !frame) return;
+      showGameVideoPart(section, part.youtubeId);
+      frame.dataset.ready = "0";
+      frame.dataset.youtubeId = part.youtubeId;
+      frame.src = gameVideoEmbedUrl(part.youtubeId, part.videoStartS);
+    });
+  });
+  const showError = (message) => {
+    const box = section.querySelector("[data-video-error]");
+    if (box) {
+      box.textContent = message;
+      box.hidden = false;
+    }
+  };
+  section.querySelector("[data-video-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const tracking = window.FooterTracking;
+    const youtubeId = tracking.parseYoutubeId(form.url.value);
+    const gameStartS = tracking.parseClock(form.gameStart.value);
+    const videoStartS = tracking.parseClock(form.videoStart.value);
+    const gameEndS = form.gameEnd.value.trim() ? tracking.parseClock(form.gameEnd.value) : null;
+    if (!youtubeId) return showError("Não reconheço essa ligação do YouTube. Copia-a do botão Partilhar do vídeo.");
+    if (gameStartS == null || videoStartS == null || Number.isNaN(gameEndS) || (form.gameEnd.value.trim() && gameEndS == null)) return showError("Escreve os tempos como mm:ss (por exemplo 26:29).");
+    if (gameEndS != null && gameEndS <= gameStartS) return showError("O fim tem de ser depois do começo.");
+    if (getGameVideoParts(game.id).some((v) => v.gameStartS === gameStartS)) return showError("Já há uma parte que começa nesse momento da análise.");
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    try {
+      await addGameVideoPart(game, { youtubeId, label: form.label.value.trim(), gameStartS, videoStartS, gameEndS });
+      renderHistoryGameDetail();
+    } catch (error) {
+      button.disabled = false;
+      showError(error.message || "Não foi possível guardar o vídeo.");
+    }
+  });
+  section.querySelectorAll("[data-video-remove]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (button.dataset.confirming !== "1") {
+        button.dataset.confirming = "1";
+        button.textContent = "Carrega outra vez para remover";
+        return;
+      }
+      button.disabled = true;
+      try {
+        await removeGameVideoPart(game, button.dataset.videoRemove);
+        renderHistoryGameDetail();
+      } catch (error) {
+        button.disabled = false;
+        showError(error.message);
+      }
+    });
+  });
+}
+
 function getPlayerTrackingGames(playerId) {
   return Object.entries(trackingStore)
     .map(([gameId, entry]) => {
@@ -6838,6 +7085,7 @@ function renderHistoryGameDetail() {
       ${renderTeamRadarChart([...hydrate(game.teamA), ...hydrate(getBenchA(game))], [...hydrate(game.teamB), ...hydrate(getBenchB(game))], { inlineOdds: true })}
     </section>
     ${renderHistoryRosterEditor(game)}
+    ${renderGameVideoSection(game)}
     ${renderTrackingTestSection(game)}
   `;
   els.historyGameDetail.querySelector("[data-save-history-game-date]")?.addEventListener("click", async (buttonEvent) => {
@@ -6863,6 +7111,7 @@ function renderHistoryGameDetail() {
   bindHistoryRosterEditorActions(game);
   bindMvpPanelActions(game, els.historyGameDetail);
   bindTrackingTestSection(game, els.historyGameDetail);
+  bindGameVideoSection(game, els.historyGameDetail);
 }
 
 function renderHistoryRosterEditor(game) {

@@ -339,6 +339,44 @@
     return i < 0 ? null : { position: i + 1, of: rows.length };
   }
 
+  // Game video (YouTube «não listado»): only the 11-character video id is kept.
+  function parseYoutubeId(text) {
+    const s = String(text || "").trim();
+    if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+    let url;
+    try {
+      url = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    } catch {
+      return null;
+    }
+    const host = url.hostname.replace(/^(www\.|m\.|music\.)/, "");
+    let id = null;
+    if (host === "youtu.be") id = url.pathname.split("/")[1];
+    else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+      id = url.searchParams.get("v") || url.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/)?.[1] || null;
+    }
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  }
+
+  // "26:29", "1:02:03", "95" or "" (= 0) -> seconds; null when it is not a time.
+  function parseClock(text) {
+    const s = String(text ?? "").trim().replace(",", ".");
+    if (!s) return 0;
+    if (!/^\d+(\.\d+)?$|^\d+(:[0-5]?\d){1,2}$/.test(s)) return null;
+    return s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
+  }
+
+  // Tracker seconds -> which video part and which second of it. A time before the first part goes
+  // to the start of the first one; a time after the end of its part (gameEndS) has no video.
+  function videoSeekTarget(parts, gameSeconds) {
+    const list = (parts || []).filter((v) => v?.youtubeId).sort((a, b) => a.gameStartS - b.gameStartS);
+    if (!list.length || gameSeconds == null || !Number.isFinite(Number(gameSeconds))) return null;
+    const t = Number(gameSeconds);
+    const part = [...list].reverse().find((v) => t >= v.gameStartS) || list[0];
+    if (part.gameEndS != null && t >= part.gameEndS) return null;
+    return { part, seconds: Math.max(0, Math.floor(part.videoStartS + Math.max(0, t - part.gameStartS))) };
+  }
+
   function loadStore(storage) {
     try {
       const raw = storage?.getItem(STORAGE_KEY);
@@ -361,6 +399,7 @@
   return {
     STORAGE_KEY, SCHEMA, MIN_MINUTES_FOR_HIGHLIGHT,
     normalizeLabel, parseResult, proposeMapping, inheritMapping, mappingProblems, gameHighlights, teamHeatmap, roleLabel, speedBands, rankIn, statusTag, passPartners, teamFaceOff, gamePeriods, periodStats, storyFacts,
+    parseYoutubeId, parseClock, videoSeekTarget,
     loadStore, saveStore,
   };
 });
