@@ -1722,25 +1722,49 @@ function renderGalleryGames(games) {
 
 function renderGalleryHighlights(items) {
   if (!items.length) return `<div class="empty-state">Ainda nao ha highlights. Abre um video e carrega em "Marcar momento" quando vires uma jogada boa.</div>`;
-  return `
-    <div class="gallery-grid">
-      ${items.map((item) => {
-        const game = state.games.find((entry) => entry.id === item.gameId);
-        return `
-          <button type="button" class="gallery-card highlight-card" data-gallery-highlight="${escapeHtml(item.id)}">
-            <span class="gallery-thumb">
-              <img src="https://i.ytimg.com/vi/${encodeURIComponent(item.youtubeId)}/hqdefault.jpg" alt="" loading="lazy">
-              <span class="gallery-play" aria-hidden="true"></span>
-              <span class="gallery-parts">${escapeHtml(formatVideoClock(item.momentS))} · ${Math.round(item.endS - item.startS)} s</span>
-            </span>
-            <span class="gallery-meta">
-              <strong class="highlight-note">${escapeHtml(item.note)}</strong>
-              <small>${escapeHtml(item.authorName || "Jogador")}</small>
-              <small class="gallery-title">${game ? `${escapeHtml(formatDate(game.date))} · ${escapeHtml(getGameResultText(game))}` : ""}</small>
-            </span>
-          </button>`;
-      }).join("")}
-    </div>`;
+  // Agrupados por jogo (mais recente primeiro), cada grupo com o cabecalho do jogo para se perceber de onde sao.
+  const groups = new Map();
+  items.forEach((item) => {
+    if (!groups.has(item.gameId)) groups.set(item.gameId, []);
+    groups.get(item.gameId).push(item);
+  });
+  const games = [...groups.keys()]
+    .map((gameId) => state.games.find((entry) => entry.id === gameId))
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  return games.map((game) => {
+    const moments = groups.get(game.id).sort((a, b) => a.momentS - b.momentS);
+    const parts = getGameVideoParts(game.id);
+    const date = new Date(game.date);
+    const validDate = !Number.isNaN(date.getTime());
+    return `
+      <section class="highlight-game">
+        <button type="button" class="highlight-game-head" data-gallery-game="${escapeHtml(game.id)}" title="Ver o video completo">
+          <span class="highlight-game-thumb">
+            <img src="https://i.ytimg.com/vi/${encodeURIComponent((parts[0] || moments[0]).youtubeId)}/mqdefault.jpg" alt="" loading="lazy">
+          </span>
+          <span class="highlight-game-date" aria-hidden="true">
+            <b>${validDate ? date.getDate() : "?"}</b>
+            <small>${validDate ? date.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "") : ""}</small>
+          </span>
+          <span class="highlight-game-info">
+            <strong>${escapeHtml(getGameResultText(game))}</strong>
+            <small>${escapeHtml(formatDate(game.date))} · ${escapeHtml(getGameTitle(game))}</small>
+          </span>
+          <span class="highlight-game-count">🔖 ${moments.length}</span>
+        </button>
+        <div class="highlight-moments">
+          ${moments.map((item) => `
+            <button type="button" class="highlight-moment" data-gallery-highlight="${escapeHtml(item.id)}">
+              <span class="moment-time">▶ ${escapeHtml(formatVideoClock(item.momentS))}</span>
+              <span class="moment-text">
+                <strong>${escapeHtml(item.note)}</strong>
+                <small>${escapeHtml(item.authorName || "Jogador")} · ${Math.round(item.endS - item.startS)} s</small>
+              </span>
+            </button>`).join("")}
+        </div>
+      </section>`;
+  }).join("");
 }
 
 function renderGallery() {
