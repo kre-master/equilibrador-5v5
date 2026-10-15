@@ -7369,7 +7369,10 @@ function renderMomentsBlock(game) {
     <div class="moments" data-moments>
       <div class="moments-head">
         <h4>Momentos</h4>
-        ${canMarkMoments() ? `<button type="button" class="primary-btn moments-mark" data-moment-mark>🔖 Marcar momento</button>` : `<small class="moments-hint">Entra para marcar momentos</small>`}
+        <div class="moments-actions">
+          <button type="button" class="ghost-btn moments-fs" data-stage-open>${STAGE_FS_ICON}<span>Ecra cheio</span></button>
+          ${canMarkMoments() ? `<button type="button" class="primary-btn moments-mark" data-moment-mark>🔖 Marcar momento</button>` : `<small class="moments-hint">Entra para marcar momentos</small>`}
+        </div>
       </div>
       ${renderMomentForm()}
       <div data-moments-list>${renderMomentsList(game)}</div>
@@ -7563,6 +7566,9 @@ function bindMomentsBlock(root, game, { getFrame, playClip }) {
     on(block.querySelector("[data-moment-mark]"), "click", () => main.open());
   }
   const stage = getFrame()?.closest("[data-video-stage]");
+  on(block.querySelector("[data-stage-open]"), "click", () => {
+    if (stage) toggleStageFullscreen(stage);
+  });
   const stageForm = stage?.querySelector(".stage-form");
   if (stageForm) {
     const overlay = wireMomentForm(stageForm, game, { getFrame, onSaved: refreshList, resumeAfter: true });

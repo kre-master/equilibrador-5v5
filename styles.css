@@ -4708,3 +4708,49 @@ body.stage-open .profile-section {
     height: 50px;
   }
 }
+
+/* Botao de ecra cheio por baixo do video (os cantos do leitor sao do YouTube) */
+.moments-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.moments-fs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.moments-fs svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.video-stage:not(.is-fullscreen) .stage-fs {
+  display: none;
+}
+
+/* Em ecra cheio: botoes a meio da direita, longe dos controlos do YouTube nos cantos */
+.video-stage.is-fullscreen .stage-fs {
+  top: calc(50% - 74px);
+  right: calc(14px + env(safe-area-inset-right, 0px));
+}
+
+.video-stage.is-fullscreen .stage-mark {
+  top: calc(50% - 22px);
+  bottom: auto;
+  right: calc(10px + env(safe-area-inset-right, 0px));
+}
+
+@media (max-height: 500px) {
+  .video-stage.is-fullscreen .stage-mark {
+    bottom: auto;
+  }
+}
