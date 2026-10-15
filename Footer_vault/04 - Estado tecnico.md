@@ -456,3 +456,4 @@ Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql`
 - Tabela `game_video_bookmarks` em `supabase/bookmarks-migration.sql` (RLS: autenticados leem, cada um insere os seus, apaga os seus; admin apaga qualquer um). Sem a tabela, os momentos ficam no dispositivo (`footer-video-bookmarks-v1`).
 - Galeria tem filtro Jogos / Highlights; Highlights agrupa os momentos por jogo (cabecalho com data, resultado e numero de momentos) e abre o leitor so no pedaco.
 - Cache-buster JS/CSS: `20261015-moments2`.
+- Ecra cheio proprio (`data-video-stage`, botao ⛶ no canto do video): o do YouTube fica desligado (`fs=0`) para se poder marcar momentos por cima. Em ecra cheio aparece o botao 🔖 semi-transparente; o formulario abre translucido sobre o video e o video continua depois de guardar. No iPhone (sem Fullscreen API para elementos) o palco ocupa a pagina toda (`pseudo-fullscreen`). Cache-buster `20261015-stage1`.

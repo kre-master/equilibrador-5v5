@@ -4561,3 +4561,150 @@ th.stat-col {
     grid-template-columns: 1fr;
   }
 }
+
+/* Palco do video: ecra cheio proprio com botao de marcar momento por cima */
+.video-stage {
+  position: relative;
+}
+
+.stage-controls {
+  display: contents;
+}
+
+.stage-btn {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 50%;
+  padding: 0;
+  color: #fff;
+  background: rgba(5, 10, 20, .45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity .18s ease, background .18s ease;
+}
+
+.stage-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stage-fs {
+  top: 10px;
+  right: 10px;
+  opacity: .75;
+}
+
+.stage-mark {
+  display: none;
+  right: 18px;
+  bottom: 76px;
+  width: 58px;
+  height: 58px;
+  font-size: 24px;
+  opacity: .6;
+  box-shadow: 0 0 20px rgba(59, 140, 255, .35);
+}
+
+.stage-btn:hover,
+.stage-btn:focus-visible {
+  opacity: 1;
+  background: rgba(59, 140, 255, .55);
+}
+
+.video-stage:not(.is-fullscreen) .stage-form {
+  display: none !important;
+}
+
+.video-stage.is-fullscreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.video-stage.is-fullscreen .game-video-frame {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.video-stage.is-fullscreen .stage-mark {
+  display: grid;
+}
+
+.video-stage.is-fullscreen .stage-fs {
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+}
+
+.video-stage.pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  height: 100dvh;
+}
+
+body.stage-open {
+  overflow: hidden;
+}
+
+/* Um pai com backdrop-filter prenderia o palco fixo dentro dele. */
+body.stage-open .panel,
+body.stage-open .profile-section {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.stage-form {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 4;
+  width: min(calc(100% - 24px), 520px);
+  transform: translateX(-50%);
+  border-color: rgba(255, 255, 255, .2);
+  background: rgba(5, 10, 20, .72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.stage-form input[type="text"] {
+  background: rgba(0, 0, 0, .45);
+}
+
+@media (max-height: 500px) {
+  .stage-form {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .stage-form .moment-form-time label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stage-form input[type="text"] {
+    min-height: 36px;
+  }
+
+  .stage-mark {
+    bottom: 56px;
+    width: 50px;
+    height: 50px;
+  }
+}

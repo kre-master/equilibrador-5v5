@@ -1830,6 +1830,11 @@ function openVideoLightbox(gameId, options = {}) {
   }));
   if (options.clip) playLightboxClip(game, options.clip);
   else playLightboxPart(0, parts[0].youtubeId, parts[0].videoStartS || 0);
+  const stageControls = document.querySelector("#video-lightbox-stage-controls");
+  if (stageControls) {
+    stageControls.innerHTML = renderStageControls();
+    bindVideoStage(document.querySelector("#video-lightbox-stage"));
+  }
   const moments = document.querySelector("#video-lightbox-moments");
   if (moments) {
     moments.innerHTML = renderMomentsBlock(game);
@@ -1848,6 +1853,7 @@ function openVideoLightbox(gameId, options = {}) {
 function closeVideoLightbox() {
   const modal = document.querySelector("#video-lightbox");
   if (!modal || modal.classList.contains("hidden")) return;
+  exitStageFullscreen(document.querySelector("#video-lightbox-stage"));
   modal.classList.add("hidden");
   document.body.classList.remove("mvp-gate-open");
   // Remove o iframe para o video parar.
@@ -7171,7 +7177,8 @@ async function removeGameVideoPart(game, partId) {
 }
 
 function gameVideoEmbedUrl(youtubeId, start = 0, autoplay = false, end = null) {
-  const params = new URLSearchParams({ enablejsapi: "1", playsinline: "1", rel: "0" });
+  // fs=0: o ecra cheio e o nosso (data-video-stage), para os momentos poderem ser marcados por cima.
+  const params = new URLSearchParams({ enablejsapi: "1", playsinline: "1", rel: "0", fs: "0" });
   if (start > 0) params.set("start", String(Math.floor(start)));
   if (end != null && end > start) params.set("end", String(Math.ceil(end)));
   if (autoplay) params.set("autoplay", "1");
@@ -7332,42 +7339,117 @@ function renderMomentsList(game) {
   </ul>`;
 }
 
+function canMarkMoments() {
+  return !remoteEnabled || Boolean(currentSession?.user);
+}
+
+function renderMomentForm(extraClass = "") {
+  return `
+    <form class="moment-form ${extraClass} hidden" data-moment-form>
+      <div class="moment-form-time">
+        <label>Momento <input type="text" name="moment" inputmode="numeric" placeholder="mm:ss" required></label>
+        <span class="moment-window" data-moment-window></span>
+      </div>
+      <div class="moment-adjust" role="group" aria-label="Ajustar pedaco">
+        <span>Inicio</span><button type="button" data-moment-adjust="start:-5">−5 s</button><button type="button" data-moment-adjust="start:5">+5 s</button>
+        <span>Fim</span><button type="button" data-moment-adjust="end:-5">−5 s</button><button type="button" data-moment-adjust="end:5">+5 s</button>
+      </div>
+      <input type="text" name="note" maxlength="140" placeholder="Ex.: Golaco do Cunha" required autocomplete="off">
+      <p class="tracking-error" data-moment-error hidden></p>
+      <div class="moment-form-actions">
+        <button type="button" class="ghost-btn" data-moment-cancel>Cancelar</button>
+        <button type="submit" class="primary-btn">Guardar momento</button>
+      </div>
+    </form>`;
+}
+
 function renderMomentsBlock(game) {
   if (!getGameVideoParts(game.id).length) return "";
-  const canMark = !remoteEnabled || Boolean(currentSession?.user);
   return `
     <div class="moments" data-moments>
       <div class="moments-head">
         <h4>Momentos</h4>
-        ${canMark ? `<button type="button" class="primary-btn moments-mark" data-moment-mark>🔖 Marcar momento</button>` : `<small class="moments-hint">Entra para marcar momentos</small>`}
+        ${canMarkMoments() ? `<button type="button" class="primary-btn moments-mark" data-moment-mark>🔖 Marcar momento</button>` : `<small class="moments-hint">Entra para marcar momentos</small>`}
       </div>
-      <form class="moment-form hidden" data-moment-form>
-        <div class="moment-form-time">
-          <label>Momento <input type="text" name="moment" inputmode="numeric" placeholder="mm:ss" required></label>
-          <span class="moment-window" data-moment-window></span>
-        </div>
-        <div class="moment-adjust" role="group" aria-label="Ajustar pedaco">
-          <span>Inicio</span><button type="button" data-moment-adjust="start:-5">−5 s</button><button type="button" data-moment-adjust="start:5">+5 s</button>
-          <span>Fim</span><button type="button" data-moment-adjust="end:-5">−5 s</button><button type="button" data-moment-adjust="end:5">+5 s</button>
-        </div>
-        <input type="text" name="note" maxlength="140" placeholder="Ex.: Golaco do Cunha" required autocomplete="off">
-        <p class="tracking-error" data-moment-error hidden></p>
-        <div class="moment-form-actions">
-          <button type="button" class="ghost-btn" data-moment-cancel>Cancelar</button>
-          <button type="submit" class="primary-btn">Guardar momento</button>
-        </div>
-      </form>
+      ${renderMomentForm()}
       <div data-moments-list>${renderMomentsList(game)}</div>
     </div>`;
 }
 
-// Liga o bloco de momentos a um leitor. getFrame devolve o iframe atual; playClip mostra um pedaco.
-function bindMomentsBlock(root, game, { getFrame, playClip }) {
-  const block = root?.querySelector("[data-moments]");
-  if (!block) return;
-  const form = block.querySelector("[data-moment-form]");
-  const windowLabel = block.querySelector("[data-moment-window]");
-  const errorBox = block.querySelector("[data-moment-error]");
+// Ecra cheio proprio (em vez do do YouTube) para se poder marcar momentos por cima do video.
+const STAGE_FS_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`;
+const STAGE_EXIT_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>`;
+
+function renderStageControls() {
+  return `
+    <button type="button" class="stage-btn stage-fs" data-stage-fullscreen aria-label="Ecra cheio">${STAGE_FS_ICON}</button>
+    ${canMarkMoments() ? `
+      <button type="button" class="stage-btn stage-mark" data-stage-mark aria-label="Marcar momento">🔖</button>
+      ${renderMomentForm("stage-form")}` : ""}`;
+}
+
+function isStageFullscreen(stage) {
+  return stage.classList.contains("is-fullscreen");
+}
+
+function setStageFullscreenUi(stage, active) {
+  stage.classList.toggle("is-fullscreen", active);
+  const button = stage.querySelector("[data-stage-fullscreen]");
+  if (button) {
+    button.innerHTML = active ? STAGE_EXIT_ICON : STAGE_FS_ICON;
+    button.setAttribute("aria-label", active ? "Sair do ecra cheio" : "Ecra cheio");
+  }
+  if (!active) stage.querySelector(".stage-form")?.classList.add("hidden");
+}
+
+async function toggleStageFullscreen(stage) {
+  const nativeElement = document.fullscreenElement || document.webkitFullscreenElement;
+  if (isStageFullscreen(stage)) {
+    if (nativeElement) {
+      await Promise.resolve((document.exitFullscreen || document.webkitExitFullscreen).call(document)).catch(() => {});
+    }
+    stage.classList.remove("pseudo-fullscreen");
+    document.body.classList.remove("stage-open");
+    setStageFullscreenUi(stage, false);
+    return;
+  }
+  const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
+  try {
+    if (!request) throw new Error("no fullscreen");
+    await request.call(stage);
+    screen.orientation?.lock?.("landscape").catch(() => {});
+  } catch {
+    // iPhone: sem ecra cheio para elementos; o video ocupa a pagina toda.
+    stage.classList.add("pseudo-fullscreen");
+    document.body.classList.add("stage-open");
+  }
+  setStageFullscreenUi(stage, true);
+}
+
+document.addEventListener("fullscreenchange", () => {
+  if (document.fullscreenElement) return;
+  document.querySelectorAll("[data-video-stage].is-fullscreen:not(.pseudo-fullscreen)").forEach((stage) => setStageFullscreenUi(stage, false));
+});
+document.addEventListener("webkitfullscreenchange", () => {
+  if (document.webkitFullscreenElement) return;
+  document.querySelectorAll("[data-video-stage].is-fullscreen:not(.pseudo-fullscreen)").forEach((stage) => setStageFullscreenUi(stage, false));
+});
+
+function bindVideoStage(stage) {
+  // Um re-render pode tirar da pagina um palco que estava em ecra cheio falso; limpa o estado da pagina.
+  if (!document.querySelector("[data-video-stage].pseudo-fullscreen")) document.body.classList.remove("stage-open");
+  if (!stage) return;
+  on(stage.querySelector("[data-stage-fullscreen]"), "click", () => toggleStageFullscreen(stage));
+}
+
+function exitStageFullscreen(stage) {
+  if (stage && isStageFullscreen(stage)) toggleStageFullscreen(stage);
+}
+
+// Liga um formulario de momento a um leitor. Devolve open() para o abrir com o tempo atual do video.
+function wireMomentForm(form, game, { getFrame, onSaved, resumeAfter = false }) {
+  const windowLabel = form.querySelector("[data-moment-window]");
+  const errorBox = form.querySelector("[data-moment-error]");
   let offsets = { before: BOOKMARK_BEFORE_S, after: BOOKMARK_AFTER_S };
   let youtubeId = null;
 
@@ -7385,6 +7467,68 @@ function bindMomentsBlock(root, game, { getFrame, playClip }) {
     errorBox.textContent = message;
     errorBox.hidden = !message;
   };
+  const close = () => {
+    form.classList.add("hidden");
+    showError("");
+    if (resumeAfter) sendVideoCommand(getFrame(), "playVideo");
+  };
+
+  on(form.moment, "input", updateWindow);
+  form.querySelectorAll("[data-moment-adjust]").forEach((button) => on(button, "click", () => {
+    const [edge, delta] = button.dataset.momentAdjust.split(":");
+    const change = Number(delta);
+    if (edge === "start") offsets.before = Math.min(60, Math.max(0, offsets.before - change));
+    else offsets.after = Math.min(60, Math.max(1, offsets.after + change));
+    updateWindow();
+  }));
+  on(form.querySelector("[data-moment-cancel]"), "click", close);
+  on(form, "submit", async (event) => {
+    event.preventDefault();
+    const moment = readMoment();
+    const note = form.note.value.trim();
+    if (moment == null) return showError("Escreve o momento como mm:ss (por exemplo 23:41).");
+    if (!note) return showError("Escreve um comentario curto.");
+    const submit = form.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+      await addVideoBookmark({
+        gameId: game.id,
+        youtubeId: youtubeId || getGameVideoParts(game.id)[0]?.youtubeId,
+        momentS: Math.round(moment * 10) / 10,
+        startS: Math.max(0, Math.floor(moment - offsets.before)),
+        endS: Math.ceil(moment + offsets.after),
+        note,
+      });
+      close();
+      onSaved();
+    } catch (error) {
+      showError(error.message || "Nao foi possivel guardar o momento.");
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  return {
+    open() {
+      const frame = getFrame();
+      youtubeId = frame?.dataset.youtubeId || getGameVideoParts(game.id)[0]?.youtubeId;
+      const now = getVideoCurrentTime(frame);
+      sendVideoCommand(frame, "pauseVideo");
+      offsets = { before: BOOKMARK_BEFORE_S, after: BOOKMARK_AFTER_S };
+      form.moment.value = now == null ? "" : formatVideoClock(now);
+      form.note.value = "";
+      showError(now == null ? "Nao consegui ler o tempo do video. Escreve o momento (mm:ss)." : "");
+      form.classList.remove("hidden");
+      updateWindow();
+      (now == null ? form.moment : form.note).focus();
+    },
+  };
+}
+
+// Liga o bloco de momentos a um leitor. getFrame devolve o iframe atual; playClip mostra um pedaco.
+function bindMomentsBlock(root, game, { getFrame, playClip }) {
+  const block = root?.querySelector("[data-moments]");
+  if (!block) return;
   const refreshList = () => {
     block.querySelector("[data-moments-list]").innerHTML = renderMomentsList(game);
     bindList();
@@ -7413,57 +7557,17 @@ function bindMomentsBlock(root, game, { getFrame, playClip }) {
     }));
   };
 
-  on(block.querySelector("[data-moment-mark]"), "click", () => {
-    const frame = getFrame();
-    youtubeId = frame?.dataset.youtubeId || getGameVideoParts(game.id)[0]?.youtubeId;
-    const now = getVideoCurrentTime(frame);
-    sendVideoCommand(frame, "pauseVideo");
-    offsets = { before: BOOKMARK_BEFORE_S, after: BOOKMARK_AFTER_S };
-    form.moment.value = now == null ? "" : formatVideoClock(now);
-    form.note.value = "";
-    showError(now == null ? "Nao consegui ler o tempo do video. Escreve o momento (mm:ss)." : "");
-    form.classList.remove("hidden");
-    updateWindow();
-    (now == null ? form.moment : form.note).focus();
-  });
-  on(form.moment, "input", updateWindow);
-  form.querySelectorAll("[data-moment-adjust]").forEach((button) => on(button, "click", () => {
-    const [edge, delta] = button.dataset.momentAdjust.split(":");
-    const change = Number(delta);
-    if (edge === "start") offsets.before = Math.min(60, Math.max(0, offsets.before - change));
-    else offsets.after = Math.min(60, Math.max(1, offsets.after + change));
-    updateWindow();
-  }));
-  on(block.querySelector("[data-moment-cancel]"), "click", () => {
-    form.classList.add("hidden");
-    showError("");
-  });
-  on(form, "submit", async (event) => {
-    event.preventDefault();
-    const moment = readMoment();
-    const note = form.note.value.trim();
-    if (moment == null) return showError("Escreve o momento como mm:ss (por exemplo 23:41).");
-    if (!note) return showError("Escreve um comentario curto.");
-    const submit = form.querySelector("button[type=submit]");
-    submit.disabled = true;
-    try {
-      await addVideoBookmark({
-        gameId: game.id,
-        youtubeId: youtubeId || getGameVideoParts(game.id)[0]?.youtubeId,
-        momentS: Math.round(moment * 10) / 10,
-        startS: Math.max(0, Math.floor(moment - offsets.before)),
-        endS: Math.ceil(moment + offsets.after),
-        note,
-      });
-      form.classList.add("hidden");
-      showError("");
-      refreshList();
-    } catch (error) {
-      showError(error.message || "Nao foi possivel guardar o momento.");
-    } finally {
-      submit.disabled = false;
-    }
-  });
+  const mainForm = block.querySelector("[data-moment-form]");
+  if (mainForm) {
+    const main = wireMomentForm(mainForm, game, { getFrame, onSaved: refreshList });
+    on(block.querySelector("[data-moment-mark]"), "click", () => main.open());
+  }
+  const stage = getFrame()?.closest("[data-video-stage]");
+  const stageForm = stage?.querySelector(".stage-form");
+  if (stageForm) {
+    const overlay = wireMomentForm(stageForm, game, { getFrame, onSaved: refreshList, resumeAfter: true });
+    on(stage.querySelector("[data-stage-mark]"), "click", () => overlay.open());
+  }
   bindList();
 }
 
@@ -7487,10 +7591,13 @@ function renderGameVideoSection(game) {
           <div class="tracking-pitch-tabs game-video-parts" role="group" aria-label="Parte do vídeo">
             ${parts.map((v, i) => `<button type="button" class="${i === 0 ? "active" : ""}" data-video-part="${escapeHtml(v.youtubeId)}" aria-pressed="${i === 0}">${escapeHtml(v.label || `Parte ${i + 1}`)}</button>`).join("")}
           </div>` : ""}
-        <div class="game-video-frame">
-          <iframe data-game-video data-youtube-id="${escapeHtml(first.youtubeId)}" src="${gameVideoEmbedUrl(first.youtubeId, first.videoStartS)}"
-            title="Vídeo do jogo" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+        <div class="video-stage" data-video-stage>
+          <div class="game-video-frame">
+            <iframe data-game-video data-youtube-id="${escapeHtml(first.youtubeId)}" src="${gameVideoEmbedUrl(first.youtubeId, first.videoStartS)}"
+              title="Vídeo do jogo" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+          </div>
+          ${renderStageControls()}
         </div>
         <p class="tracking-fineprint">Vídeo não listado no YouTube: só quem tem a ligação o encontra.${getTrackingEntry(game.id) ? " Os tempos com ▶ na análise abaixo saltam para esse momento." : ""}</p>
         ${renderMomentsBlock(game)}` : `
@@ -7553,6 +7660,7 @@ function bindGameVideoSection(game, container) {
   const frame = section.querySelector("[data-game-video]");
   frame?.addEventListener("load", () => { frame.dataset.ready = "1"; });
   listenToVideoClock(frame);
+  bindVideoStage(section.querySelector("[data-video-stage]"));
   bindMomentsBlock(section, game, {
     getFrame: () => frame,
     playClip: (item) => {
