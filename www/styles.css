@@ -4177,3 +4177,249 @@ th.stat-col {
 .non-admin-mode #view-today:not(.show-generator) .game-panel .panel-head .eyebrow {
   display: none;
 }
+
+/* Momentos (bookmarks) nos videos */
+.moments {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.moments-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.moments-head h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.moments-hint,
+.moments-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.moment-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(89, 176, 255, .35);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--accent-soft);
+}
+
+.moment-form.hidden {
+  display: none;
+}
+
+.moment-form-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+.moment-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.moment-form input[type="text"] {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: rgba(3, 8, 18, .6);
+  font-size: 15px;
+  outline: none;
+}
+
+.moment-form input[name="moment"] {
+  width: 96px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.moment-form input:focus {
+  border-color: rgba(89, 176, 255, .75);
+}
+
+.moment-window {
+  color: #8cc4ff;
+  font-size: 13px;
+  font-weight: 700;
+  padding-bottom: 10px;
+}
+
+.moment-adjust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.moment-adjust button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.moment-adjust span + button {
+  margin-left: 2px;
+}
+
+.moment-adjust button + span {
+  margin-left: 8px;
+}
+
+.moment-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.moments-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moment-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color .18s ease;
+}
+
+.moment-item:hover {
+  border-color: rgba(89, 176, 255, .45);
+}
+
+.moment-play {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.moment-time {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #cfe3ff;
+  background: var(--accent-soft);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.moment-text {
+  display: grid;
+  min-width: 0;
+}
+
+.moment-text strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.moment-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.moment-delete {
+  min-width: 32px;
+  height: 32px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 16px;
+}
+
+.moment-delete:hover,
+.moment-delete.confirming {
+  color: #ff9aa0;
+  background: rgba(255, 93, 102, .12);
+}
+
+.moment-delete.confirming {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Galeria: filtro Jogos / Highlights */
+.gallery-filter {
+  display: flex;
+  gap: 4px;
+}
+
+.gallery-filter span {
+  margin-left: 4px;
+  opacity: .7;
+}
+
+.gallery-moments {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: #fff;
+  background: rgba(3, 6, 14, .75);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.highlight-note {
+  font-family: var(--font-body) !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+  overflow-wrap: anywhere;
+}
+
+#video-lightbox-moments:empty {
+  display: none;
+}
+
+.video-lightbox-card {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+}

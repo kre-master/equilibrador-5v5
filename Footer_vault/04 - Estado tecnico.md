@@ -447,3 +447,12 @@ Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql`
 - No telemovel (< 760px) os separadores ficam numa barra fixa em baixo, com icones.
 - Galeria (`renderGallery`): jogos com video agrupados por mes, miniatura do YouTube e leitor em janela (`#video-lightbox`) com partes e atalho para o jogo. Precisa de sessao, como os videos do historico.
 - Cache-buster JS/CSS: `20261015-nav1`.
+
+## 2026-10-15 - Momentos (bookmarks) nos videos e Highlights
+
+- Qualquer jogador com conta marca um momento no video (historico do jogo e leitor da Galeria) com um comentario curto. O pedaco guardado vai de 5 s antes a 5 s depois, ajustavel em passos de 5 s.
+- O tempo atual vem do leitor do YouTube por postMessage (`listenToVideoClock` / `getVideoCurrentTime`); se nao der para ler, o utilizador escreve o momento em mm:ss.
+- Tocar num momento recarrega o leitor com `start`/`end` (`gameVideoEmbedUrl(..., end)`), por isso so toca esse pedaco.
+- Tabela `game_video_bookmarks` em `supabase/bookmarks-migration.sql` (RLS: autenticados leem, cada um insere os seus, apaga os seus; admin apaga qualquer um). Sem a tabela, os momentos ficam no dispositivo (`footer-video-bookmarks-v1`).
+- Galeria tem filtro Jogos / Highlights; Highlights lista os momentos mais recentes e abre o leitor so no pedaco.
+- Cache-buster JS/CSS: `20261015-moments1`.
