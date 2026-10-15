@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261012-vel2s">
+    <link rel="stylesheet" href="styles.css?v=20261015-nav1">
   </head>
   <body>
     <div class="app-shell">
@@ -21,24 +21,54 @@
             <img class="brand-logo" src="assets/footer-logo.png?v=20260709-statsfinance1" width="48" height="48" alt="">
             <h1>Footer</h1>
           </div>
-          <div class="account-bar">
-            <span id="data-status">Modo local</span>
-            <button id="admin-login" class="ghost-btn">Entrar</button>
-            <button id="account-signup" class="ghost-btn">Criar conta</button>
-            <button id="admin-logout" class="ghost-btn hidden">Sair</button>
+          <div class="account-menu" id="account-menu">
+            <button id="account-menu-btn" class="account-chip" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-dropdown">
+              <span class="account-avatar" id="account-avatar" aria-hidden="true">?</span>
+              <span class="account-chip-text">
+                <strong id="account-name">Entrar</strong>
+                <small id="data-status">Modo local</small>
+              </span>
+            </button>
+            <div class="account-dropdown hidden" id="account-dropdown" role="menu">
+              <button id="my-profile-tab" class="menu-item hidden" type="button" role="menuitem" data-view="player-profile">Meu perfil</button>
+              <button class="menu-item" type="button" role="menuitem" data-view="account">Conta</button>
+              <button id="switch-account" class="menu-item hidden" type="button" role="menuitem">Trocar conta</button>
+              <button id="admin-login" class="menu-item" type="button" role="menuitem">Entrar</button>
+              <button id="account-signup" class="menu-item" type="button" role="menuitem">Criar conta</button>
+              <button id="admin-logout" class="menu-item menu-danger hidden" type="button" role="menuitem">Sair</button>
+            </div>
           </div>
         </div>
         <nav class="tabs" aria-label="Seccoes">
-          <button class="tab active" data-view="events">Convocatoria</button>
-          <button class="tab" data-view="today">Gerar</button>
-          <button class="tab" data-view="account">Conta</button>
-          <button id="my-profile-tab" class="tab hidden" data-view="player-profile">Meu perfil</button>
-          <button class="tab" data-view="players">Jogadores</button>
-          <button class="tab" data-view="stats">Stats</button>
-          <button class="tab" data-view="monthly">Resumo mensal</button>
-          <button class="tab admin-only" data-view="payments">Pagamentos</button>
-          <button class="tab admin-only" data-view="claims">Pedidos</button>
-          <button class="tab" data-view="games">Historico</button>
+          <button class="tab active" type="button" data-view="events">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg>
+            <span>Jogo</span>
+          </button>
+          <button class="tab" type="button" data-view="games">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            <span>Historico</span>
+          </button>
+          <button class="tab" type="button" data-view="gallery">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z"/></svg>
+            <span>Galeria</span>
+          </button>
+          <button class="tab" type="button" data-view="stats">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
+            <span>Stats</span>
+          </button>
+          <button class="tab admin-only" type="button" data-view="payments">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>
+            <span>Admin</span>
+          </button>
+        </nav>
+        <nav class="subtabs hidden" data-group="stats" aria-label="Stats">
+          <button class="subtab" type="button" data-view="stats">Hall of Fame</button>
+          <button class="subtab" type="button" data-view="players">Jogadores</button>
+          <button class="subtab" type="button" data-view="monthly">O meu mes</button>
+        </nav>
+        <nav class="subtabs hidden" data-group="admin" aria-label="Admin">
+          <button class="subtab" type="button" data-view="payments">Pagamentos</button>
+          <button class="subtab" type="button" data-view="claims">Pedidos</button>
         </nav>
       </header>
 
@@ -58,13 +88,13 @@
               <div id="events-list" class="events-list"></div>
             </section>
 
-            <section class="panel">
-              <div class="panel-head">
+            <details class="panel new-game-panel admin-only">
+              <summary class="panel-head">
                 <div>
                   <p class="eyebrow">Admin</p>
-                  <h2>Lancar jogo</h2>
+                  <h2>+ Novo jogo</h2>
                 </div>
-              </div>
+              </summary>
               <form id="event-form" class="event-form">
                 <input id="event-title" required placeholder="Nome do jogo">
                 <input id="event-date" type="datetime-local" required>
@@ -72,11 +102,18 @@
                 <input id="event-max-players" type="number" min="10" max="12" value="12" placeholder="Max. jogadores">
                 <button class="primary-btn" type="submit">Lancar evento</button>
               </form>
-            </section>
+            </details>
           </div>
         </section>
 
-        <section class="view" id="view-today">
+        <section class="view active" id="view-today">
+          <div class="section-divider" id="generate-anchor">
+            <div>
+              <p class="eyebrow">Equipas</p>
+              <h2>Gerar equipas</h2>
+            </div>
+            <button id="toggle-generator" class="ghost-btn non-admin-only" type="button" aria-expanded="false">Experimentar gerar equipas</button>
+          </div>
           <div class="layout-grid">
             <section class="panel selection-panel">
               <div class="panel-head">
@@ -305,6 +342,18 @@
           </section>
         </section>
 
+        <section class="view" id="view-gallery">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Videos dos jogos</p>
+                <h2>Galeria</h2>
+              </div>
+            </div>
+            <div id="gallery-panel" class="gallery-panel"></div>
+          </section>
+        </section>
+
         <section class="view" id="view-history-game">
           <section class="panel wide-panel">
             <div id="history-game-detail" class="history-game-detail"></div>
@@ -383,6 +432,24 @@
       </form>
     </div>
 
+    <div id="video-lightbox" class="auth-modal video-lightbox hidden" role="dialog" aria-modal="true" aria-labelledby="video-lightbox-title">
+      <div class="auth-modal-backdrop" data-close-video></div>
+      <div class="video-lightbox-card">
+        <div class="video-lightbox-head">
+          <div>
+            <p class="eyebrow" id="video-lightbox-eyebrow"></p>
+            <h2 id="video-lightbox-title"></h2>
+          </div>
+          <button type="button" class="auth-close" data-close-video aria-label="Fechar">&times;</button>
+        </div>
+        <div class="game-video-parts tracking-pitch-tabs hidden" id="video-lightbox-parts" role="group" aria-label="Parte do video"></div>
+        <div class="game-video-frame" id="video-lightbox-frame"></div>
+        <div class="video-lightbox-actions">
+          <button type="button" class="ghost-btn" id="video-lightbox-open-game">Ver jogo e analise</button>
+        </div>
+      </div>
+    </div>
+
     <canvas id="export-canvas" width="1600" height="2200" hidden></canvas>
     <script src="app-config.js?v=20260723-statsrankings1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -390,6 +457,6 @@
     <script src="postgame-feedback.js?v=20260913-feedbackonly1"></script>
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="app.js?v=20261012-vel2s"></script>
+    <script src="app.js?v=20261015-nav1"></script>
   </body>
 </html>

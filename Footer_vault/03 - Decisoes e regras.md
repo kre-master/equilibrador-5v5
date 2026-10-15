@@ -169,3 +169,8 @@ O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir t
 - Tema oficial desde 2026-10-10: "Holofote" (escuro, estadio a noite, azul da chama do logo como cor de destaque). Escolhido entre seis propostas.
 - Novas cores devem usar os tokens de `:root` em `styles.css`; azul para accao/seleccao, verde so para estados positivos, laranja/vermelho para alertas e equipa B.
 - Campo e cartas FIFA mantem as cores proprias.
+
+## Navegacao
+
+- Desde 2026-10-15: quatro separadores para todos (Jogo, Historico, Galeria, Stats) e Admin so para admins. Novas vistas devem entrar num destes grupos (`VIEW_GROUPS`) em vez de criar mais separadores.
+- Conta e perfil vivem no menu do avatar, nao na barra de separadores.

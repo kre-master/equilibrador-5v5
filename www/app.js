@@ -833,6 +833,7 @@ function bindEvents() {
   on(els.adminLogout, "click", adminLogout);
   bindLoginModal();
   bindSignupModal();
+  bindNavigation();
   on(els.eventForm, "submit", saveEventFromForm);
   on(els.loadEventGoing, "click", loadCurrentEventGoingPlayers);
   on(els.monthlyMonth, "change", () => { currentMonthlyMonth = els.monthlyMonth.value; renderMonthlyRecap(); });
@@ -1145,6 +1146,7 @@ function updateAccessUi(message) {
   if (els.accountSignup) els.accountSignup.classList.toggle("hidden", Boolean(currentSession) || !remoteEnabled);
   if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !currentSession);
   if (els.myProfileTab) els.myProfileTab.classList.toggle("hidden", !linkedPlayer);
+  updateAccountMenu();
 }
 
 function adminLogin() {
@@ -1567,17 +1569,212 @@ function on(element, eventName, handler) {
   if (element) element.addEventListener(eventName, handler);
 }
 
+// Separadores principais agrupam varias vistas. "Jogo" mostra a convocatoria e o gerar na mesma pagina.
+const VIEW_GROUPS = {
+  events: "game",
+  today: "game",
+  games: "history",
+  "history-game": "history",
+  gallery: "gallery",
+  stats: "stats",
+  players: "stats",
+  monthly: "stats",
+  payments: "admin",
+  claims: "admin",
+};
+
 function showView(viewName, options = {}) {
-  if (viewName !== "today") {
+  const group = VIEW_GROUPS[viewName] || viewName;
+  if (group !== "game") {
     previewGame = null;
   }
   currentViewName = viewName;
-  const activeTabName = viewName === "history-game" ? "games" : viewName;
-  els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === activeTabName));
-  els.views.forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
+  const visibleViews = group === "game" ? ["events", "today"] : [viewName];
+  els.tabs.forEach((tab) => tab.classList.toggle("active", VIEW_GROUPS[tab.dataset.view] === group));
+  els.views.forEach((view) => view.classList.toggle("active", visibleViews.includes(view.id.replace(/^view-/, ""))));
+  document.querySelectorAll(".subtabs").forEach((nav) => nav.classList.toggle("hidden", nav.dataset.group !== group));
+  document.querySelectorAll(".subtab").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
+  if (viewName === "today") {
+    // Vindo de "abrir jogo" ou de importar confirmados: leva o utilizador ate as equipas.
+    requestAnimationFrame(() => document.querySelector("#generate-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
   if (navigationHistoryReady && options.push !== false) {
     pushNavigationState();
   }
+}
+
+function toggleAccountMenu(force) {
+  const dropdown = document.querySelector("#account-dropdown");
+  const button = document.querySelector("#account-menu-btn");
+  if (!dropdown || !button) return;
+  const open = typeof force === "boolean" ? force : dropdown.classList.contains("hidden");
+  dropdown.classList.toggle("hidden", !open);
+  button.setAttribute("aria-expanded", String(open));
+}
+
+function bindNavigation() {
+  document.querySelectorAll(".subtab").forEach((button) => on(button, "click", () => showView(button.dataset.view)));
+  on(document.querySelector("#account-menu-btn"), "click", (event) => {
+    event.stopPropagation();
+    toggleAccountMenu();
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#account-menu")) toggleAccountMenu(false);
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") toggleAccountMenu(false);
+  });
+  document.querySelectorAll("#account-dropdown .menu-item").forEach((item) => on(item, "click", () => toggleAccountMenu(false)));
+  document.querySelectorAll("#account-dropdown .menu-item[data-view]").forEach((item) => on(item, "click", () => {
+    if (item === els.myProfileTab) {
+      const linkedPlayer = getLinkedPlayer();
+      if (linkedPlayer) openPlayerProfile(linkedPlayer.id);
+      return;
+    }
+    showView(item.dataset.view);
+  }));
+  on(document.querySelector("#switch-account"), "click", async () => {
+    await adminLogout();
+    openLoginModal();
+  });
+  on(document.querySelector("#toggle-generator"), "click", (event) => {
+    const view = document.querySelector("#view-today");
+    const open = !view.classList.contains("show-generator");
+    view.classList.toggle("show-generator", open);
+    event.currentTarget.setAttribute("aria-expanded", String(open));
+    event.currentTarget.textContent = open ? "Esconder gerador" : "Experimentar gerar equipas";
+  });
+  bindVideoLightbox();
+}
+
+function updateAccountMenu() {
+  const name = document.querySelector("#account-name");
+  const avatar = document.querySelector("#account-avatar");
+  const linkedPlayer = getLinkedPlayer();
+  const label = currentSession
+    ? currentProfile?.display_name || linkedPlayer?.name || currentProfile?.username || "Conta"
+    : remoteEnabled ? "Entrar" : "Footer";
+  if (name) name.textContent = label;
+  if (avatar) avatar.textContent = currentSession ? initials(label) : "?";
+  document.querySelector("#switch-account")?.classList.toggle("hidden", !currentSession);
+}
+
+// ---- Galeria: todos os jogos com video, no mesmo leitor do historico ----
+let galleryGameId = null;
+
+function getGalleryGames() {
+  return state.games
+    .filter((game) => getGameVideoParts(game.id).length)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function renderGallery() {
+  const panel = document.querySelector("#gallery-panel");
+  if (!panel) return;
+  if (remoteEnabled && !currentSession?.user) {
+    panel.innerHTML = `<div class="empty-state">Entra na tua conta para veres os videos do grupo.</div>`;
+    return;
+  }
+  const games = getGalleryGames();
+  if (!games.length) {
+    panel.innerHTML = `<div class="empty-state">Ainda nao ha videos. Quando o admin juntar o video de um jogo no historico, aparece aqui.</div>`;
+    return;
+  }
+  const byMonth = new Map();
+  games.forEach((game) => {
+    const date = new Date(game.date);
+    const key = Number.isNaN(date.getTime()) ? "Sem data" : date.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(game);
+  });
+  panel.innerHTML = [...byMonth.entries()].map(([month, monthGames]) => `
+    <section class="gallery-month">
+      <h3>${escapeHtml(month)}</h3>
+      <div class="gallery-grid">
+        ${monthGames.map((game) => {
+          const parts = getGameVideoParts(game.id);
+          return `
+            <button type="button" class="gallery-card" data-gallery-game="${escapeHtml(game.id)}">
+              <span class="gallery-thumb">
+                <img src="https://i.ytimg.com/vi/${encodeURIComponent(parts[0].youtubeId)}/hqdefault.jpg" alt="" loading="lazy">
+                <span class="gallery-play" aria-hidden="true"></span>
+                ${parts.length > 1 ? `<span class="gallery-parts">${parts.length} partes</span>` : ""}
+              </span>
+              <span class="gallery-meta">
+                <strong>${escapeHtml(getGameResultText(game))}</strong>
+                <small>${escapeHtml(formatDate(game.date))}</small>
+                <small class="gallery-title">${escapeHtml(getGameTitle(game))}</small>
+              </span>
+            </button>`;
+        }).join("")}
+      </div>
+    </section>`).join("");
+  panel.querySelectorAll("[data-gallery-game]").forEach((button) => on(button, "click", () => openVideoLightbox(button.dataset.galleryGame)));
+}
+
+function playLightboxPart(index, youtubeId, start = 0) {
+  const frame = document.querySelector("#video-lightbox-frame");
+  if (!frame) return;
+  frame.innerHTML = `<iframe src="${gameVideoEmbedUrl(youtubeId, start, true)}" title="Video do jogo"
+    referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+  document.querySelectorAll("#video-lightbox-parts [data-lightbox-part]").forEach((button) => {
+    const active = Number(button.dataset.lightboxIndex) === index;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function openVideoLightbox(gameId) {
+  const game = state.games.find((item) => item.id === gameId);
+  const parts = game ? getGameVideoParts(game.id) : [];
+  const modal = document.querySelector("#video-lightbox");
+  if (!game || !parts.length || !modal) return;
+  galleryGameId = game.id;
+  document.querySelector("#video-lightbox-eyebrow").textContent = `${formatDate(game.date)} · ${getGameTitle(game)}`;
+  document.querySelector("#video-lightbox-title").textContent = getGameResultText(game);
+  const partsNav = document.querySelector("#video-lightbox-parts");
+  partsNav.classList.toggle("hidden", parts.length < 2);
+  partsNav.innerHTML = parts.map((part, index) => `
+    <button type="button" data-lightbox-index="${index}" data-lightbox-part="${escapeHtml(part.youtubeId)}" data-lightbox-start="${part.videoStartS || 0}" aria-pressed="false">${escapeHtml(part.label || `Parte ${index + 1}`)}</button>`).join("");
+  partsNav.querySelectorAll("[data-lightbox-part]").forEach((button) => on(button, "click", () => {
+    playLightboxPart(Number(button.dataset.lightboxIndex), button.dataset.lightboxPart, Number(button.dataset.lightboxStart) || 0);
+  }));
+  playLightboxPart(0, parts[0].youtubeId, parts[0].videoStartS || 0);
+  modal.classList.remove("hidden");
+  document.body.classList.add("mvp-gate-open");
+}
+
+function closeVideoLightbox() {
+  const modal = document.querySelector("#video-lightbox");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  document.body.classList.remove("mvp-gate-open");
+  // Remove o iframe para o video parar.
+  const frame = document.querySelector("#video-lightbox-frame");
+  if (frame) frame.innerHTML = "";
+}
+
+function bindVideoLightbox() {
+  document.querySelectorAll("[data-close-video]").forEach((el) => on(el, "click", closeVideoLightbox));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeVideoLightbox();
+  });
+  on(document.querySelector("#video-lightbox-open-game"), "click", () => {
+    const game = state.games.find((item) => item.id === galleryGameId);
+    closeVideoLightbox();
+    if (!game) return;
+    if (isFinishedGame(game)) {
+      currentHistoryGameId = game.id;
+      currentGameId = null;
+      showView("history-game");
+      renderHistoryGameDetail();
+      return;
+    }
+    currentGameId = game.id;
+    currentHistoryGameId = null;
+    showView("today");
+    renderCurrentGame();
+  });
 }
 
 function setupNavigationHistory() {
@@ -1633,6 +1830,7 @@ function render() {
   renderCurrentGame();
   renderGamesList();
   renderHistoryGameDetail();
+  renderGallery();
   renderAccountPanel();
   renderClaimsList();
   renderAccountsList();

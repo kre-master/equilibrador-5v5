@@ -3768,3 +3768,412 @@ th.stat-col {
 .tracking-sprint-links small { color: var(--muted); }
 .tracking-rhythm [data-video-seek] { cursor: pointer; }
 .tracking-rhythm rect[data-video-seek]:hover { fill-opacity: .7; }
+
+/* ===== Navegacao reorganizada: separadores com icone, sub-separadores e menu de conta ===== */
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.subtabs {
+  display: flex;
+  align-self: flex-start;
+  gap: 4px;
+  margin-top: -4px;
+}
+
+.subtabs.hidden {
+  display: none;
+}
+
+.subtab {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.subtab:hover {
+  color: var(--ink);
+}
+
+.subtab.active {
+  color: #cfe3ff;
+  border-color: rgba(89, 176, 255, .45);
+  background: var(--accent-soft);
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 240px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 14px 5px 5px;
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+}
+
+.account-chip:hover,
+.account-chip[aria-expanded="true"] {
+  border-color: rgba(89, 176, 255, .5);
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(89, 176, 255, .45);
+  color: #cfe0ff;
+  background: linear-gradient(160deg, #1b3363, #0f1d3a);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.account-chip-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.account-chip-text strong,
+.account-chip-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-chip-text strong {
+  font-size: 13px;
+}
+
+.account-chip-text small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.account-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 2px;
+  min-width: 200px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 6px;
+  background: var(--surface-opaque);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .55);
+}
+
+.account-dropdown.hidden {
+  display: none;
+}
+
+.menu-item {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: transparent;
+  font-weight: 600;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: var(--accent-soft);
+}
+
+.menu-danger {
+  color: #ff9aa0;
+}
+
+/* Jogo: convocatoria + gerar na mesma pagina */
+#view-events.active + #view-today.active {
+  margin-top: 28px;
+}
+
+.section-divider {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 4px;
+  scroll-margin-top: 16px;
+}
+
+.non-admin-mode #view-today:not(.show-generator) .selection-panel,
+.non-admin-mode #view-today:not(.show-generator) .suggestions-panel {
+  display: none;
+}
+
+.non-admin-mode #view-today:not(.show-generator) .game-panel {
+  grid-column: 1 / -1;
+}
+
+.new-game-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 0;
+}
+
+.new-game-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.new-game-panel[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Galeria */
+.gallery-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.gallery-month h3 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.gallery-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 8px 8px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.gallery-card:hover,
+.gallery-card:focus-visible {
+  border-color: rgba(89, 176, 255, .55);
+  box-shadow: 0 0 24px rgba(59, 140, 255, .22);
+  transform: translateY(-2px);
+}
+
+.gallery-thumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: #000;
+}
+
+.gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: .88;
+}
+
+.gallery-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  box-shadow: var(--accent-glow);
+}
+
+.gallery-play::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 54%;
+  border-style: solid;
+  border-width: 9px 0 9px 15px;
+  border-color: transparent transparent transparent #fff;
+  transform: translate(-50%, -50%);
+}
+
+.gallery-parts {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: #fff;
+  background: rgba(3, 6, 14, .75);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.gallery-meta {
+  display: grid;
+  gap: 2px;
+  padding: 0 4px;
+  min-width: 0;
+}
+
+.gallery-meta strong {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gallery-meta small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-lightbox-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 12px;
+  width: min(100%, 980px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border: 1px solid rgba(89, 176, 255, .3);
+  border-radius: 22px;
+  padding: 18px;
+  background: var(--surface-opaque);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+}
+
+.video-lightbox-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.video-lightbox-head .auth-close {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.video-lightbox-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.game-video-parts.hidden {
+  display: none;
+}
+
+/* Telemovel: separadores numa barra fixa em baixo, como numa app */
+@media (max-width: 760px) {
+  .app-shell {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .tabs {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    justify-content: space-around;
+    gap: 2px;
+    width: auto;
+    overflow: visible;
+    border-radius: 22px;
+    padding: 6px;
+    background: rgba(8, 15, 30, .92);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+  }
+
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+    min-height: 54px;
+    border-radius: 16px;
+    padding: 6px 2px;
+    font-size: 11px;
+  }
+
+  .tab svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .subtabs {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-top: 0;
+  }
+
+  .subtabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subtab {
+    flex: 0 0 auto;
+  }
+
+  .account-chip {
+    padding-right: 5px;
+  }
+
+  .account-chip-text {
+    display: none;
+  }
+
+  .gallery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-lightbox {
+    padding: 10px;
+  }
+
+  .video-lightbox-card {
+    padding: 14px;
+  }
+}
+
+.non-admin-mode #view-today:not(.show-generator) .game-panel .panel-head .eyebrow {
+  display: none;
+}

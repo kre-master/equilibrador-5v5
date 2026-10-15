@@ -437,3 +437,13 @@ Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql`
 - PNG exportado (`drawGameCanvas` em `app.js`) segue o mesmo tema: fundo escuro, placard azul e fontes do tema.
 - `theme-color` e manifest passaram a `#05080f`. Barra de estado Android/iOS nao foi alterada.
 - Cache-buster JS/CSS: `20261010-holofote1`.
+
+## 2026-10-15 - Navegacao reorganizada e Galeria
+
+- Separadores principais: Jogo (convocatoria + gerar na mesma pagina), Historico, Galeria, Stats (sub-separadores Hall of Fame, Jogadores, O meu mes) e Admin (Pagamentos, Pedidos; so admin).
+- `VIEW_GROUPS` em `app.js` liga cada vista ao separador; as vistas `events` e `today` continuam a existir e aparecem juntas. `showView("today")` faz scroll ate `#generate-anchor`.
+- Para nao-admins, os passos 1 e 2 do gerador ficam escondidos ate carregarem em "Experimentar gerar equipas"; o jogo confirmado continua visivel.
+- Conta, Meu perfil, Trocar conta, Entrar, Criar conta e Sair passaram para o menu do avatar no topo.
+- No telemovel (< 760px) os separadores ficam numa barra fixa em baixo, com icones.
+- Galeria (`renderGallery`): jogos com video agrupados por mes, miniatura do YouTube e leitor em janela (`#video-lightbox`) com partes e atalho para o jogo. Precisa de sessao, como os videos do historico.
+- Cache-buster JS/CSS: `20261015-nav1`.
