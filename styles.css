@@ -4754,3 +4754,497 @@ body.stage-open .profile-section {
     bottom: auto;
   }
 }
+
+/* ===== Perfil do jogador: identidade, periodo, resumo e detalhe ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pp-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pp-card-thumb {
+  flex: 0 0 auto;
+  width: 112px;
+  aspect-ratio: 733 / 1024;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  filter: drop-shadow(0 10px 24px rgba(59, 140, 255, .28));
+  transition: transform .18s ease;
+}
+
+.pp-card-thumb:hover,
+.pp-card-thumb:focus-visible {
+  transform: translateY(-3px) rotate(-1.5deg);
+}
+
+.pp-card-thumb .player-card {
+  height: 100%;
+}
+
+.pp-identity {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pp-identity h2 {
+  font-size: clamp(34px, 6vw, 52px);
+  line-height: .95;
+  overflow-wrap: anywhere;
+}
+
+.pp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.pp-ovr {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pp-ovr b {
+  color: #8cc4ff;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 900;
+  text-shadow: 0 0 16px rgba(89, 176, 255, .45);
+}
+
+.pp-last5 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-last5 small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.pp-periods {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pp-month select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 34px 0 14px;
+  color: var(--muted);
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.pp-month.active select {
+  color: #cfe3ff;
+  border-color: rgba(89, 176, 255, .55);
+  background: var(--accent-soft);
+}
+
+.pp-summary {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(89, 176, 255, .22);
+  border-radius: 22px;
+  padding: 18px;
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgba(59, 140, 255, .14), transparent 60%),
+    var(--surface);
+}
+
+.pp-record {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 22px;
+}
+
+.pp-record-item {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pp-record-item b,
+.pp-record-item i {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.pp-record-item i {
+  color: var(--muted);
+  font-size: 22px;
+}
+
+.pp-wdl b.win { color: var(--green); }
+.pp-wdl b.draw { color: #c3cee3; }
+.pp-wdl b.loss { color: var(--orange); }
+
+.pp-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pp-kpi {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(3, 8, 18, .35);
+}
+
+.pp-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.pp-kpi-info {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.pp-kpi-info:hover {
+  color: var(--ink);
+  border-color: rgba(89, 176, 255, .5);
+}
+
+.pp-kpi-value {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-kpi-value small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pp-kpi-none {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pp-kpi-cover {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pp-kpi-action {
+  justify-self: start;
+  border: 0;
+  padding: 2px 0;
+  color: var(--accent-2);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pp-kpi-action:hover {
+  text-decoration: underline;
+}
+
+.pp-kpi-note {
+  margin: 4px 0 0;
+  color: #c3cee3;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pp-highlight {
+  display: grid;
+  gap: 4px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+}
+
+.pp-highlight p {
+  margin: 0;
+  color: #dbe8ff;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.pp-beta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pp-beta .tracking-badge {
+  margin-right: 6px;
+}
+
+.pp-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pp-extras small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pp-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.pp-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.pp-tabs .subtab {
+  flex: 0 0 auto;
+}
+
+.pp-tab-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.pp-tab-panel[hidden] {
+  display: none;
+}
+
+.pp-games {
+  display: grid;
+  gap: 10px;
+}
+
+.pp-game {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.pp-game-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.pp-game-date {
+  display: grid;
+  justify-items: center;
+  min-width: 46px;
+  border: 1px solid rgba(89, 176, 255, .45);
+  border-radius: 12px;
+  padding: 4px 8px;
+  color: #8cc4ff;
+  line-height: 1;
+}
+
+.pp-game-date b {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pp-game-date small {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pp-game-main {
+  display: grid;
+  min-width: 0;
+}
+
+.pp-game-main strong {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pp-game-main small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pp-outcome {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 13px;
+  color: #c3cee3;
+  background: rgba(138, 155, 187, .18);
+}
+
+.pp-outcome.win { color: #7fe6b8; background: rgba(52, 199, 138, .18); }
+.pp-outcome.loss { color: #ffbe8f; background: rgba(255, 154, 77, .18); }
+
+.pp-mvp {
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: #1a1408;
+  background: linear-gradient(135deg, #f8e491, #d4ab45);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pp-game-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pp-game-metrics span {
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--muted);
+  background: rgba(3, 8, 18, .4);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pp-game-metrics b {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.pp-game-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pp-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pp-game-actions .ghost-btn {
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.pp-game-detail > summary {
+  cursor: pointer;
+  color: var(--accent-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pp-game-detail[open] > summary {
+  margin-bottom: 10px;
+}
+
+.pp-card-modal-body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 10px;
+}
+
+.pp-card-modal-body .player-card-profile {
+  width: min(320px, 78vw);
+}
+
+.pp-card-modal-body .auth-close {
+  top: 0;
+  right: 0;
+}
+
+@media (max-width: 760px) {
+  .pp-hero {
+    gap: 14px;
+  }
+
+  .pp-card-thumb {
+    width: 92px;
+  }
+
+  .pp-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pp-kpi-value {
+    font-size: 36px;
+  }
+
+  .pp-summary {
+    padding: 14px;
+  }
+}
+
+.pp-wdl b + b {
+  margin-left: .35em;
+}

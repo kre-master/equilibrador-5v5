@@ -457,3 +457,13 @@ Quando forem adicionadas novas tabelas ou politicas, rever `supabase/schema.sql`
 - Galeria tem filtro Jogos / Highlights; Highlights agrupa os momentos por jogo (cabecalho com data, resultado e numero de momentos) e abre o leitor so no pedaco.
 - Cache-buster JS/CSS: `20261015-moments2`.
 - Ecra cheio proprio (`data-video-stage`, botao ⛶ no canto do video): o do YouTube fica desligado (`fs=0`) para se poder marcar momentos por cima. Em ecra cheio aparece o botao 🔖 semi-transparente; o formulario abre translucido sobre o video e o video continua depois de guardar. No iPhone (sem Fullscreen API para elementos) o palco ocupa a pagina toda (`pseudo-fullscreen`). Botao "Ecra cheio" por baixo do video (os cantos do leitor sao do YouTube); em ecra cheio, sair e 🔖 ficam a meio da direita. Cache-buster `20261015-stage2`.
+
+## 2026-10-21 - Perfil do jogador (fase 1 do revamp)
+
+- O perfil e a pagina principal do jogador: miniatura da carta (abre a carta completa e a colecao), seletor de periodo (mes, 3 meses, epoca set-ago, tudo), resumo com presencas, V/E/D e MVP, quatro indicadores (distancia, ritmo, velocidade max., sprints), destaque factual e separadores Jogo a jogo / Cartas / Historico / Com quem.
+- Calculos em `player-insights.js` (testes em `tests/player-insights.test.mjs`, `npm.cmd run test:insights`): ritmo = distancia total / minutos validos totais; cobertura por metrica ("2 de 3 jogos"); ausencia = "sem dados", nunca zero; destaques comparam os dois ultimos jogos analisados sem tirar conclusoes de forma fisica.
+- Qualidade: etiqueta Beta e botao de informacao por metrica com o estado do tracker (preliminar, indicativo, detetado). Sem recordes enquanto nenhum jogador for elegivel. Jogos de tracking marcados como teste contam (decisao do utilizador).
+- "O meu mes" (Stats) abre o proprio perfil no periodo deste mes. Calorias (estimativa) e forma fisica percebida so aparecem no proprio perfil.
+- Velocidade max. tem atalho "Ver o momento" quando o jogo tem video (usa `maxSustainedAtS` e `videoSeekTarget`).
+- Proximas fases: evolucao com grafico grande e escolha de metrica, mapa de calor orientado para o ataque, duas colunas no computador; depois relacoes com contexto, passes, comparacao opcional com o grupo, stories.
+- Cache-buster JS/CSS: `20261021-profile1`.

@@ -174,3 +174,10 @@ O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir t
 
 - Desde 2026-10-15: quatro separadores para todos (Jogo, Historico, Galeria, Stats) e Admin so para admins. Novas vistas devem entrar num destes grupos (`VIEW_GROUPS`) em vez de criar mais separadores.
 - Conta e perfil vivem no menu do avatar, nao na barra de separadores.
+
+## Perfil e estatisticas do jogador
+
+- O perfil e o sitio principal das estatisticas pessoais; "O meu mes" e so o periodo deste mes dentro do perfil.
+- Linguagem prudente: factos observados ("percorreste mais 1,1 km") e nunca juizos de forma fisica ou qualidade de jogo a partir do tracking.
+- Cada metrica mostra a cobertura (jogos analisados vs disputados) e o estado de qualidade do tracker. Sem dados aparece como "sem dados".
+- Comparar primeiro o jogador consigo proprio; comparacao com o grupo so como opcao e com quem tem dados comparaveis.

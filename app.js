@@ -135,6 +135,9 @@ let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
 let gameFeedback = state.gameFeedback || [];
 let featureRollouts = state.featureRollouts || [];
+// Perfil: periodo escolhido ("month:AAAA-MM", "3m", "season", "all") e separador de detalhe.
+let profilePeriod = null;
+let profileTab = "games";
 let privateWeightHistory = [];
 let mvpVoteCounts = [];
 let payments = state.payments || [];
@@ -1585,6 +1588,13 @@ const VIEW_GROUPS = {
 };
 
 function showView(viewName, options = {}) {
+  // "O meu mes" vive agora no perfil do proprio jogador, no periodo deste mes.
+  const linkedForMonthly = viewName === "monthly" ? getLinkedPlayer() : null;
+  if (linkedForMonthly) {
+    profilePeriod = `month:${monthKey(new Date())}`;
+    openPlayerProfile(linkedForMonthly.id);
+    return;
+  }
   const group = VIEW_GROUPS[viewName] || viewName;
   if (group !== "game") {
     previewGame = null;
@@ -2137,13 +2147,29 @@ function renderPlayerProfile() {
   const awardAudit = getPlayerWinAwardAudit(playerData.id);
   const awards = getPlayerAwardShowcase(playerData);
 
+  const months = getProfileMonths(playerData.id);
+  if (!profilePeriod || (profilePeriod.startsWith("month:") && !months.includes(profilePeriod.slice(6)))) {
+    profilePeriod = months.length ? `month:${months[0]}` : "all";
+  }
+  const period = getProfilePeriodData(playerData.id, profilePeriod);
+  const periodAwards = getPeriodAwards(playerData.id, period.games);
+  const isOwnProfile = Boolean(currentSession?.user?.id) && playerData.linkedUserId === currentSession.user.id;
+
   els.playerProfile.innerHTML = `
-    <div class="player-profile-head">
-      <div class="player-profile-card-wrap player-profile-card-hero">
-        ${renderPlayerCard(playerData, { mode: "profile", form, variant })}
-      </div>
+    ${renderProfileHero(playerData, form, variant)}
+    ${renderProfilePeriodNav(months)}
+    ${renderProfileSummary(playerData, period, { isOwnProfile })}
+
+    <nav class="pp-tabs" role="tablist" aria-label="Detalhes do jogador">
+      ${[["games", "Jogo a jogo"], ["cards", "Cartas"], ["history", "Histórico"], ["people", "Com quem"]].map(([key, label]) => `
+        <button type="button" class="subtab ${profileTab === key ? "active" : ""}" role="tab" aria-selected="${profileTab === key}" data-profile-tab="${key}">${label}</button>`).join("")}
+    </nav>
+
+    <div class="pp-tab-panel" data-profile-panel="games" ${profileTab === "games" ? "" : "hidden"}>
+      ${renderProfileGameList(playerData, period)}
     </div>
 
+    <div class="pp-tab-panel" data-profile-panel="history" ${profileTab === "history" ? "" : "hidden"}>
     <section class="profile-section">
       <h3>Historico</h3>
       ${renderHistorySummaryCard(summary, winRate)}
@@ -2153,7 +2179,37 @@ function renderPlayerProfile() {
       </div>
     </section>
 
-    ${renderPlayerTrackingSection(playerData.id)}
+    <section class="profile-section">
+      <h3>Ultimos 20 da equipa</h3>
+      ${teamRecentItems.length ? `
+        <div class="profile-games">
+          ${teamRecentItems.map((item) => renderTeamRecentGameRow(item)).join("")}
+        </div>
+      ` : `<div class="empty-state">Ainda nao ha jogos finalizados.</div>`}
+    </section>
+
+    <section class="profile-section">
+      <h3>Ultimos 20 jogos do jogador</h3>
+      ${playerRecentItems.length ? `
+        <div class="profile-games">
+          ${playerRecentItems.map((item) => renderPlayerGameRow(item)).join("")}
+        </div>
+      ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
+    </section>
+    </div>
+
+    <div class="pp-tab-panel" data-profile-panel="cards" ${profileTab === "cards" ? "" : "hidden"}>
+    <section class="profile-section">
+      <div class="section-title-row">
+        <h3>Cartas ${escapeHtml(getProfilePeriodLabel(profilePeriod).toLowerCase())}</h3>
+        <span class="unlock-progress">${periodAwards.filter((award) => award.isFirst).length} novas · ${periodAwards.filter((award) => !award.isFirst).length} repetidas</span>
+      </div>
+      ${periodAwards.length ? `
+        <div class="award-grid">
+          ${periodAwards.map((award) => renderAwardShowcaseCard(playerData, award)).join("")}
+        </div>
+      ` : `<div class="empty-state compact">Nenhuma carta neste período.</div>`}
+    </section>
 
     <section class="profile-section">
       <h3>Auditoria de cartas</h3>
@@ -2187,7 +2243,9 @@ function renderPlayerProfile() {
         </div>
       ` : `<div class="empty-state compact">Ainda nao ha cartas especiais registadas.</div>`}
     </section>
+    </div>
 
+    <div class="pp-tab-panel" data-profile-panel="people" ${profileTab === "people" ? "" : "hidden"}>
     <section class="profile-section">
       <h3>Melhores sinergias</h3>
       ${synergies.length ? `
@@ -2196,26 +2254,9 @@ function renderPlayerProfile() {
         </div>
       ` : `<div class="empty-state compact">Ainda nao ha jogos suficientes para medir sinergias.</div>`}
     </section>
+    </div>
 
-    <section class="profile-section">
-      <h3>Ultimos 20 da equipa</h3>
-      ${teamRecentItems.length ? `
-        <div class="profile-games">
-          ${teamRecentItems.map((item) => renderTeamRecentGameRow(item)).join("")}
-        </div>
-      ` : `<div class="empty-state">Ainda nao ha jogos finalizados.</div>`}
-    </section>
-
-    <section class="profile-section">
-      <h3>Ultimos 20 jogos do jogador</h3>
-      ${playerRecentItems.length ? `
-        <div class="profile-games">
-          ${playerRecentItems.map((item) => renderPlayerGameRow(item)).join("")}
-        </div>
-      ` : `<div class="empty-state">Ainda nao ha jogos registados para este jogador.</div>`}
-    </section>
-
-    ${playerData.linkedUserId === currentSession?.user?.id ? `
+    ${isOwnProfile ? `
       <section class="profile-section">
         <label class="private-weight">Peso estimado (kg, privado)<input type="number" min="30" max="250" step="0.1" value="${getPlayerWeight(playerData.id)}" data-player-weight><small>Só tu tens acesso. Uma nova medição não altera meses anteriores.</small></label>
       </section>
@@ -2241,7 +2282,8 @@ function renderPlayerProfile() {
       renderCurrentGame();
     });
   });
-  bindAwardDetailCards(els.playerProfile, playerData, awards);
+  bindAwardDetailCards(els.playerProfile, playerData, [...awards, ...periodAwards]);
+  bindProfileOverview(playerData, period);
   els.playerProfile.querySelector("[data-player-weight]")?.addEventListener("change", async (event) => {
     const value = Number(event.target.value);
     if (value < 30 || value > 250) {
@@ -2252,6 +2294,303 @@ function renderPlayerProfile() {
     await savePrivateWeight(playerData.id, value);
     event.target.disabled = false;
   });
+}
+
+// ---- Perfil: periodo, resumo e indicadores (calculos em player-insights.js) ----
+
+const PROFILE_METRIC_NOTES = {
+  measured: "Medido pelo tracking de vídeo.",
+  preliminary: "Preliminar: ainda por validar contra uma medição de referência.",
+  indicative: "Indicativo: uma falha de deteção pode afetar este valor. Não é um recorde validado.",
+  detected: "Detetado automaticamente pelo tracking, ainda sem auditoria.",
+  estimate: "Estimativa.",
+};
+
+function getProfileMonths(playerId) {
+  return [...new Set(getFinishedGames().filter((game) => getPlayerParticipation(game, playerId)).map((game) => monthKey(game.date)))].sort().reverse();
+}
+
+function getProfilePeriodLabel(period) {
+  if (String(period).startsWith("month:")) {
+    const key = period.slice(6);
+    return key === monthKey(new Date()) ? "Este mês" : formatMonthLabel(key);
+  }
+  if (period === "3m") return "Últimos 3 meses";
+  if (period === "season") {
+    const { startYear } = FooterInsights.periodRange("season");
+    return `Época ${String(startYear).slice(2)}/${String(startYear + 1).slice(2)}`;
+  }
+  return "Desde sempre";
+}
+
+// Tracking do jogador num jogo: so resultados publicados (rascunhos apenas para admins).
+function getProfileTrackingFor(gameId, playerId) {
+  const entry = getTrackingEntry(gameId);
+  if (!entry?.result?.players || (entry.status === "draft" && !isAdmin)) return null;
+  const label = getTrackingLabelFor(entry, playerId);
+  const p = label ? entry.result.players.find((item) => item.label === label) : null;
+  return p ? { entry, p } : null;
+}
+
+function getProfilePeriodData(playerId, period) {
+  const range = FooterInsights.periodRange(period);
+  const teamGames = getFinishedGames().filter((game) => FooterInsights.inPeriod(game.date, range));
+  const games = teamGames.filter((game) => getPlayerParticipation(game, playerId));
+  const rows = games.map((game) => {
+    const participation = getPlayerParticipation(game, playerId);
+    const tracking = getProfileTrackingFor(game.id, playerId);
+    return FooterInsights.buildGameRow({
+      gameId: game.id,
+      date: game.date,
+      outcome: getPlayerOutcome(game, participation.side),
+      mvp: getOfficialMvpIdsForGame(game).has(playerId),
+      tracking: tracking?.p || null,
+      metricStatus: tracking?.entry.result.metricStatus || {},
+      videoAvailable: getGameVideoParts(game.id).length > 0,
+    });
+  });
+  const summary = FooterInsights.summarize(rows, { teamGames: teamGames.length });
+  return { period, range, games, rows, summary, facts: FooterInsights.highlights(rows, summary) };
+}
+
+function getPeriodAwards(playerId, games) {
+  const alreadySeen = new Set();
+  const first = games.length ? games.reduce((min, game) => (new Date(game.date) < new Date(min.date) ? game : min), games[0]) : null;
+  if (first) {
+    getFinishedGamesAsc().filter((game) => new Date(game.date) < new Date(first.date))
+      .forEach((game) => getAwardsUnlockedByGame(playerId, game).forEach((award) => alreadySeen.add(award.key)));
+  }
+  const awards = [];
+  games.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((game) => {
+    getAwardsUnlockedByGame(playerId, game).forEach((award) => {
+      awards.push({ ...award, gameId: game.id, date: game.date, isFirst: !alreadySeen.has(award.key) });
+      alreadySeen.add(award.key);
+    });
+  });
+  return awards;
+}
+
+function renderProfileHero(playerData, form, variant) {
+  const rating = canSeeCurrentRatings() ? form.currentRating : playerData.overall;
+  const lastFive = getPlayerAppearanceRecord(playerData.id, 5).map((item) => item.outcome);
+  return `
+    <section class="pp-hero">
+      <button type="button" class="pp-card-thumb" data-profile-card aria-label="Ver a carta de ${escapeHtml(playerData.name)}">
+        ${renderPlayerCard(playerData, { mode: "field", form, variant })}
+      </button>
+      <div class="pp-identity">
+        <p class="eyebrow">Jogador</p>
+        <h2>${escapeHtml(playerData.name)}</h2>
+        <div class="pp-meta">
+          <span class="pp-ovr"><b>${rating}</b> OVR</span>
+          ${lastFive.length ? `<span class="pp-last5"><small>Ult. ${lastFive.length}</small>${renderRecordDots(lastFive, { chronological: true })}</span>` : ""}
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderProfilePeriodNav(months) {
+  const isMonth = String(profilePeriod).startsWith("month:");
+  return `
+    <div class="pp-periods" role="group" aria-label="Período">
+      <label class="pp-month ${isMonth ? "active" : ""}">
+        <span class="sr-only">Mês</span>
+        <select data-profile-month ${months.length ? "" : "disabled"}>
+          ${months.length ? months.map((key) => `<option value="${key}" ${profilePeriod === `month:${key}` ? "selected" : ""}>${escapeHtml(key === monthKey(new Date()) ? "Este mês" : formatMonthLabel(key))}</option>`).join("") : `<option>Sem jogos</option>`}
+          ${months.length && !isMonth ? `<option value="" selected hidden>Mês</option>` : ""}
+        </select>
+      </label>
+      ${[["3m", "3 meses"], ["season", "Época"], ["all", "Tudo"]].map(([value, label]) => `
+        <button type="button" class="subtab ${profilePeriod === value ? "active" : ""}" data-profile-period="${value}" aria-pressed="${profilePeriod === value}">${label}</button>`).join("")}
+    </div>`;
+}
+
+function renderProfileKpi({ label, value, unit, approx = false, games, played, status, context = "", action = "" }) {
+  const note = status ? PROFILE_METRIC_NOTES[status] || "" : "";
+  return `
+    <article class="pp-kpi ${value == null ? "is-empty" : ""}">
+      <div class="pp-kpi-top">
+        <span>${escapeHtml(label)}</span>
+        ${note ? `<button type="button" class="pp-kpi-info" data-kpi-info aria-label="Qualidade do valor: ${escapeHtml(FooterInsights.statusText(status) || "")}">ⓘ</button>` : ""}
+      </div>
+      <strong class="pp-kpi-value">${value == null ? `<span class="pp-kpi-none">sem dados</span>` : `${approx ? "≈" : ""}${value}${unit ? `<small>${unit}</small>` : ""}`}</strong>
+      <small class="pp-kpi-cover">${games ? `${games} de ${played} ${played === 1 ? "jogo" : "jogos"}` : "sem jogos analisados"}${context ? ` · ${context}` : ""}</small>
+      ${action}
+      ${note ? `<p class="pp-kpi-note" hidden>${escapeHtml(note)}</p>` : ""}
+    </article>`;
+}
+
+function getProfileMomentTarget(gameId, seconds) {
+  if (!gameId || seconds == null || !window.FooterTracking) return null;
+  return window.FooterTracking.videoSeekTarget(getGameVideoParts(gameId), seconds) || null;
+}
+
+function renderProfileSummary(playerData, period, { isOwnProfile }) {
+  const s = period.summary;
+  if (!s.played) {
+    return `<section class="pp-summary"><div class="empty-state compact">Sem jogos ${escapeHtml(getProfilePeriodLabel(profilePeriod).toLowerCase())}.</div></section>`;
+  }
+  const speedMoment = getProfileMomentTarget(s.maxSpeed.gameId, s.maxSpeed.atS);
+  const kpis = [
+    renderProfileKpi({ label: "Distância", value: s.distance.totalM == null ? null : formatTrackingNumber(s.distance.totalM / 1000, 1), unit: "km", games: s.distance.games, played: s.played, status: s.distance.status }),
+    renderProfileKpi({
+      label: "Ritmo", value: s.pace.value == null ? null : formatTrackingNumber(s.pace.value), unit: "m/min", games: s.pace.games, played: s.played, status: s.pace.status,
+      context: s.pace.goalkeeperMin >= 1 ? `inclui ${formatTrackingNumber(s.pace.goalkeeperMin)} min na baliza` : "",
+    }),
+    renderProfileKpi({
+      label: "Velocidade máx.", value: s.maxSpeed.value == null ? null : formatTrackingNumber(s.maxSpeed.value, 1), unit: "km/h", approx: true, games: s.maxSpeed.games, played: s.played, status: s.maxSpeed.status,
+      action: speedMoment ? `<button type="button" class="pp-kpi-action" data-profile-moment="${escapeHtml(s.maxSpeed.gameId)}" data-profile-moment-at="${s.maxSpeed.atS}">▶ Ver o momento</button>` : "",
+    }),
+    renderProfileKpi({ label: "Sprints", value: s.sprints.total == null ? null : formatTrackingNumber(s.sprints.total), unit: "", games: s.sprints.games, played: s.played, status: s.sprints.status }),
+  ];
+  return `
+    <section class="pp-summary">
+      <div class="pp-record">
+        <span class="pp-record-item"><b>${s.played}</b>${s.teamGames ? `<i>/${s.teamGames}</i>` : ""} <small>presenças</small></span>
+        <span class="pp-record-item pp-wdl"><b class="win">${s.wins}V</b> <b class="draw">${s.draws}E</b> <b class="loss">${s.losses}D</b></span>
+        <span class="pp-record-item"><b>${s.mvps}</b> <small>MVP</small></span>
+      </div>
+      <div class="pp-kpis">${kpis.join("")}</div>
+      ${period.facts.length ? `<div class="pp-highlight">${period.facts.map((fact) => `<p>${escapeHtml(fact)}</p>`).join("")}</div>` : ""}
+      ${s.trackedGames
+        ? `<p class="pp-beta"><span class="tracking-badge">Beta</span> Números do tracking de vídeo, ainda em validação. Toca em ⓘ para ver a qualidade de cada um.</p>`
+        : `<p class="pp-beta">Nenhum jogo deste período foi analisado por vídeo.</p>`}
+      ${isOwnProfile ? renderProfilePrivateExtras(playerData, period) : ""}
+    </section>`;
+}
+
+// So para o proprio: usa o peso privado e as respostas pos-jogo.
+function renderProfilePrivateExtras(playerData, period) {
+  const feedback = period.games.map((game) => gameFeedback.find((item) => item.gameId === game.id && item.playerId === playerData.id)).filter(Boolean);
+  const energy = FooterMonthly.average(feedback.map((item) => item.remainingEnergy));
+  const calories = period.games.reduce((sum, game) => {
+    const row = period.rows.find((item) => item.gameId === game.id);
+    const participation = getPlayerParticipation(game, playerData.id);
+    const minutes = row?.minutes ?? FooterMonthly.activeMinutesForSquad(participation ? getGameSidePlayerIds(game, participation.side).length : 5);
+    const answer = feedback.find((item) => item.gameId === game.id);
+    return sum + FooterMonthly.estimateCalories({ weightKg: getPlayerWeight(playerData.id, game.date), minutes, met: FooterMonthly.metForIntensity(answer?.gameIntensity) });
+  }, 0);
+  return `
+    <div class="pp-extras">
+      <span>≈ ${formatTrackingNumber(calories)} kcal <small>estimativa com o teu peso</small></span>
+      <span>${energy == null ? "Sem respostas" : `${formatTrackingNumber(energy, 1)}/10`} <small>forma física que sentiste</small></span>
+    </div>`;
+}
+
+function renderProfileGameList(playerData, period) {
+  if (!period.games.length) return `<div class="empty-state compact">Sem jogos neste período.</div>`;
+  const ordered = period.games.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  return `
+    <div class="pp-games">
+      ${ordered.map((game) => {
+        const row = period.rows.find((item) => item.gameId === game.id);
+        const participation = getPlayerParticipation(game, playerData.id);
+        const tracking = getProfileTrackingFor(game.id, playerData.id);
+        const date = new Date(game.date);
+        const outcomeLabel = { win: "V", draw: "E", loss: "D" }[row.outcome] || "–";
+        const metric = (value, unit, digits = 0, approx = false) => value == null ? "" : `<span><b>${approx ? "≈" : ""}${formatTrackingNumber(value, digits)}</b> ${unit}</span>`;
+        return `
+          <article class="pp-game">
+            <div class="pp-game-head">
+              <span class="pp-game-date"><b>${date.getDate()}</b><small>${date.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "")}</small></span>
+              <div class="pp-game-main">
+                <strong>${escapeHtml(getPlayerResultText(game, participation?.side))}</strong>
+                <small>${escapeHtml(getGameTitle(game))}</small>
+              </div>
+              ${row.mvp ? `<span class="pp-mvp">MVP</span>` : ""}
+              <span class="pp-outcome ${row.outcome}">${outcomeLabel}</span>
+            </div>
+            ${row.tracked ? `
+              <div class="pp-game-metrics">
+                ${row.distanceM == null ? "" : `<span><b>${formatTrackingNumber(row.distanceM / 1000, 1)}</b> km</span>`}
+                ${metric(row.pace, "m/min")}
+                ${metric(row.maxSpeed, "km/h", 1, true)}
+                ${metric(row.sprints, "sprints")}
+                ${metric(row.passes, "passes")}
+              </div>` : `<p class="pp-game-none">Sem análise de vídeo</p>`}
+            <div class="pp-game-actions">
+              <button type="button" class="ghost-btn" data-profile-open-game="${escapeHtml(game.id)}">Abrir jogo</button>
+              ${row.videoAvailable ? `<button type="button" class="ghost-btn" data-profile-video="${escapeHtml(game.id)}">▶ Vídeo</button>` : ""}
+            </div>
+            ${tracking ? `
+              <details class="pp-game-detail">
+                <summary>Análise completa do jogo</summary>
+                ${renderPlayerTrackingBlock(tracking.entry, tracking.p, {})}
+              </details>` : ""}
+          </article>`;
+      }).join("")}
+    </div>`;
+}
+
+function openProfileCardModal(playerData) {
+  document.querySelector(".pp-card-modal")?.remove();
+  const form = getPlayerForm(playerData);
+  const variant = getPlayerCardVariant(playerData, form);
+  const modal = document.createElement("div");
+  modal.className = "auth-modal pp-card-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", `Carta de ${playerData.name}`);
+  modal.innerHTML = `
+    <div class="auth-modal-backdrop" data-close-card></div>
+    <div class="pp-card-modal-body">
+      <button type="button" class="auth-close" data-close-card aria-label="Fechar">&times;</button>
+      ${renderPlayerCard(playerData, { mode: "profile", form, variant })}
+      <button type="button" class="primary-btn" data-card-collection>Ver coleção de cartas</button>
+    </div>`;
+  const close = () => {
+    modal.remove();
+    document.body.classList.remove("mvp-gate-open");
+    window.removeEventListener("keydown", onKey);
+  };
+  const onKey = (event) => { if (event.key === "Escape") close(); };
+  modal.querySelectorAll("[data-close-card]").forEach((el) => el.addEventListener("click", close));
+  modal.querySelector("[data-card-collection]").addEventListener("click", () => {
+    close();
+    profileTab = "cards";
+    renderPlayerProfile();
+    els.playerProfile.querySelector(".pp-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  window.addEventListener("keydown", onKey);
+  document.body.appendChild(modal);
+  document.body.classList.add("mvp-gate-open");
+  modal.querySelector("[data-card-collection]").focus();
+}
+
+function bindProfileOverview(playerData) {
+  const root = els.playerProfile;
+  root.querySelectorAll("[data-profile-tab]").forEach((button) => button.addEventListener("click", () => {
+    profileTab = button.dataset.profileTab;
+    root.querySelectorAll("[data-profile-tab]").forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-selected", String(active));
+    });
+    root.querySelectorAll("[data-profile-panel]").forEach((panel) => { panel.hidden = panel.dataset.profilePanel !== profileTab; });
+  }));
+  root.querySelector("[data-profile-month]")?.addEventListener("change", (event) => {
+    if (!event.target.value) return;
+    profilePeriod = `month:${event.target.value}`;
+    renderPlayerProfile();
+  });
+  root.querySelectorAll("[data-profile-period]").forEach((button) => button.addEventListener("click", () => {
+    profilePeriod = button.dataset.profilePeriod;
+    renderPlayerProfile();
+  }));
+  root.querySelectorAll("[data-kpi-info]").forEach((button) => button.addEventListener("click", () => {
+    const note = button.closest(".pp-kpi")?.querySelector(".pp-kpi-note");
+    if (note) note.hidden = !note.hidden;
+  }));
+  root.querySelectorAll("[data-profile-moment]").forEach((button) => button.addEventListener("click", () => {
+    const gameId = button.dataset.profileMoment;
+    const target = getProfileMomentTarget(gameId, Number(button.dataset.profileMomentAt));
+    if (!target) return;
+    openVideoLightbox(gameId, {
+      clip: { youtubeId: target.part.youtubeId, startS: Math.max(0, Math.floor(target.seconds - 4)), endS: Math.ceil(target.seconds + 4), note: "Velocidade máxima" },
+    });
+  }));
+  root.querySelectorAll("[data-profile-video]").forEach((button) => button.addEventListener("click", () => openVideoLightbox(button.dataset.profileVideo)));
+  root.querySelector("[data-profile-card]")?.addEventListener("click", () => openProfileCardModal(playerData));
 }
 
 function renderProfileStat(label, value) {
@@ -7746,32 +8085,6 @@ function bindGameVideoSection(game, container) {
   });
 }
 
-function getPlayerTrackingGames(playerId) {
-  return Object.entries(trackingStore)
-    .map(([gameId, entry]) => {
-      const label = getTrackingLabelFor(entry, playerId);
-      const game = state.games.find((item) => item.id === gameId);
-      const p = label ? entry.result.players.find((item) => item.label === label) : null;
-      return p && game ? { game, entry, p } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.game.date) - new Date(a.game.date));
-}
-
-function renderPlayerTrackingSection(playerId) {
-  if (!window.FooterTracking) return "";
-  const items = getPlayerTrackingGames(playerId);
-  if (!items.length) return "";
-  const { game, entry, p } = items[0];
-  const gameLink = `Último jogo analisado: <button class="link-btn" type="button" data-profile-open-game="${escapeHtml(game.id)}">${formatDate(game.date)}</button>`;
-  return `
-    <section class="profile-section tracking-section">
-      <div class="tracking-head"><h3>Tracking de vídeo</h3>${getTrackingBadge(entry)}</div>
-      ${renderPlayerTrackingBlock(entry, p, { gameLink })}
-      <p class="tracking-fineprint">Valores em teste, ainda por validar contra uma medição de referência.</p>
-    </section>
-  `;
-}
 
 function renderHistoryGameDetail() {
   if (!els.historyGameDetail) return;
