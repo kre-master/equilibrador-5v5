@@ -173,7 +173,13 @@ O browser integrado/Codex browser pode falhar com sandbox no Windows. Preferir t
 ## Navegacao
 
 - Desde 2026-10-15: quatro separadores para todos (Jogo, Historico, Galeria, Stats) e Admin so para admins. Novas vistas devem entrar num destes grupos (`VIEW_GROUPS`) em vez de criar mais separadores.
-- Conta e perfil vivem no menu do avatar, nao na barra de separadores.
+- Desde 2026-10-22: separador Jogador (o perfil do proprio) no inicio da barra, so com conta ligada a jogador; e a pagina inicial. Conta continua no menu do avatar.
+- Notificacoes no simbolo do Footer: bolinha vermelha com o numero de novidades do grupo por ver (convocatoria lancada, video adicionado, momento marcado por outro jogador, MVP eleito); bolinha verde fluorescente quando ha versao nova da app. Abrir o painel poe ambas a zero. O "visto" e por dispositivo (localStorage).
+
+## Versoes da app
+
+- Formato MAJOR.MINOR.PATCH em `notifications.js` (`CHANGELOG`, a entrada do topo e a versao atual). MAJOR: mudanca grande na forma de usar; MINOR: novidade visivel; PATCH: correcoes.
+- 1.0.0 (2026-10-22) e a primeira versao com changelog. Cada push com mudancas para os jogadores acrescenta uma entrada no topo, escrita para o utilizador.
 
 ## Perfil e estatisticas do jogador
 

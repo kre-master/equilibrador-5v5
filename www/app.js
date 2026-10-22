@@ -460,6 +460,7 @@ function normalizeEventRecord(record) {
     maxPlayers: Number(record.maxPlayers ?? record.max_players ?? 12),
     status: String(record.status || "open"),
     createdBy: record.createdBy || record.created_by || null,
+    createdAt: record.createdAt || record.created_at || null,
   };
 }
 
@@ -474,6 +475,7 @@ function eventFromRow(row) {
     maxPlayers: row.max_players,
     status: row.status,
     createdBy: row.created_by,
+    createdAt: row.created_at,
   });
 }
 
@@ -849,44 +851,12 @@ async function initApp() {
   setupNavigationHistory();
 }
 
+// O perfil do proprio jogador e a pagina inicial; convocatorias e jogos novos chegam pelas notificacoes.
 function applyLandingRoute() {
   const linkedPlayer = getLinkedPlayer();
   if (!linkedPlayer) return;
-
-  const activeEvent = getLandingActiveEvent();
-  if (activeEvent && !getResponseForPlayer(activeEvent.id, linkedPlayer.id)) {
-    currentEventId = activeEvent.id;
-    showView("events", { push: false });
-    return;
-  }
-
-  const openGame = getLandingOpenGame(linkedPlayer.id);
-  if (openGame) {
-    currentGameId = openGame.id;
-    currentHistoryGameId = null;
-    showView("today", { push: false });
-    return;
-  }
-
   currentPlayerProfileId = linkedPlayer.id;
   showView("player-profile", { push: false });
-}
-
-function getLandingOpenGame(playerId) {
-  return [...state.games]
-    .filter((game) => !isFinishedGame(game) && getGamePlayerIds(ensureGameShape(game)).includes(playerId))
-    .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null;
-}
-
-function getLandingActiveEvent() {
-  const now = Date.now();
-  return [...(state.events || [])]
-    .filter((eventData) => eventData.status === "open")
-    .sort((a, b) => {
-      const aFuture = new Date(a.startsAt).getTime() >= now ? 0 : 1;
-      const bFuture = new Date(b.startsAt).getTime() >= now ? 0 : 1;
-      return aFuture - bFuture || new Date(a.startsAt) - new Date(b.startsAt);
-    })[0] || null;
 }
 
 async function initRemote() {
@@ -1575,6 +1545,7 @@ function on(element, eventName, handler) {
 
 // Separadores principais agrupam varias vistas. "Jogo" mostra a convocatoria e o gerar na mesma pagina.
 const VIEW_GROUPS = {
+  "player-profile": "profile",
   events: "game",
   today: "game",
   games: "history",
@@ -1631,9 +1602,16 @@ function bindNavigation() {
   });
   document.addEventListener("click", (event) => {
     if (!event.target.closest("#account-menu")) toggleAccountMenu(false);
+    if (!event.target.closest("#notify-menu")) toggleNotifyPanel(false);
   });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") toggleAccountMenu(false);
+    if (event.key !== "Escape") return;
+    toggleAccountMenu(false);
+    toggleNotifyPanel(false);
+  });
+  on(document.querySelector("#notify-btn"), "click", (event) => {
+    event.stopPropagation();
+    toggleNotifyPanel();
   });
   document.querySelectorAll("#account-dropdown .menu-item").forEach((item) => on(item, "click", () => toggleAccountMenu(false)));
   document.querySelectorAll("#account-dropdown .menu-item[data-view]").forEach((item) => on(item, "click", () => {
@@ -1668,6 +1646,165 @@ function updateAccountMenu() {
   if (name) name.textContent = label;
   if (avatar) avatar.textContent = currentSession ? initials(label) : "?";
   document.querySelector("#switch-account")?.classList.toggle("hidden", !currentSession);
+}
+
+// ---- Notificacoes no simbolo do Footer (notifications.js) ----
+// Vermelho: novidades do grupo (convocatorias, videos, momentos, MVP). Verde: versao nova da app.
+// O "visto" fica neste dispositivo; abrir o painel poe os dois contadores a zero.
+const NOTIFY_SEEN_KEY = "footer-notifications-seen-v1";
+const NOTIFY_ICONS = {
+  event: '<circle cx="12" cy="12" r="9"/><path d="M12 7l3.5 2.5-1.3 4h-4.4l-1.3-4z"/>',
+  video: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z"/>',
+  moment: '<path d="M7 4h10v16l-5-3.5L7 20z"/>',
+  mvp: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+};
+
+function readNotifySeen() {
+  let seen = {};
+  try {
+    seen = JSON.parse(window.localStorage.getItem(NOTIFY_SEEN_KEY) || "{}") || {};
+  } catch {
+    seen = {};
+  }
+  if (!seen.feedSeenAt) {
+    seen.feedSeenAt = FooterNotifications.defaultSeenAt();
+    writeNotifySeen(seen);
+  }
+  return seen;
+}
+
+function writeNotifySeen(seen) {
+  try {
+    window.localStorage.setItem(NOTIFY_SEEN_KEY, JSON.stringify(seen));
+  } catch {
+    // Sem armazenamento local: os contadores voltam a aparecer na proxima visita.
+  }
+}
+
+function getNotificationFeed() {
+  const userId = currentSession?.user?.id || null;
+  const items = [];
+  (state.events || []).forEach((eventData) => {
+    if (eventData.status !== "open" || !eventData.createdAt || (userId && eventData.createdBy === userId)) return;
+    items.push({ id: `event:${eventData.id}`, kind: "event", at: eventData.createdAt, eventId: eventData.id,
+      text: `Convocatória: ${eventData.title} · ${formatDate(eventData.startsAt)}` });
+  });
+  state.games.forEach((game) => {
+    const firstVideoAt = getGameVideoParts(game.id).map((part) => part.createdAt).filter(Boolean).sort()[0];
+    if (firstVideoAt) {
+      items.push({ id: `video:${game.id}`, kind: "video", at: firstVideoAt, gameId: game.id, text: `Vídeo novo: ${getGameTitle(game)}` });
+    }
+    const mvpNames = [...getOfficialMvpIdsForGame(game)].map((id) => findPlayer(id)?.name).filter(Boolean);
+    if (mvpNames.length) {
+      items.push({ id: `mvp:${game.id}`, kind: "mvp", at: getMvpLockAt(game)?.toISOString(), gameId: game.id,
+        text: `MVP: ${mvpNames.join(" e ")} · ${getGameTitle(game)}` });
+    }
+  });
+  const gameIds = new Set(state.games.map((game) => game.id));
+  videoBookmarks.forEach((item) => {
+    if (!gameIds.has(item.gameId) || (userId && item.createdBy === userId)) return;
+    items.push({ id: `moment:${item.id}`, kind: "moment", at: item.createdAt, gameId: item.gameId, bookmarkId: item.id,
+      text: `${item.authorName || "Jogador"}: ${item.note}` });
+  });
+  return FooterNotifications.buildFeed(items);
+}
+
+function setNotifyBadge(element, count) {
+  if (!element) return;
+  element.textContent = count > 9 ? "9+" : String(count);
+  element.classList.toggle("hidden", !count);
+}
+
+function renderNotifyBadges() {
+  const seen = readNotifySeen();
+  const feedCount = FooterNotifications.countUnseen(getNotificationFeed(), seen.feedSeenAt);
+  const appCount = FooterNotifications.unseenReleases(seen.appVersion).length;
+  setNotifyBadge(document.querySelector("#notify-badge"), feedCount);
+  setNotifyBadge(document.querySelector("#notify-badge-app"), appCount);
+  const button = document.querySelector("#notify-btn");
+  if (button) {
+    const parts = [feedCount ? `${feedCount} por ver` : "", appCount ? "versão nova da app" : ""].filter(Boolean);
+    button.setAttribute("aria-label", parts.length ? `Novidades: ${parts.join(", ")}` : "Novidades");
+  }
+}
+
+function formatRelativeTime(value) {
+  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "ontem" : `há ${days} dias`;
+}
+
+function renderNotifyPanel(seen) {
+  const panel = document.querySelector("#notify-panel");
+  if (!panel) return;
+  const feed = getNotificationFeed();
+  const seenTime = new Date(seen.feedSeenAt).getTime();
+  const releases = FooterNotifications.unseenReleases(seen.appVersion);
+  panel.innerHTML = `
+    ${releases.map((release) => `
+      <section class="notify-release">
+        <p class="notify-release-head"><span class="notify-version">v${escapeHtml(release.version)}</span> ${escapeHtml(release.title)}</p>
+        <ul>${release.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </section>`).join("")}
+    <p class="notify-heading">Novidades</p>
+    ${feed.length ? `
+      <div class="notify-list">
+        ${feed.map((item) => `
+          <button type="button" class="notify-item ${new Date(item.at).getTime() > seenTime ? "is-new" : ""}" data-notify-id="${escapeHtml(item.id)}">
+            <svg class="notify-icon notify-icon-${item.kind}" viewBox="0 0 24 24" aria-hidden="true">${NOTIFY_ICONS[item.kind]}</svg>
+            <span class="notify-text">${escapeHtml(item.text)}</span>
+            <small>${escapeHtml(formatRelativeTime(item.at))}</small>
+          </button>`).join("")}
+      </div>` : `<p class="notify-empty">Sem novidades por agora.</p>`}
+    <p class="notify-footer">Footer v${escapeHtml(FooterNotifications.APP_VERSION)}</p>`;
+  panel.querySelectorAll("[data-notify-id]").forEach((button) => on(button, "click", () => {
+    const item = feed.find((entry) => entry.id === button.dataset.notifyId);
+    toggleNotifyPanel(false);
+    if (item) openNotification(item);
+  }));
+}
+
+function toggleNotifyPanel(force) {
+  const panel = document.querySelector("#notify-panel");
+  const button = document.querySelector("#notify-btn");
+  if (!panel || !button) return;
+  const open = typeof force === "boolean" ? force : panel.classList.contains("hidden");
+  if (open === !panel.classList.contains("hidden")) return;
+  if (open) {
+    toggleAccountMenu(false);
+    const seen = readNotifySeen();
+    // Mostra o que era novo antes de marcar tudo como visto.
+    renderNotifyPanel(seen);
+    writeNotifySeen({ feedSeenAt: new Date().toISOString(), appVersion: FooterNotifications.APP_VERSION });
+    renderNotifyBadges();
+  }
+  panel.classList.toggle("hidden", !open);
+  button.setAttribute("aria-expanded", String(open));
+}
+
+function openNotification(item) {
+  if (item.kind === "event") {
+    currentEventId = item.eventId;
+    showView("events");
+    renderEventsList();
+    return;
+  }
+  if (item.kind === "mvp") {
+    currentHistoryGameId = item.gameId;
+    currentGameId = null;
+    showView("history-game");
+    renderHistoryGameDetail();
+    return;
+  }
+  const clip = item.kind === "moment" ? videoBookmarks.find((entry) => entry.id === item.bookmarkId) : null;
+  galleryMode = clip ? "highlights" : "games";
+  showView("gallery");
+  renderGallery();
+  openVideoLightbox(item.gameId, clip ? { clip } : {});
 }
 
 // ---- Galeria: todos os jogos com video, no mesmo leitor do historico ----
@@ -1957,6 +2094,7 @@ function render() {
   renderEventsList();
   renderPlayerProfile();
   renderMvpVoteGate();
+  renderNotifyBadges();
 }
 
 function getLinkedPlayer() {
@@ -2405,12 +2543,30 @@ function renderProfilePeriodNav(months) {
     </div>`;
 }
 
-function renderProfileKpi({ label, value, unit, approx = false, games, played, status, context = "", action = "" }) {
+// Icones dos numeros do jogador, no traco dos separadores; a cor vem de .stat-icon-<chave> no CSS.
+const STAT_ICONS = {
+  distance: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/>',
+  pace: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+  speed: '<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>',
+  sprints: '<path d="m5 6 6 6-6 6M13 6l6 6-6 6"/>',
+  passes: '<circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="7" r="2.5"/><path d="M8.5 15.5 15.5 8.5M11 8h5v5"/>',
+  games: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4"/>',
+  wins: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
+  mvp: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  calories: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.3 3.8-8.8 2 1.3 2.6 3.3 2.4 5 1.1-.6 2-1.9 2.2-3.4 2.4 2 4.6 4.6 4.6 7.4 0 3.5-2.6 6-6.5 6z"/>',
+  energy: '<rect x="3" y="7" width="16" height="10" rx="2.5"/><path d="M21 10.5v3M11.5 9l-2 3.2h3L10.5 15"/>',
+};
+
+function statIcon(key) {
+  return STAT_ICONS[key] ? `<svg class="stat-icon stat-icon-${key}" viewBox="0 0 24 24" aria-hidden="true">${STAT_ICONS[key]}</svg>` : "";
+}
+
+function renderProfileKpi({ label, icon = "", value, unit, approx = false, games, played, status, context = "", action = "" }) {
   const note = status ? PROFILE_METRIC_NOTES[status] || "" : "";
   return `
     <article class="pp-kpi ${value == null ? "is-empty" : ""}">
       <div class="pp-kpi-top">
-        <span>${escapeHtml(label)}</span>
+        <span class="pp-kpi-label">${statIcon(icon)}${escapeHtml(label)}</span>
         ${note ? `<button type="button" class="pp-kpi-info" data-kpi-info aria-label="Qualidade do valor: ${escapeHtml(FooterInsights.statusText(status) || "")}">ⓘ</button>` : ""}
       </div>
       <strong class="pp-kpi-value">${value == null ? `<span class="pp-kpi-none">sem dados</span>` : `${approx ? "≈" : ""}${value}${unit ? `<small>${unit}</small>` : ""}`}</strong>
@@ -2432,23 +2588,23 @@ function renderProfileSummary(playerData, period, { isOwnProfile }) {
   }
   const speedMoment = getProfileMomentTarget(s.maxSpeed.gameId, s.maxSpeed.atS);
   const kpis = [
-    renderProfileKpi({ label: "Distância", value: s.distance.totalM == null ? null : formatTrackingNumber(s.distance.totalM / 1000, 1), unit: "km", games: s.distance.games, played: s.played, status: s.distance.status }),
+    renderProfileKpi({ label: "Distância", icon: "distance", value: s.distance.totalM == null ? null : formatTrackingNumber(s.distance.totalM / 1000, 1), unit: "km", games: s.distance.games, played: s.played, status: s.distance.status }),
     renderProfileKpi({
-      label: "Ritmo", value: s.pace.value == null ? null : formatTrackingNumber(s.pace.value), unit: "m/min", games: s.pace.games, played: s.played, status: s.pace.status,
+      label: "Ritmo", icon: "pace", value: s.pace.value == null ? null : formatTrackingNumber(s.pace.value), unit: "m/min", games: s.pace.games, played: s.played, status: s.pace.status,
       context: s.pace.goalkeeperMin >= 1 ? `inclui ${formatTrackingNumber(s.pace.goalkeeperMin)} min na baliza` : "",
     }),
     renderProfileKpi({
-      label: "Velocidade máx.", value: s.maxSpeed.value == null ? null : formatTrackingNumber(s.maxSpeed.value, 1), unit: "km/h", approx: true, games: s.maxSpeed.games, played: s.played, status: s.maxSpeed.status,
+      label: "Velocidade máx.", icon: "speed", value: s.maxSpeed.value == null ? null : formatTrackingNumber(s.maxSpeed.value, 1), unit: "km/h", approx: true, games: s.maxSpeed.games, played: s.played, status: s.maxSpeed.status,
       action: speedMoment ? `<button type="button" class="pp-kpi-action" data-profile-moment="${escapeHtml(s.maxSpeed.gameId)}" data-profile-moment-at="${s.maxSpeed.atS}">▶ Ver o momento</button>` : "",
     }),
-    renderProfileKpi({ label: "Sprints", value: s.sprints.total == null ? null : formatTrackingNumber(s.sprints.total), unit: "", games: s.sprints.games, played: s.played, status: s.sprints.status }),
+    renderProfileKpi({ label: "Sprints", icon: "sprints", value: s.sprints.total == null ? null : formatTrackingNumber(s.sprints.total), unit: "", games: s.sprints.games, played: s.played, status: s.sprints.status }),
   ];
   return `
     <section class="pp-summary">
       <div class="pp-record">
-        <span class="pp-record-item"><b>${s.played}</b>${s.teamGames ? `<i>/${s.teamGames}</i>` : ""} <small>presenças</small></span>
-        <span class="pp-record-item pp-wdl"><b class="win">${s.wins}V</b> <b class="draw">${s.draws}E</b> <b class="loss">${s.losses}D</b></span>
-        <span class="pp-record-item"><b>${s.mvps}</b> <small>MVP</small></span>
+        <span class="pp-record-item">${statIcon("games")}<b>${s.played}</b>${s.teamGames ? `<i>/${s.teamGames}</i>` : ""} <small>presenças</small></span>
+        <span class="pp-record-item pp-wdl">${statIcon("wins")}<b class="win">${s.wins}V</b> <b class="draw">${s.draws}E</b> <b class="loss">${s.losses}D</b></span>
+        <span class="pp-record-item">${statIcon("mvp")}<b>${s.mvps}</b> <small>MVP</small></span>
       </div>
       <div class="pp-kpis">${kpis.join("")}</div>
       ${period.facts.length ? `<div class="pp-highlight">${period.facts.map((fact) => `<p>${escapeHtml(fact)}</p>`).join("")}</div>` : ""}
@@ -2472,8 +2628,8 @@ function renderProfilePrivateExtras(playerData, period) {
   }, 0);
   return `
     <div class="pp-extras">
-      <span>≈ ${formatTrackingNumber(calories)} kcal <small>estimativa com o teu peso</small></span>
-      <span>${energy == null ? "Sem respostas" : `${formatTrackingNumber(energy, 1)}/10`} <small>forma física que sentiste</small></span>
+      <span>${statIcon("calories")}≈ ${formatTrackingNumber(calories)} kcal <small>estimativa com o teu peso</small></span>
+      <span>${statIcon("energy")}${energy == null ? "Sem respostas" : `${formatTrackingNumber(energy, 1)}/10`} <small>forma física que sentiste</small></span>
     </div>`;
 }
 
@@ -2488,7 +2644,7 @@ function renderProfileGameList(playerData, period) {
         const tracking = getProfileTrackingFor(game.id, playerData.id);
         const date = new Date(game.date);
         const outcomeLabel = { win: "V", draw: "E", loss: "D" }[row.outcome] || "–";
-        const metric = (value, unit, digits = 0, approx = false) => value == null ? "" : `<span><b>${approx ? "≈" : ""}${formatTrackingNumber(value, digits)}</b> ${unit}</span>`;
+        const metric = (value, unit, digits = 0, approx = false, icon = "") => value == null ? "" : `<span>${statIcon(icon)}<b>${approx ? "≈" : ""}${formatTrackingNumber(value, digits)}</b> ${unit}</span>`;
         return `
           <article class="pp-game">
             <div class="pp-game-head">
@@ -2502,11 +2658,11 @@ function renderProfileGameList(playerData, period) {
             </div>
             ${row.tracked ? `
               <div class="pp-game-metrics">
-                ${row.distanceM == null ? "" : `<span><b>${formatTrackingNumber(row.distanceM / 1000, 1)}</b> km</span>`}
-                ${metric(row.pace, "m/min")}
-                ${metric(row.maxSpeed, "km/h", 1, true)}
-                ${metric(row.sprints, "sprints")}
-                ${metric(row.passes, "passes")}
+                ${row.distanceM == null ? "" : `<span>${statIcon("distance")}<b>${formatTrackingNumber(row.distanceM / 1000, 1)}</b> km</span>`}
+                ${metric(row.pace, "m/min", 0, false, "pace")}
+                ${metric(row.maxSpeed, "km/h", 1, true, "speed")}
+                ${metric(row.sprints, "sprints", 0, false, "sprints")}
+                ${metric(row.passes, "passes", 0, false, "passes")}
               </div>` : `<p class="pp-game-none">Sem análise de vídeo</p>`}
             <div class="pp-game-actions">
               <button type="button" class="ghost-btn" data-profile-open-game="${escapeHtml(game.id)}">Abrir jogo</button>
@@ -6164,9 +6320,6 @@ function renderPlayerCard(playerData, options = {}) {
         ${renderPlayerCardPhoto(playerData)}
       </div>
       <strong class="card-name">${escapeHtml(shortName(playerData.name, mode === "profile" ? 15 : 11))}</strong>
-      <div class="card-stats">
-        ${renderFutStats(playerData)}
-      </div>
     </article>
   `;
 }
@@ -6176,17 +6329,6 @@ function renderPlayerCardPhoto(playerData) {
     return `<img src="${escapeHtml(playerData.photoDataUrl)}" alt="">`;
   }
   return `<span>${escapeHtml(initials(playerData.name))}</span>`;
-}
-
-function renderFutStats(playerData) {
-  return [
-    ["PAC", playerData.pace],
-    ["SHO", playerData.shooting],
-    ["PAS", playerData.passing],
-    ["DRI", playerData.dribbling],
-    ["DEF", playerData.defending],
-    ["PHY", playerData.physical],
-  ].map(([label, value]) => `<span><b>${value}</b><em>${label}</em></span>`).join("");
 }
 
 function orderTeamForField(players) {
@@ -7460,6 +7602,7 @@ function gameVideoPartFromRow(row) {
     id: row.id, position: row.position, youtubeId: row.youtube_id, label: row.label || "",
     gameStartS: Number(row.game_start_s) || 0, videoStartS: Number(row.video_start_s) || 0,
     gameEndS: row.game_end_s == null ? null : Number(row.game_end_s),
+    createdAt: row.created_at || null,
   };
 }
 
@@ -7494,7 +7637,7 @@ async function addGameVideoPart(game, part) {
   const parts = getGameVideoParts(game.id);
   const position = (parts.length ? Math.max(...parts.map((v) => v.position)) : 0) + 1;
   if (!gameVideosRemote) {
-    gameVideos[game.id] = [...parts, { ...part, id: `local-${Date.now()}`, position }];
+    gameVideos[game.id] = [...parts, { ...part, id: `local-${Date.now()}`, position, createdAt: new Date().toISOString() }];
     if (!saveLocalVideos()) throw new Error("Não foi possível guardar neste dispositivo.");
     return;
   }
@@ -8512,37 +8655,11 @@ async function drawPlayerDot(ctx, playerData, pos, color, game = null) {
   ctx.fillStyle = getCardTextColor(variant);
   ctx.fillText(shortName(playerData.name, 12).toUpperCase(), x + width * 0.5, y + height * 0.645);
 
-  drawFutStats(ctx, playerData, x, y, width, height, variant);
   ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
-}
-
-function drawFutStats(ctx, playerData, x, y, width, height, variant = PLAYER_CARD_VARIANTS.base) {
-  const left = [
-    ["PAC", playerData.pace],
-    ["SHO", playerData.shooting],
-    ["PAS", playerData.passing],
-  ];
-  const right = [
-    ["DRI", playerData.dribbling],
-    ["DEF", playerData.defending],
-    ["PHY", playerData.physical],
-  ];
-  const startY = y + height * 0.735;
-  const rowGap = height * 0.055;
-  ctx.fillStyle = getCardTextColor(variant);
-  ctx.font = `800 ${Math.round(width * 0.027)}px Bahnschrift Condensed, Arial Narrow, Segoe UI, Arial`;
-  left.forEach(([label, value], index) => {
-    ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.19, startY + index * rowGap);
-  });
-  right.forEach(([label, value], index) => {
-    ctx.textAlign = "left";
-    ctx.fillText(`${value} ${label}`, x + width * 0.555, startY + index * rowGap);
-  });
 }
 
 function getCardPhotoRect(x, y, width, height) {

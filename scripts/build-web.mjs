@@ -10,6 +10,7 @@ const files = [
   "monthly-recap.js",
   "player-insights.js",
   "tracking-metrics.js",
+  "notifications.js",
   "app-config.js",
   "manifest.webmanifest"
 ];

@@ -11,15 +11,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261021-profile1">
+    <link rel="stylesheet" href="styles.css?v=20261022-v100">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="topbar-main">
-          <div class="brand">
-            <img class="brand-logo" src="assets/footer-logo.png?v=20260709-statsfinance1" width="48" height="48" alt="">
+          <div class="brand" id="notify-menu">
+            <button id="notify-btn" class="brand-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-panel" aria-label="Novidades">
+              <img class="brand-logo" src="assets/footer-logo.png?v=20260709-statsfinance1" width="48" height="48" alt="">
+              <span id="notify-badge-app" class="notify-badge notify-badge-app hidden" aria-hidden="true"></span>
+              <span id="notify-badge" class="notify-badge notify-badge-feed hidden" aria-hidden="true"></span>
+            </button>
             <h1>Footer</h1>
+            <div id="notify-panel" class="notify-panel hidden" role="dialog" aria-label="Novidades"></div>
           </div>
           <div class="account-menu" id="account-menu">
             <button id="account-menu-btn" class="account-chip" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-dropdown">
@@ -30,7 +35,6 @@
               </span>
             </button>
             <div class="account-dropdown hidden" id="account-dropdown" role="menu">
-              <button id="my-profile-tab" class="menu-item hidden" type="button" role="menuitem" data-view="player-profile">Meu perfil</button>
               <button class="menu-item" type="button" role="menuitem" data-view="account">Conta</button>
               <button id="switch-account" class="menu-item hidden" type="button" role="menuitem">Trocar conta</button>
               <button id="admin-login" class="menu-item" type="button" role="menuitem">Entrar</button>
@@ -40,6 +44,10 @@
           </div>
         </div>
         <nav class="tabs" aria-label="Seccoes">
+          <button id="my-profile-tab" class="tab hidden" type="button" data-view="player-profile">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>
+            <span>Jogador</span>
+          </button>
           <button class="tab active" type="button" data-view="events">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg>
             <span>Jogo</span>
@@ -462,6 +470,7 @@
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="player-insights.js?v=20261021-profile1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="app.js?v=20261021-profile1"></script>
+    <script src="notifications.js?v=20261022-v100"></script>
+    <script src="app.js?v=20261022-v100"></script>
   </body>
 </html>

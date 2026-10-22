@@ -10,6 +10,7 @@
     "test:monthly": "node --test tests/monthly-recap.test.mjs",
     "test:tracking": "node --test tests/tracking-metrics.test.mjs",
     "test:insights": "node --test tests/player-insights.test.mjs",
+    "test:notifications": "node --test tests/notifications.test.mjs",
     "build:web": "node scripts/build-web.mjs",
     "cap:sync": "npm run build:web && npx cap sync",
     "cap:sync:android": "npm run build:web && npx cap sync android",

@@ -1,5 +1,13 @@
 # Estado tecnico
 
+## 2026-10-22 - v1.0.0: separador Jogador, notificacoes, icones e cartas limpas
+
+- Separador `#my-profile-tab` na barra (grupo `profile` em `VIEW_GROUPS`); `applyLandingRoute` abre sempre o perfil do jogador ligado.
+- Novo modulo `notifications.js` (changelog, versao, feed e contagens; testes em `tests/notifications.test.mjs`, `npm run test:notifications`). Feed montado em `getNotificationFeed` a partir de dados ja carregados; eventos e partes de video passam a ler `created_at`. Sem alteracoes Supabase.
+- Icones SVG dos numeros do perfil em `STAT_ICONS` / `statIcon`.
+- Cartas (campo, perfil e PNG exportado) deixam de mostrar PAC/SHO/PAS/DRI/DEF/PHY; ficam foto, nome e OVR.
+- Cache-buster `20261022-v100`.
+
 ## 2026-10-07 - Ajustes de convocatoria pelo admin
 
 - Botoes Confirmar nas listas Talvez/Nao vou e Remover na lista Vou; perfis continuam acessiveis pelo nome.
