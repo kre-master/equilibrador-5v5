@@ -4266,7 +4266,7 @@ th.stat-col {
 
 .moment-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -5455,4 +5455,176 @@ body.stage-open .profile-section {
   height: 14px;
   margin-right: 4px;
   vertical-align: -2px;
+}
+
+/* ===== Partilhar momentos ===== */
+.moment-share {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  transition: color .18s ease, background .18s ease;
+}
+
+.moment-share svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.moment-share:hover,
+.moment-share:focus-visible {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+.moment-share.copied {
+  color: var(--green);
+  background: var(--green-2);
+}
+
+.highlight-moment-wrap {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.highlight-moment-wrap .highlight-moment {
+  padding-right: 48px;
+}
+
+.highlight-moment-wrap .moment-share {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+/* ===== Momentos durante o video: barra propria por baixo e destaque quando o momento acontece ===== */
+.video-stage .game-video-frame {
+  transition: box-shadow .25s ease;
+}
+
+.video-stage.moment-live-on .game-video-frame {
+  box-shadow: 0 0 0 3px var(--amber), 0 0 30px rgba(243, 179, 64, .55);
+}
+
+.moment-live {
+  position: absolute;
+  bottom: 58px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 80px);
+  border: 1px solid rgba(243, 179, 64, .6);
+  border-radius: 999px;
+  padding: 6px 12px 6px 10px;
+  color: #fff;
+  background: rgba(5, 10, 20, .72);
+  box-shadow: 0 0 18px rgba(243, 179, 64, .4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: none;
+  animation: moment-live-in .25s ease-out;
+}
+
+.moment-live strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moment-live small {
+  flex: 0 0 auto;
+  color: #f6d38f;
+  font-size: 12px;
+}
+
+.moment-live-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 0 0 rgba(243, 179, 64, .7);
+  animation: moment-live-pulse 1s ease-out infinite;
+}
+
+@keyframes moment-live-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes moment-live-pulse {
+  to { box-shadow: 0 0 0 9px rgba(243, 179, 64, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moment-live,
+  .moment-live-dot { animation: none; }
+}
+
+.moment-timeline {
+  position: relative;
+  height: 26px;
+  margin: 8px 2px 4px;
+}
+
+.moment-timeline-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(130, 175, 255, .16);
+  transform: translateY(-50%);
+}
+
+.moment-timeline-head {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.moment-timeline-mark {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg-solid);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--amber);
+  transform: translate(-50%, -50%);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.moment-timeline-mark::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+}
+
+.moment-timeline-mark:hover,
+.moment-timeline-mark:focus-visible,
+.moment-timeline-mark.active {
+  box-shadow: 0 0 12px rgba(243, 179, 64, .8);
+  transform: translate(-50%, -50%) scale(1.3);
 }

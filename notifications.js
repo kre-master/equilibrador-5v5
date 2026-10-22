@@ -8,6 +8,18 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.1.0",
+      date: "2026-10-22",
+      title: "Partilha os melhores momentos",
+      items: [
+        "Cada momento dos vídeos tem agora um botão de partilhar.",
+        "Quem abre o link vai direto a esse momento na app.",
+        "Os momentos começam 8 segundos antes, para se perceber a jogada.",
+        "Por baixo do vídeo há uma barra com os momentos marcados; toca num para lá saltares.",
+        "Quando um momento acontece, o vídeo acende e mostra o que foi marcado.",
+      ],
+    },
+    {
       version: "1.0.0",
       date: "2026-10-22",
       title: "O teu perfil passa a ser a casa da app",

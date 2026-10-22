@@ -851,6 +851,60 @@ async function initApp() {
   setupNavigationHistory();
 }
 
+// ---- Partilhar momentos: link da app com ?momento=<id>, que abre esse pedaco do video ----
+const SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></svg>';
+let pendingSharedMomentId = new URLSearchParams(window.location.search).get("momento");
+
+function renderMomentShareButton(item) {
+  return `<button type="button" class="moment-share" data-moment-share="${escapeHtml(item.id)}" aria-label="Partilhar momento" title="Partilhar">${SHARE_ICON}</button>`;
+}
+
+function getMomentShareUrl(item) {
+  const url = new URL(window.location.pathname, window.location.origin);
+  url.searchParams.set("momento", item.id);
+  return url.toString();
+}
+
+async function shareMoment(item, button) {
+  const game = state.games.find((entry) => entry.id === item.gameId);
+  const text = `🔖 ${item.note} (${item.authorName || "Jogador"}${game ? ` · ${getGameTitle(game)}` : ""})`;
+  const url = getMomentShareUrl(item);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "Footer", text, url });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    button.classList.add("copied");
+    button.setAttribute("title", "Link copiado");
+    setTimeout(() => {
+      button.classList.remove("copied");
+      button.setAttribute("title", "Partilhar");
+    }, 1800);
+  } catch {
+    window.prompt("Copia o link do momento:", url);
+  }
+}
+
+// So abre quando os momentos ja estao carregados (pode ser so depois de entrar na conta).
+function openPendingSharedMoment() {
+  if (!pendingSharedMomentId) return;
+  const item = videoBookmarks.find((entry) => entry.id === pendingSharedMomentId);
+  if (!item || !state.games.some((game) => game.id === item.gameId)) return;
+  pendingSharedMomentId = null;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("momento");
+  history.replaceState(history.state, "", url.toString());
+  galleryMode = "highlights";
+  showView("gallery");
+  renderGallery();
+  openVideoLightbox(item.gameId, { clip: item });
+}
+
 // O perfil do proprio jogador e a pagina inicial; convocatorias e jogos novos chegam pelas notificacoes.
 function applyLandingRoute() {
   const linkedPlayer = getLinkedPlayer();
@@ -1609,6 +1663,13 @@ function bindNavigation() {
     toggleAccountMenu(false);
     toggleNotifyPanel(false);
   });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-moment-share]");
+    if (!button) return;
+    event.stopPropagation();
+    const item = videoBookmarks.find((entry) => entry.id === button.dataset.momentShare);
+    if (item) shareMoment(item, button);
+  });
   on(document.querySelector("#notify-btn"), "click", (event) => {
     event.stopPropagation();
     toggleNotifyPanel();
@@ -1902,13 +1963,16 @@ function renderGalleryHighlights(items) {
         </button>
         <div class="highlight-moments">
           ${moments.map((item) => `
+            <div class="highlight-moment-wrap">
             <button type="button" class="highlight-moment" data-gallery-highlight="${escapeHtml(item.id)}">
               <span class="moment-time">▶ ${escapeHtml(formatVideoClock(item.momentS))}</span>
               <span class="moment-text">
                 <strong>${escapeHtml(item.note)}</strong>
-                <small>${escapeHtml(item.authorName || "Jogador")} · ${Math.round(item.endS - item.startS)} s</small>
+                <small>${escapeHtml(item.authorName || "Jogador")} · ${Math.round(item.endS - getClipStart(item))} s</small>
               </span>
-            </button>`).join("")}
+            </button>
+            ${renderMomentShareButton(item)}
+            </div>`).join("")}
         </div>
       </section>`;
   }).join("");
@@ -1957,7 +2021,7 @@ function playLightboxPart(index, youtubeId, start = 0, end = null) {
 function playLightboxClip(game, item) {
   const parts = getGameVideoParts(game.id);
   const index = Math.max(0, parts.findIndex((part) => part.youtubeId === item.youtubeId));
-  playLightboxPart(index, item.youtubeId, item.startS, item.endS);
+  playLightboxPart(index, item.youtubeId, getClipStart(item), item.endS);
 }
 
 function openVideoLightbox(gameId, options = {}) {
@@ -1982,17 +2046,16 @@ function openVideoLightbox(gameId, options = {}) {
     stageControls.innerHTML = renderStageControls();
     bindVideoStage(document.querySelector("#video-lightbox-stage"));
   }
+  const playLightboxMoment = (item) => {
+    document.querySelector("#video-lightbox-title").textContent = item.note;
+    playLightboxClip(game, item);
+  };
   const moments = document.querySelector("#video-lightbox-moments");
   if (moments) {
     moments.innerHTML = renderMomentsBlock(game);
-    bindMomentsBlock(moments, game, {
-      getFrame: getLightboxFrame,
-      playClip: (item) => {
-        document.querySelector("#video-lightbox-title").textContent = item.note;
-        playLightboxClip(game, item);
-      },
-    });
+    bindMomentsBlock(moments, game, { getFrame: getLightboxFrame, playClip: playLightboxMoment });
   }
+  attachMomentTracker(document.querySelector("#video-lightbox-stage"), game, { getFrame: getLightboxFrame, playClip: playLightboxMoment });
   modal.classList.remove("hidden");
   document.body.classList.add("mvp-gate-open");
 }
@@ -2095,6 +2158,7 @@ function render() {
   renderPlayerProfile();
   renderMvpVoteGate();
   renderNotifyBadges();
+  openPendingSharedMoment();
 }
 
 function getLinkedPlayer() {
@@ -7671,8 +7735,19 @@ function gameVideoEmbedUrl(youtubeId, start = 0, autoplay = false, end = null) {
 // Qualquer jogador com conta marca um momento com comentario; tocar no momento mostra so esse pedaco.
 // Os tempos sao do video do YouTube (nao da analise). Sem a tabela, ficam neste dispositivo.
 const VIDEO_BOOKMARKS_KEY = "footer-video-bookmarks-v1";
-const BOOKMARK_BEFORE_S = 5;
+const BOOKMARK_BEFORE_S = 8;
 const BOOKMARK_AFTER_S = 5;
+const LEGACY_BOOKMARK_BEFORE_S = 5;
+// Destaque no video: de 1 s antes ate 2 s depois do momento marcado.
+const MOMENT_LIVE_BEFORE_S = 1;
+const MOMENT_LIVE_AFTER_S = 2;
+
+// Momentos antigos guardados com o inicio por defeito (-5 s) tambem passam a comecar 8 s antes.
+// Um inicio ajustado a mao mantem-se.
+function getClipStart(item) {
+  if (Math.abs(item.momentS - item.startS - LEGACY_BOOKMARK_BEFORE_S) < 0.5) return Math.max(0, item.momentS - BOOKMARK_BEFORE_S);
+  return item.startS;
+}
 let videoBookmarks = (() => {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(VIDEO_BOOKMARKS_KEY) || "[]");
@@ -7773,6 +7848,7 @@ window.addEventListener("message", (event) => {
   const previous = videoClocks.get(event.source) || {};
   videoClocks.set(event.source, {
     time: typeof info.currentTime === "number" ? info.currentTime : previous.time,
+    duration: typeof info.duration === "number" && info.duration > 0 ? info.duration : previous.duration,
     playing: typeof info.playerState === "number" ? info.playerState === 1 : previous.playing,
     at: performance.now(),
   });
@@ -7792,6 +7868,86 @@ function getVideoCurrentTime(frame) {
   const clock = frame?.contentWindow ? videoClocks.get(frame.contentWindow) : null;
   if (!clock || typeof clock.time !== "number") return null;
   return clock.playing ? clock.time + (performance.now() - clock.at) / 1000 : clock.time;
+}
+
+function getVideoDuration(frame) {
+  const clock = frame?.contentWindow ? videoClocks.get(frame.contentWindow) : null;
+  return clock?.duration || null;
+}
+
+// ---- Momentos durante o video ----
+// A barra do YouTube nao pode ser alterada (o leitor e um iframe de outro dominio). Por isso, por baixo
+// do video ha uma barra propria com os momentos, e o video ganha um destaque quando o momento acontece.
+const momentTrackers = new Map();
+let momentTrackerTimer = null;
+
+function attachMomentTracker(stage, game, { getFrame, playClip }) {
+  if (!stage) return;
+  let timeline = stage.nextElementSibling;
+  if (!timeline?.matches?.("[data-moment-timeline]")) {
+    timeline = document.createElement("div");
+    timeline.className = "moment-timeline hidden";
+    timeline.dataset.momentTimeline = "";
+    stage.after(timeline);
+  }
+  let live = stage.querySelector("[data-moment-live]");
+  if (!live) {
+    live = document.createElement("div");
+    live.className = "moment-live hidden";
+    live.dataset.momentLive = "";
+    live.setAttribute("aria-live", "polite");
+    stage.append(live);
+  }
+  timeline.onclick = (event) => {
+    const marker = event.target.closest("[data-timeline-moment]");
+    const item = marker && videoBookmarks.find((entry) => entry.id === marker.dataset.timelineMoment);
+    if (item) playClip(item);
+  };
+  momentTrackers.set(stage, { game, getFrame, timeline, live, key: "", liveId: null });
+  if (!momentTrackerTimer) momentTrackerTimer = setInterval(tickMomentTrackers, 250);
+}
+
+function tickMomentTrackers() {
+  momentTrackers.forEach((tracker, stage) => {
+    if (!stage.isConnected) {
+      tracker.timeline.remove();
+      momentTrackers.delete(stage);
+      return;
+    }
+    if (!stage.offsetParent && !stage.classList.contains("is-fullscreen")) return;
+    const frame = tracker.getFrame();
+    const youtubeId = frame?.dataset.youtubeId;
+    const duration = getVideoDuration(frame);
+    const now = getVideoCurrentTime(frame);
+    const items = youtubeId ? getGameBookmarks(tracker.game.id).filter((item) => item.youtubeId === youtubeId) : [];
+
+    const key = `${youtubeId}|${duration}|${items.map((item) => item.id).join(",")}`;
+    if (key !== tracker.key) {
+      tracker.key = key;
+      tracker.timeline.classList.toggle("hidden", !duration || !items.length);
+      tracker.timeline.innerHTML = duration ? `
+        <span class="moment-timeline-track"><span class="moment-timeline-head" data-timeline-head></span></span>
+        ${items.map((item) => `
+          <button type="button" class="moment-timeline-mark" data-timeline-moment="${escapeHtml(item.id)}"
+            style="left:${Math.min(100, (item.momentS / duration) * 100).toFixed(2)}%"
+            title="${escapeHtml(`${formatVideoClock(item.momentS)} · ${item.note}`)}" aria-label="${escapeHtml(`Ver momento: ${item.note}`)}"></button>`).join("")}` : "";
+    }
+    const head = tracker.timeline.querySelector("[data-timeline-head]");
+    if (head && duration && now != null) head.style.width = `${Math.min(100, (now / duration) * 100).toFixed(2)}%`;
+
+    const current = now == null ? null : items.find((item) => now >= item.momentS - MOMENT_LIVE_BEFORE_S && now <= item.momentS + MOMENT_LIVE_AFTER_S);
+    if ((current?.id || null) !== tracker.liveId) {
+      tracker.liveId = current?.id || null;
+      stage.classList.toggle("moment-live-on", Boolean(current));
+      tracker.live.classList.toggle("hidden", !current);
+      tracker.live.innerHTML = current ? `<span class="moment-live-dot" aria-hidden="true"></span><strong>${escapeHtml(current.note)}</strong><small>${escapeHtml(current.authorName || "Jogador")}</small>` : "";
+      tracker.timeline.querySelectorAll("[data-timeline-moment]").forEach((mark) => mark.classList.toggle("active", mark.dataset.timelineMoment === tracker.liveId));
+    }
+  });
+  if (!momentTrackers.size) {
+    clearInterval(momentTrackerTimer);
+    momentTrackerTimer = null;
+  }
 }
 
 function sendVideoCommand(frame, func, args = []) {
@@ -7815,6 +7971,7 @@ function renderMomentsList(game) {
               <small>${escapeHtml(partLabel)}${escapeHtml(item.authorName || "Jogador")}</small>
             </span>
           </button>
+          ${renderMomentShareButton(item)}
           ${canDeleteBookmark(item) ? `<button type="button" class="moment-delete" data-moment-delete="${escapeHtml(item.id)}" aria-label="Apagar momento">&times;</button>` : ""}
         </li>`;
     }).join("")}
@@ -8149,17 +8306,16 @@ function bindGameVideoSection(game, container) {
   frame?.addEventListener("load", () => { frame.dataset.ready = "1"; });
   listenToVideoClock(frame);
   bindVideoStage(section.querySelector("[data-video-stage]"));
-  bindMomentsBlock(section, game, {
-    getFrame: () => frame,
-    playClip: (item) => {
-      if (!frame) return;
-      showGameVideoPart(section, item.youtubeId);
-      frame.dataset.ready = "0";
-      frame.dataset.youtubeId = item.youtubeId;
-      frame.src = gameVideoEmbedUrl(item.youtubeId, item.startS, true, item.endS);
-      frame.scrollIntoView({ behavior: "smooth", block: "center" });
-    },
-  });
+  const playSectionClip = (item) => {
+    if (!frame) return;
+    showGameVideoPart(section, item.youtubeId);
+    frame.dataset.ready = "0";
+    frame.dataset.youtubeId = item.youtubeId;
+    frame.src = gameVideoEmbedUrl(item.youtubeId, getClipStart(item), true, item.endS);
+    frame.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  bindMomentsBlock(section, game, { getFrame: () => frame, playClip: playSectionClip });
+  attachMomentTracker(section.querySelector("[data-video-stage]"), game, { getFrame: () => frame, playClip: playSectionClip });
   // Time links live in the tracking sections below, so listen on the whole game page. The page element
   // outlives each render, so the listener is added once and reads the game shown at click time.
   if (container.dataset.videoSeekBound !== "1") {
