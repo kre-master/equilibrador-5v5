@@ -69,10 +69,11 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 
 ## Passo 3.2 - convites (2026-10-23)
 
-- Migracao `supabase/group-invites-migration.sql` escrita e ensaiada em producao numa transacao anulada (tudo ok). **Ainda nao aplicada**: espera OK do dono, porque muda o comportamento das contas novas.
+- Migracao `supabase/group-invites-migration.sql` ensaiada numa transacao anulada e **aplicada em producao a 2026-10-23** (`group_invites_phase_3_2`), com OK do dono.
 - `group_invites` (um link ativo por grupo, codigo de 16 caracteres); RPCs `get_group_invite` (admin; `p_renew` anula o anterior), `preview_group_invite` (qualquer pessoa, so devolve o nome do grupo), `accept_group_invite` (entra como jogador).
 - Contas novas deixam de entrar automaticamente nos Futeboleiros; `profiles.role` so sincroniza quem ja e membro.
-- App (v1.4.0, commit local): link `?convite=` guardado no dispositivo ate a pessoa entrar; faixa no topo (convite por aceitar / conta sem grupo); painel "Convidar jogadores" em Admin > Pedidos (mostrar, copiar, WhatsApp, gerar novo); depois de entrar abre "Qual destes es tu?" (pedido de perfil existente). Conta sem grupo comeca vazia (sem jogadores de exemplo).
+- `create_own_player(grupo, nome)`: membro sem ficha cria a sua (nota provisoria = media do grupo) e fica com pedido de associacao pendente; o admin aprova em Pedidos e acerta a nota. Um so pedido pendente por conta.
+- App (v1.4.0): link `?convite=` guardado no dispositivo ate a pessoa entrar; faixa no topo (convite por aceitar / conta sem grupo); painel "Convidar jogadores" em Admin > Pedidos (mostrar, copiar, WhatsApp, gerar novo); depois de entrar abre "Qual destes es tu?" (pedido de perfil existente). Conta sem grupo comeca vazia (sem jogadores de exemplo).
 
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 

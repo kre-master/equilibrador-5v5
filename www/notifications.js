@@ -14,6 +14,7 @@
       items: [
         "Os admins têm um link de convite para partilhar no WhatsApp.",
         "Quem abre o link entra no grupo e escolhe o seu perfil em \"Qual destes és tu?\".",
+        "Se não estás na lista, crias o teu perfil e o admin aprova.",
         "Contas novas só entram num grupo através de um convite.",
       ],
     },

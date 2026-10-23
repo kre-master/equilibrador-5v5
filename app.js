@@ -2716,7 +2716,7 @@ function renderAccountPanel() {
   els.accountPanel.innerHTML = `
     <div class="account-card">
       <h3>Qual destes es tu?</h3>
-      <p>Escolhe o teu perfil${getActiveGroup() ? ` em ${escapeHtml(getActiveGroup().name)}` : ""}. O admin aprova antes de ficares ligado. Se nao estas na lista, pede ao admin para te adicionar.</p>
+      <p>Escolhe o teu perfil${getActiveGroup() ? ` em ${escapeHtml(getActiveGroup().name)}` : ""}. O admin aprova antes de ficares ligado.</p>
       ${renderSecurityActions()}
       <div class="claim-grid">
         ${availablePlayers.map((p) => `
@@ -2729,13 +2729,47 @@ function renderAccountPanel() {
           </button>
         `).join("") || `<div class="hint">Nao ha perfis livres para reclamar.</div>`}
       </div>
+      ${activeGroupId ? `
+        <div class="create-own-player">
+          <strong>Nao estas na lista?</strong>
+          <p class="hint">Cria o teu perfil. Fica com uma nota provisoria ate o admin aprovar e a acertar.</p>
+          <div class="add-guest-row">
+            <input data-own-player-name maxlength="40" placeholder="O teu nome" value="${escapeHtml(currentProfile?.display_name || "")}">
+            <button class="ghost-btn" data-create-own-player>Criar o meu perfil</button>
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
 
   els.accountPanel.querySelectorAll("[data-claim-player]").forEach((button) => {
     button.addEventListener("click", () => requestPlayerClaim(button.dataset.claimPlayer));
   });
+  els.accountPanel.querySelector("[data-create-own-player]")?.addEventListener("click", createOwnPlayer);
   bindAccountPanelActions();
+}
+
+// Membro novo que nao esta na lista: cria a ficha e fica como pedido pendente para o admin.
+async function createOwnPlayer() {
+  if (!supabaseClient || !currentSession?.user || !activeGroupId) return;
+  const name = els.accountPanel?.querySelector("[data-own-player-name]")?.value.trim() || "";
+  if (name.length < 2) {
+    alert("Escreve o teu nome.");
+    return;
+  }
+  const { error } = await supabaseClient.rpc("create_own_player", { p_group_id: activeGroupId, p_name: name });
+  if (error) {
+    const message = String(error.message || "");
+    alert(message.includes("claim_pending")
+      ? "Ja tens um pedido pendente. Espera pela aprovacao do admin."
+      : message.includes("already_linked")
+        ? "Ja tens um perfil neste grupo."
+        : `Nao consegui criar o perfil: ${message}`);
+    return;
+  }
+  await loadAccountState();
+  await loadRemoteState();
+  render();
 }
 
 function renderSecurityActions() {

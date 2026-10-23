@@ -115,6 +115,49 @@ grant execute on function public.get_group_invite(uuid, boolean) to authenticate
 grant execute on function public.preview_group_invite(text) to anon, authenticated;
 grant execute on function public.accept_group_invite(text) to authenticated;
 
+-- Membro sem ficha na lista cria a sua: nota provisoria = media do grupo, e fica como pedido de
+-- associacao pendente, que o admin aprova em Pedidos (e acerta a nota).
+create or replace function public.create_own_player(p_group_id uuid, p_name text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_name text := left(btrim(coalesce(p_name, '')), 40);
+  v_rating integer;
+  v_player_id text;
+begin
+  if v_user_id is null then
+    raise exception 'authentication_required' using errcode = '42501';
+  end if;
+  if not private.is_group_member(p_group_id) then
+    raise exception 'group_member_required' using errcode = '42501';
+  end if;
+  if char_length(v_name) < 2 then
+    raise exception 'name_required' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.players where group_id = p_group_id and linked_user_id = v_user_id) then
+    raise exception 'already_linked' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.player_claims where user_id = v_user_id and status = 'pending') then
+    raise exception 'claim_pending' using errcode = 'P0001';
+  end if;
+
+  select coalesce(round(avg(overall))::integer, 60) into v_rating
+  from public.players where group_id = p_group_id and not is_guest;
+  v_player_id := 'p-' || gen_random_uuid()::text;
+  insert into public.players (id, name, pace, shooting, passing, dribbling, defending, physical, overall, group_id)
+  values (v_player_id, v_name, v_rating, v_rating, v_rating, v_rating, v_rating, v_rating, v_rating, p_group_id);
+  insert into public.player_claims (user_id, player_id, status) values (v_user_id, v_player_id, 'pending');
+  return v_player_id;
+end;
+$$;
+
+revoke all on function public.create_own_player(uuid, text) from public, anon;
+grant execute on function public.create_own_player(uuid, text) to authenticated;
+
 -- Contas novas ja nao entram sozinhas nos Futeboleiros; so se sincroniza o papel de quem ja e membro.
 create or replace function private.profiles_sync_legacy_membership()
 returns trigger
