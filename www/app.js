@@ -137,6 +137,25 @@ let myGroups = [];
 let activeGroupId = null;
 // Papel de cada conta no grupo ativo (so carregado para admins, para a lista de contas).
 let groupMemberRoles = new Map();
+// Jogos publicos (fase 3.1.3): pedidos aos jogos do grupo (admin), jogos de outros grupos e caracteristicas.
+let joinRequests = [];
+let requesterTraits = new Map();
+let publicEvents = [];
+let myTraits = null;
+const TRAIT_LABELS = {
+  fitness: { relaxed: "Descontraido", regular: "Regular", athletic: "Atletico" },
+  position: { goalkeeper: "So guarda-redes", mixed: "Misto (vai a baliza e troca)", outfield: "Jogador de campo" },
+  age_band: { "18-24": "18-24", "25-34": "25-34", "35-44": "35-44", "45+": "45+" },
+};
+const NEEDS_LABELS = { outfield: "Jogador de campo", mixed: "Misto", goalkeeper: "Guarda-redes" };
+const PUBLIC_GAME_ERRORS = {
+  traits_required: "Preenche primeiro as tuas caracteristicas na Conta.",
+  event_full: "O jogo ja esta cheio.",
+  request_rejected: "O admin deste jogo recusou o teu pedido.",
+  event_not_public: "Este jogo ja nao esta aberto.",
+  already_group_member: "Ja fazes parte deste grupo.",
+  request_already_decided: "Este pedido ja foi decidido.",
+};
 let playerClaims = [];
 let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
@@ -481,6 +500,9 @@ function normalizeEventRecord(record) {
     minPlayers: Number(record.minPlayers ?? record.min_players ?? 10),
     maxPlayers: Number(record.maxPlayers ?? record.max_players ?? 12),
     status: String(record.status || "open"),
+    visibility: (record.visibility || "group") === "public" ? "public" : "group",
+    // Lista fixa: corre ao carregar o estado, antes das constantes dos jogos publicos.
+    publicNeeds: ["outfield", "mixed", "goalkeeper"].includes(record.publicNeeds ?? record.public_needs) ? (record.publicNeeds ?? record.public_needs) : null,
     createdBy: record.createdBy || record.created_by || null,
     createdAt: record.createdAt || record.created_at || null,
   };
@@ -496,6 +518,8 @@ function eventFromRow(row) {
     minPlayers: row.min_players,
     maxPlayers: row.max_players,
     status: row.status,
+    visibility: row.visibility,
+    publicNeeds: row.public_needs,
     createdBy: row.created_by,
     createdAt: row.created_at,
   });
@@ -512,6 +536,8 @@ function eventToRow(eventData) {
     min_players: clean.minPlayers,
     max_players: clean.maxPlayers,
     status: clean.status,
+    visibility: clean.visibility,
+    public_needs: clean.visibility === "public" ? clean.publicNeeds : null,
     created_by: clean.createdBy,
     ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
@@ -1110,6 +1136,7 @@ async function loadAccountState() {
   const groupsLoaded = await loadMyGroups();
   isAdmin = groupsLoaded ? isGroupAdminRole(getActiveGroup()?.role) : currentProfile?.role === "admin";
   await loadGroupMemberRoles();
+  await loadMyTraits();
   await loadPlayerClaims();
 }
 
@@ -1270,7 +1297,64 @@ async function loadRemoteState() {
   await loadRemoteTracking();
   await loadRemoteVideos();
   await loadRemoteBookmarks();
+  await loadJoinRequests();
+  await loadPublicEvents();
   saveState();
+}
+
+async function loadMyTraits() {
+  myTraits = null;
+  if (!supabaseClient || !currentSession?.user) return;
+  const { data, error } = await supabaseClient
+    .from("player_traits")
+    .select("*")
+    .eq("user_id", currentSession.user.id);
+  if (error) {
+    console.warn("Traits load failed. Run supabase/public-games-migration.sql.", error);
+    return;
+  }
+  myTraits = data?.[0] || null;
+}
+
+// Pedidos aos jogos publicos do grupo ativo, com as caracteristicas de quem pede (so admins).
+async function loadJoinRequests() {
+  joinRequests = [];
+  requesterTraits = new Map();
+  if (!supabaseClient || !currentSession?.user || !isAdmin) return;
+  const { data, error } = await supabaseClient
+    .from("event_join_requests")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("Join requests load failed. Run supabase/public-games-migration.sql.", error);
+    return;
+  }
+  const groupEventIds = new Set((state.events || []).map((eventData) => eventData.id));
+  joinRequests = (data || []).filter((row) => groupEventIds.has(row.event_id));
+  const userIds = [...new Set(joinRequests.map((row) => row.user_id))];
+  if (!userIds.length) return;
+  const { data: traitRows, error: traitError } = await supabaseClient.from("player_traits").select("*").in("user_id", userIds);
+  if (traitError) {
+    console.warn("Requester traits load failed", traitError);
+    return;
+  }
+  (traitRows || []).forEach((row) => requesterTraits.set(row.user_id, row));
+}
+
+async function loadPublicEvents() {
+  publicEvents = [];
+  if (!supabaseClient || !currentSession?.user) return;
+  const { data, error } = await supabaseClient.rpc("list_public_events");
+  if (error) {
+    console.warn("Public events load failed. Run supabase/public-games-migration.sql.", error);
+    return;
+  }
+  publicEvents = data || [];
+}
+
+function getPublicGameErrorMessage(error) {
+  const key = Object.keys(PUBLIC_GAME_ERRORS).find((code) => String(error?.message || "").includes(code));
+  return key ? PUBLIC_GAME_ERRORS[key] : error?.message || "erro inesperado.";
 }
 
 async function repairDuplicatePlayerLinks() {
@@ -2348,6 +2432,8 @@ function render() {
   renderStatsPanel();
   renderMonthlyRecap();
   renderEventsList();
+  renderPublicGames();
+  renderTraitsPanel();
   renderPlayerProfile();
   renderMvpVoteGate();
   renderNotifyBadges();
@@ -5134,6 +5220,230 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-open-player]").forEach((button) => {
     button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
   });
+  els.eventsList.querySelectorAll("[data-event-public-save]").forEach((button) => {
+    button.addEventListener("click", () => saveEventPublicSettings(button.dataset.eventPublicSave));
+  });
+  els.eventsList.querySelectorAll("[data-join-decide]").forEach((button) => {
+    button.addEventListener("click", () => decideJoinRequest(button.dataset.joinDecide, button.dataset.accept === "true"));
+  });
+}
+
+// Admin: abrir o jogo a quem nao e do grupo, dizer o que falta e decidir os pedidos.
+function renderEventPublicSection(eventData) {
+  if (!isAdmin || !remoteEnabled || ["cancelled", "completed"].includes(eventData.status)) return "";
+  const isPublic = eventData.visibility === "public";
+  const requests = joinRequests.filter((row) => row.event_id === eventData.id);
+  const pending = requests.filter((row) => row.status === "pending");
+  const accepted = requests.filter((row) => row.status === "accepted");
+  return `
+    <div class="event-public admin-actions">
+      <div class="event-public-row">
+        <label class="game-date-control">
+          <span>Visibilidade</span>
+          <select data-event-visibility="${eventData.id}">
+            <option value="group" ${isPublic ? "" : "selected"}>So o grupo</option>
+            <option value="public" ${isPublic ? "selected" : ""}>Publico</option>
+          </select>
+        </label>
+        <label class="game-date-control">
+          <span>Precisamos de</span>
+          <select data-event-needs="${eventData.id}">
+            <option value="">Qualquer</option>
+            ${Object.entries(NEEDS_LABELS).map(([value, label]) => `<option value="${value}" ${eventData.publicNeeds === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </label>
+        <button class="ghost-btn" data-event-public-save="${eventData.id}">Guardar</button>
+      </div>
+      ${isPublic ? `<p class="hint">Quem nao e do grupo ve a data, hora, local e quantos faltam, e pode dizer que esta disponivel.</p>` : ""}
+      ${pending.length ? `
+        <div class="join-requests">
+          <strong>Pedidos (${pending.length})</strong>
+          ${pending.map((row) => renderJoinRequestRow(row, eventData)).join("")}
+        </div>
+      ` : isPublic ? `<p class="hint">Ainda sem pedidos.</p>` : ""}
+      ${accepted.length ? `<p class="hint good">Aceites: ${accepted.map((row) => escapeHtml(row.requester_name)).join(", ")}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderJoinRequestRow(row, eventData) {
+  const traits = requesterTraits.get(row.user_id) || {};
+  const fits = !eventData.publicNeeds || traitsFitNeeds(traits.position, eventData.publicNeeds);
+  const traitText = [
+    TRAIT_LABELS.position[traits.position],
+    TRAIT_LABELS.fitness[traits.fitness],
+    traits.age_band ? `${TRAIT_LABELS.age_band[traits.age_band]} anos` : "",
+  ].filter(Boolean).join(" · ") || "Sem caracteristicas";
+  return `
+    <div class="join-request-row">
+      <div>
+        <strong>${escapeHtml(row.requester_name || "Jogador")}</strong>
+        ${eventData.publicNeeds && fits ? `<span class="metric good-pill">Encaixa</span>` : ""}
+        <p>${escapeHtml(traitText)}</p>
+      </div>
+      <div class="roster-actions">
+        <button class="mini-btn" data-join-decide="${row.id}" data-accept="true">Aceitar</button>
+        <button class="mini-btn" data-join-decide="${row.id}" data-accept="false">Recusar</button>
+      </div>
+    </div>
+  `;
+}
+
+// Misto serve para tudo; campo e redes servem para o que dizem.
+function traitsFitNeeds(position, needs) {
+  if (!position || !needs) return false;
+  return position === "mixed" || position === needs;
+}
+
+async function saveEventPublicSettings(eventId) {
+  if (!requireAdmin()) return;
+  const eventData = (state.events || []).find((item) => item.id === eventId);
+  if (!eventData) return;
+  const visibility = els.eventsList?.querySelector(`[data-event-visibility="${eventId}"]`)?.value === "public" ? "public" : "group";
+  const needs = els.eventsList?.querySelector(`[data-event-needs="${eventId}"]`)?.value || null;
+  const previous = { visibility: eventData.visibility, publicNeeds: eventData.publicNeeds };
+  eventData.visibility = visibility;
+  eventData.publicNeeds = visibility === "public" ? needs : null;
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("events").upsert(eventToRow(eventData));
+    if (error) {
+      Object.assign(eventData, previous);
+      alert(`Nao consegui guardar: ${error.message}`);
+      return;
+    }
+  }
+  saveState();
+  renderEventsList();
+}
+
+async function decideJoinRequest(requestId, accept) {
+  if (!requireAdmin() || !supabaseClient) return;
+  const row = joinRequests.find((item) => item.id === requestId);
+  if (!row) return;
+  if (!confirm(`${accept ? "Aceitar" : "Recusar"} ${row.requester_name || "este pedido"}?`)) return;
+  const { error } = await supabaseClient.rpc("decide_public_event_request", { p_request_id: requestId, p_accept: accept });
+  if (error) {
+    alert(`Nao consegui decidir: ${getPublicGameErrorMessage(error)}`);
+    return;
+  }
+  // Ao aceitar entra uma ficha de convidado e a resposta "Vou": volta a carregar o grupo.
+  await loadRemoteState();
+  render();
+}
+
+// Jogos publicos de outros grupos; o painel so aparece quando ha algum.
+function renderPublicGames() {
+  const panel = document.querySelector("#public-games-panel");
+  const list = document.querySelector("#public-games-list");
+  if (!panel || !list) return;
+  panel.classList.toggle("hidden", !publicEvents.length);
+  if (!publicEvents.length) {
+    list.innerHTML = "";
+    return;
+  }
+  const hasTraits = Boolean(myTraits?.fitness && myTraits?.position && myTraits?.age_band);
+  list.innerHTML = `
+    ${hasTraits ? "" : `<div class="hint warn">Para pedires um lugar, preenche primeiro as tuas caracteristicas na Conta.</div>`}
+    ${publicEvents.map((row) => {
+      const status = row.my_status;
+      const fits = row.needs && traitsFitNeeds(myTraits?.position, row.needs);
+      return `
+        <article class="event-card public-game-card">
+          <div class="event-top">
+            <div>
+              <p class="eyebrow">${escapeHtml(row.group_name || "Grupo")}</p>
+              <h3>${escapeHtml(row.title || "Jogo")}</h3>
+              <p>${formatDate(row.starts_at)}${row.location ? ` - ${escapeHtml(row.location)}` : ""}</p>
+            </div>
+            <strong class="counter">${row.spots_left > 0 ? `Faltam ${row.spots_left}` : "Cheio"}</strong>
+          </div>
+          <div class="event-counts">
+            ${row.needs ? `<span class="metric">Precisam de: ${escapeHtml(NEEDS_LABELS[row.needs] || row.needs)}</span>` : ""}
+            ${fits ? `<span class="metric good-pill">Encaixas</span>` : ""}
+            ${status === "pending" ? `<span class="metric warn-pill">Pedido enviado</span>` : ""}
+            ${status === "accepted" ? `<span class="metric good-pill">Aceite - contamos contigo</span>` : ""}
+          </div>
+          <div class="actions">
+            ${status === "pending"
+              ? `<button class="ghost-btn" data-public-cancel="${escapeHtml(row.event_id)}">Cancelar pedido</button>`
+              : status === "accepted"
+                ? ""
+                : `<button class="primary-btn" data-public-request="${escapeHtml(row.event_id)}" ${hasTraits && row.spots_left > 0 ? "" : "disabled"}>Estou disponivel</button>`}
+          </div>
+        </article>
+      `;
+    }).join("")}
+  `;
+  list.querySelectorAll("[data-public-request]").forEach((button) => {
+    button.addEventListener("click", () => changePublicRequest(button.dataset.publicRequest, true));
+  });
+  list.querySelectorAll("[data-public-cancel]").forEach((button) => {
+    button.addEventListener("click", () => changePublicRequest(button.dataset.publicCancel, false));
+  });
+}
+
+async function changePublicRequest(eventId, request) {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.rpc(request ? "request_public_event" : "cancel_public_event_request", { p_event_id: eventId });
+  if (error) {
+    alert(getPublicGameErrorMessage(error));
+    return;
+  }
+  await loadPublicEvents();
+  renderPublicGames();
+}
+
+// Caracteristicas da conta: so o admin de um jogo a que pedes para ir as ve.
+function renderTraitsPanel() {
+  const panel = document.querySelector("#traits-panel");
+  if (!panel) return;
+  if (!remoteEnabled || !currentSession?.user) {
+    panel.innerHTML = "";
+    return;
+  }
+  const select = (field, label) => `
+    <label class="game-date-control">
+      <span>${label}</span>
+      <select data-trait="${field}">
+        <option value="">-</option>
+        ${Object.entries(TRAIT_LABELS[field]).map(([value, text]) => `<option value="${value}" ${myTraits?.[field] === value ? "selected" : ""}>${text}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  panel.innerHTML = `
+    <div class="account-card">
+      <h3>As minhas caracteristicas</h3>
+      <p>Para jogos publicos de outros grupos. So o admin do jogo a que pedes para ir as ve.</p>
+      <div class="traits-row">
+        ${select("fitness", "Forma")}
+        ${select("position", "Posicao")}
+        ${select("age_band", "Idade")}
+      </div>
+      <div class="actions"><button class="primary-btn" data-save-traits>Guardar</button></div>
+    </div>
+  `;
+  panel.querySelector("[data-save-traits]")?.addEventListener("click", saveMyTraits);
+}
+
+async function saveMyTraits() {
+  if (!supabaseClient || !currentSession?.user) return;
+  const panel = document.querySelector("#traits-panel");
+  const value = (field) => panel?.querySelector(`[data-trait="${field}"]`)?.value || null;
+  const row = {
+    user_id: currentSession.user.id,
+    fitness: value("fitness"),
+    position: value("position"),
+    age_band: value("age_band"),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabaseClient.from("player_traits").upsert(row);
+  if (error) {
+    alert(`Nao consegui guardar: ${error.message}`);
+    return;
+  }
+  myTraits = row;
+  renderTraitsPanel();
+  renderPublicGames();
 }
 
 function renderEventCard(eventData) {
@@ -5178,6 +5488,7 @@ function renderEventCard(eventData) {
         ${renderRosterMini("Nao vou", notGoing, eventData, "not_going")}
       </div>
       ${renderEventAdminAdds(eventData)}
+      ${renderEventPublicSection(eventData)}
       <div class="actions admin-actions">
         <button class="ghost-btn" data-event-share="${eventData.id}">WhatsApp</button>
         ${eventData.status === "cancelled" ? `

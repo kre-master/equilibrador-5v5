@@ -8,6 +8,16 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.3.0",
+      date: "2026-10-23",
+      title: "Jogos públicos",
+      items: [
+        "O admin pode abrir um jogo a quem não é do grupo quando falta alguém.",
+        "Vês os jogos públicos de outros grupos e podes dizer que estás disponível.",
+        "Na Conta indicas a tua forma, posição e faixa etária; só o admin do jogo a que pedes para ir as vê.",
+      ],
+    },
+    {
       version: "1.2.0",
       date: "2026-10-23",
       title: "Equipas mais rápidas e votos só teus",

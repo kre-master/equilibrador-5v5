@@ -59,7 +59,13 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
   - gatilhos `*_same_group_players` em games, event_responses, payments, attendance_overrides e player_form_snapshots recusam fichas de outro grupo (`player_from_another_group`); ids inexistentes continuam aceites;
   - `public.set_group_member_role(grupo, conta, papel)`: so admin do grupo; dono fixo; ninguem muda o proprio papel; nos Futeboleiros sincroniza `profiles.role`. A app (lista de contas) usa esta funcao e mostra so as contas do grupo ativo (dono/admin/jogador).
 - Fica para a 3.2: tirar o default Futeboleiros de `group_id` (mantido para versoes antigas da app em cache) e deixar de juntar contas novas aos Futeboleiros automaticamente (trigger `profiles_sync_legacy_membership`) quando houver convites.
-- Falta 3.1.3: jogos publicos e pedidos de entrada.
+- 3.1.3 aplicado em producao a 2026-10-23 (migracao `public_games_phase_3_1_3`, ficheiro `supabase/public-games-migration.sql`), ensaiado antes numa transacao anulada:
+  - `events.visibility` (`group`/`public`) e `events.public_needs` (`outfield`/`mixed`/`goalkeeper`);
+  - `player_traits` (forma, posicao, faixa etaria) da conta: le o proprio e o admin de um jogo a que a pessoa pediu para ir;
+  - `event_join_requests` + RPCs `list_public_events`, `request_public_event` (exige caracteristicas; nao para o proprio grupo), `cancel_public_event_request`, `decide_public_event_request` (aceitar cria/reutiliza ficha de convidado no grupo com nota = media do grupo e poe "Vou"; recusa e definitiva para esse jogo);
+  - app: controlos no cartao da convocatoria (admin), painel "Jogos publicos" (so aparece com jogos de outros grupos), "As minhas caracteristicas" na Conta. Versao 1.3.0.
+- Limite atual: com um so grupo e contas novas a entrar nos Futeboleiros, ainda nao ha "de fora". Ganha vida com o segundo grupo.
+- Depois: pagina do jogo e equipas para o convidado aceite (hoje so ve data/hora/local e o estado).
 
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 
