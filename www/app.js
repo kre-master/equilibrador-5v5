@@ -142,6 +142,13 @@ let joinRequests = [];
 let requesterTraits = new Map();
 let publicEvents = [];
 let myTraits = null;
+// Disponibilidade semanal e "Procurar jogadores" na convocatoria.
+const WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+const PUBLIC_SEEN_KEY = "footer-public-games-seen-v1";
+let myAvailability = [];
+let availabilityWeekOffset = 0;
+const recruitOpen = new Set();
+const availableByEvent = new Map();
 const TRAIT_LABELS = {
   fitness: { relaxed: "Descontraido", regular: "Regular", athletic: "Atletico" },
   position: { goalkeeper: "So guarda-redes", mixed: "Misto (vai a baliza e troca)", outfield: "Jogador de campo" },
@@ -164,6 +171,9 @@ const PUBLIC_GAME_ERRORS = {
   event_not_public: "Este jogo ja nao esta aberto.",
   already_group_member: "Ja fazes parte deste grupo.",
   request_already_decided: "Este pedido ja foi decidido.",
+  invite_not_found: "Este convite ja nao esta ativo.",
+  player_not_available: "Este jogador ja nao esta disponivel.",
+  event_not_open: "Esta convocatoria ja nao esta aberta.",
 };
 let playerClaims = [];
 let eventResponses = [];
@@ -547,7 +557,7 @@ function eventToRow(eventData) {
     max_players: clean.maxPlayers,
     status: clean.status,
     visibility: clean.visibility,
-    public_needs: clean.visibility === "public" ? clean.publicNeeds : null,
+    public_needs: clean.publicNeeds,
     created_by: clean.createdBy,
     ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
@@ -1155,6 +1165,7 @@ async function loadAccountState() {
   isAdmin = groupsLoaded ? isGroupAdminRole(getActiveGroup()?.role) : currentProfile?.role === "admin";
   await loadGroupMemberRoles();
   await loadMyTraits();
+  await loadMyAvailability();
   await loadGroupRequests();
   await loadPlayerClaims();
 }
@@ -1739,6 +1750,172 @@ async function loadGroupRequests() {
     return;
   }
   groupRequests = data || [];
+}
+
+async function loadMyAvailability() {
+  myAvailability = [];
+  if (!supabaseClient || !currentSession?.user) return;
+  const { data, error } = await supabaseClient
+    .from("player_availability")
+    .select("*")
+    .gte("day", toLocalDateKey(new Date()))
+    .order("day", { ascending: true });
+  if (error) {
+    console.warn("Availability load failed. Run supabase/availability-migration.sql.", error);
+    return;
+  }
+  myAvailability = data || [];
+}
+
+function toLocalDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// Segunda-feira da semana pedida (0 = esta semana).
+function getWeekDays(offset) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + offset * 7);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + index);
+    return day;
+  });
+}
+
+// "Jogos publicos": disponibilidade da semana. Ver tambem list_available_players no Supabase.
+function renderAvailabilityPanel() {
+  const panel = document.querySelector("#availability-panel");
+  if (!panel) return;
+  if (!remoteEnabled || !currentSession?.user) {
+    panel.innerHTML = "";
+    return;
+  }
+  const days = getWeekDays(availabilityWeekOffset);
+  const todayKey = toLocalDateKey(new Date());
+  const weekKeys = days.map(toLocalDateKey);
+  const weekRows = myAvailability.filter((row) => weekKeys.includes(row.day));
+  const selected = new Set(weekRows.map((row) => row.day));
+  const from = weekRows[0]?.from_hour ?? 19;
+  const to = weekRows[0]?.to_hour ?? 23;
+  const hours = (min, max, value) => Array.from({ length: max - min + 1 }, (_, i) => min + i)
+    .map((hour) => `<option value="${hour}" ${hour === value ? "selected" : ""}>${hour}h</option>`).join("");
+  const hasTraits = Boolean(myTraits?.fitness && myTraits?.position && myTraits?.age_band);
+  panel.innerHTML = `
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Queres jogar?</p>
+          <h2>A minha disponibilidade</h2>
+        </div>
+      </div>
+      <div class="availability-body">
+        <p class="hint">Diz em que dias e horas podes jogar. Os admins de grupos com vagas veem o teu nome, as tuas caracteristicas e a tua disponibilidade, e podem convidar-te.</p>
+        <div class="week-switch">
+          <button class="ghost-btn ${availabilityWeekOffset === 0 ? "selected" : ""}" data-avail-week="0">Esta semana</button>
+          <button class="ghost-btn ${availabilityWeekOffset === 1 ? "selected" : ""}" data-avail-week="1">Proxima semana</button>
+        </div>
+        <div class="day-chips">
+          ${days.map((day) => {
+            const key = toLocalDateKey(day);
+            const past = key < todayKey;
+            return `<label class="day-chip ${selected.has(key) ? "selected" : ""} ${past ? "disabled" : ""}">
+              <input type="checkbox" data-avail-day="${key}" ${selected.has(key) ? "checked" : ""} ${past ? "disabled" : ""}>
+              ${WEEKDAY_SHORT[day.getDay()]} ${day.getDate()}
+            </label>`;
+          }).join("")}
+        </div>
+        <div class="traits-row">
+          <label class="game-date-control"><span>Das</span><select data-avail-from>${hours(7, 23, from)}</select></label>
+          <label class="game-date-control"><span>As</span><select data-avail-to>${hours(8, 24, to)}</select></label>
+        </div>
+        ${hasTraits ? "" : `<p class="hint warn">Preenche tambem as tuas caracteristicas na Conta, para os admins saberem como jogas.</p>`}
+        <div class="actions"><button class="primary-btn" data-save-availability>Guardar disponibilidade</button></div>
+      </div>
+    </section>
+  `;
+  panel.querySelectorAll("[data-avail-week]").forEach((button) => {
+    button.addEventListener("click", () => {
+      availabilityWeekOffset = Number(button.dataset.availWeek);
+      renderAvailabilityPanel();
+    });
+  });
+  panel.querySelectorAll("[data-avail-day]").forEach((input) => {
+    input.addEventListener("change", () => input.closest(".day-chip")?.classList.toggle("selected", input.checked));
+  });
+  panel.querySelector("[data-save-availability]")?.addEventListener("click", saveMyAvailability);
+}
+
+async function saveMyAvailability() {
+  if (!supabaseClient || !currentSession?.user) return;
+  const panel = document.querySelector("#availability-panel");
+  const fromHour = Number(panel?.querySelector("[data-avail-from]")?.value);
+  const toHour = Number(panel?.querySelector("[data-avail-to]")?.value);
+  if (!(toHour > fromHour)) {
+    alert("A hora de fim tem de ser depois da hora de inicio.");
+    return;
+  }
+  const weekKeys = getWeekDays(availabilityWeekOffset).map(toLocalDateKey);
+  const todayKey = toLocalDateKey(new Date());
+  const days = [...(panel?.querySelectorAll("[data-avail-day]:checked") || [])].map((input) => input.dataset.availDay);
+  // A semana e substituida inteira: tira os dias desmarcados e grava os marcados.
+  const { error: deleteError } = await supabaseClient
+    .from("player_availability")
+    .delete()
+    .eq("user_id", currentSession.user.id)
+    .gte("day", weekKeys[0] < todayKey ? todayKey : weekKeys[0])
+    .lte("day", weekKeys[6]);
+  if (deleteError) {
+    alert(`Nao consegui guardar: ${deleteError.message}`);
+    return;
+  }
+  if (days.length) {
+    const rows = days.map((day) => ({ user_id: currentSession.user.id, day, from_hour: fromHour, to_hour: toHour }));
+    const { error } = await supabaseClient.from("player_availability").insert(rows);
+    if (error) {
+      alert(`Nao consegui guardar: ${error.message}`);
+      return;
+    }
+  }
+  await loadMyAvailability();
+  renderAvailabilityPanel();
+}
+
+function readPublicSeen() {
+  try {
+    return new Set(JSON.parse(window.localStorage.getItem(PUBLIC_SEEN_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function markPublicGamesSeen() {
+  const seen = readPublicSeen();
+  publicEvents.forEach((row) => seen.add(row.event_id));
+  try {
+    window.localStorage.setItem(PUBLIC_SEEN_KEY, JSON.stringify([...seen].slice(-200)));
+  } catch {
+    // Sem armazenamento local: a bolinha volta na proxima visita.
+  }
+  renderGamesTabBadge();
+}
+
+// Bolinha vermelha em Jogos: pedidos por decidir (admin), convites recebidos e jogos publicos novos.
+function getGamesAttentionCount() {
+  const pendingRequests = isAdmin ? joinRequests.filter((row) => row.status === "pending").length : 0;
+  const invites = publicEvents.filter((row) => row.my_status === "invited").length;
+  const seen = readPublicSeen();
+  const newGames = publicEvents.filter((row) => !row.my_status && !seen.has(row.event_id)).length;
+  return pendingRequests + invites + newGames;
+}
+
+function renderGamesTabBadge() {
+  const badge = document.querySelector("#games-tab-badge");
+  if (!badge) return;
+  const count = getGamesAttentionCount();
+  badge.classList.toggle("hidden", !count);
+  badge.textContent = count > 9 ? "9+" : String(count || "");
 }
 
 async function loadMyTraits() {
@@ -2329,6 +2506,7 @@ function showView(viewName, options = {}) {
   // "Fazer equipas" (today) conta como "O meu grupo" no mini-separador.
   const activeSubtab = viewName === "today" ? "events" : viewName;
   document.querySelectorAll(".subtab").forEach((button) => button.classList.toggle("active", button.dataset.view === activeSubtab));
+  if (viewName === "public-games") markPublicGamesSeen();
   if (viewName === "today") {
     // Vindo de "abrir jogo" ou de importar confirmados: leva o utilizador ate as equipas.
     requestAnimationFrame(() => document.querySelector("#generate-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -2875,6 +3053,8 @@ function render() {
   renderMonthlyRecap();
   renderEventsList();
   renderPublicGames();
+  renderAvailabilityPanel();
+  renderGamesTabBadge();
   renderTraitsPanel();
   renderGroupBanner();
   renderInvitePanel();
@@ -5701,8 +5881,14 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-open-player]").forEach((button) => {
     button.addEventListener("click", () => openPlayerProfile(button.dataset.openPlayer));
   });
-  els.eventsList.querySelectorAll("[data-event-public-save]").forEach((button) => {
-    button.addEventListener("click", () => saveEventPublicSettings(button.dataset.eventPublicSave));
+  els.eventsList.querySelectorAll("[data-recruit-toggle]").forEach((button) => {
+    button.addEventListener("click", () => toggleRecruit(button.dataset.recruitToggle));
+  });
+  els.eventsList.querySelectorAll("[data-event-public-toggle], [data-event-needs]").forEach((input) => {
+    input.addEventListener("change", () => saveEventPublicSettings(input.dataset.eventPublicToggle || input.dataset.eventNeeds));
+  });
+  els.eventsList.querySelectorAll("[data-invite-player]").forEach((button) => {
+    button.addEventListener("click", () => invitePlayerToEvent(button.dataset.eventId, button.dataset.invitePlayer));
   });
   els.eventsList.querySelectorAll("[data-join-decide]").forEach((button) => {
     button.addEventListener("click", () => decideJoinRequest(button.dataset.joinDecide, button.dataset.accept === "true"));
@@ -5731,23 +5917,42 @@ function renderEventTeams(game) {
   `;
 }
 
-// Admin: abrir o jogo a quem nao e do grupo, dizer o que falta e decidir os pedidos.
+// Admin: "Faltam X - Procurar jogadores". Abre pedidos recebidos, disponiveis (compativeis primeiro),
+// convites e a opcao de mostrar o jogo em "Jogos publicos".
 function renderEventPublicSection(eventData) {
   if (!isAdmin || !remoteEnabled || ["cancelled", "completed"].includes(eventData.status)) return "";
-  const isPublic = eventData.visibility === "public";
+  const open = recruitOpen.has(eventData.id);
+  const missing = Math.max(0, eventData.maxPlayers - getEventGoingCount(eventData.id));
   const requests = joinRequests.filter((row) => row.event_id === eventData.id);
   const pending = requests.filter((row) => row.status === "pending");
   const accepted = requests.filter((row) => row.status === "accepted");
+  const summary = [
+    pending.length ? `${pending.length} ${pending.length === 1 ? "pedido" : "pedidos"} por decidir` : "",
+    eventData.visibility === "public" ? "Visivel em Jogos publicos" : "",
+  ].filter(Boolean).join(" · ");
   return `
-    <div class="event-public admin-actions">
+    <div class="event-recruit admin-actions ${missing ? "needs-players" : ""}">
+      <div class="recruit-head">
+        <div>
+          <strong>${missing ? `Faltam ${missing} ${missing === 1 ? "jogador" : "jogadores"}` : "Precisas de mais alguem?"}</strong>
+          ${summary ? `<p>${summary}</p>` : ""}
+        </div>
+        <button class="${missing || pending.length ? "primary-btn" : "ghost-btn"}" data-recruit-toggle="${eventData.id}">${open ? "Fechar" : "Procurar jogadores"}</button>
+      </div>
+      ${open ? renderRecruitBody(eventData, pending, accepted) : ""}
+    </div>
+  `;
+}
+
+function renderRecruitBody(eventData, pending, accepted) {
+  const isPublic = eventData.visibility === "public";
+  const available = availableByEvent.get(eventData.id);
+  const compatible = (available || []).filter((row) => row.compatible);
+  const others = (available || []).filter((row) => !row.compatible);
+  const availableList = (rows) => rows.map((row) => renderAvailableRow(row, eventData)).join("");
+  return `
+    <div class="recruit-body">
       <div class="event-public-row">
-        <label class="game-date-control">
-          <span>Visibilidade</span>
-          <select data-event-visibility="${eventData.id}">
-            <option value="group" ${isPublic ? "" : "selected"}>So o grupo</option>
-            <option value="public" ${isPublic ? "selected" : ""}>Publico</option>
-          </select>
-        </label>
         <label class="game-date-control">
           <span>Precisamos de</span>
           <select data-event-needs="${eventData.id}">
@@ -5755,18 +5960,102 @@ function renderEventPublicSection(eventData) {
             ${Object.entries(NEEDS_LABELS).map(([value, label]) => `<option value="${value}" ${eventData.publicNeeds === value ? "selected" : ""}>${label}</option>`).join("")}
           </select>
         </label>
-        <button class="ghost-btn" data-event-public-save="${eventData.id}">Guardar</button>
+        <label class="recruit-switch">
+          <input type="checkbox" data-event-public-toggle="${eventData.id}" ${isPublic ? "checked" : ""}>
+          <span>Mostrar em Jogos publicos</span>
+        </label>
       </div>
-      ${isPublic ? `<p class="hint">Quem nao e do grupo ve a data, hora, local e quantos faltam, e pode dizer que esta disponivel.</p>` : ""}
+      <p class="hint">${isPublic
+        ? "Quem nao e do grupo ve a data, hora, local e quantos faltam, e pode pedir para vir."
+        : "Podes convidar quem esta disponivel, ou mostrar o jogo em Jogos publicos para receberes pedidos."}</p>
       ${pending.length ? `
         <div class="join-requests">
-          <strong>Pedidos (${pending.length})</strong>
+          <strong>Pedidos recebidos (${pending.length})</strong>
           ${pending.map((row) => renderJoinRequestRow(row, eventData)).join("")}
         </div>
-      ` : isPublic ? `<p class="hint">Ainda sem pedidos.</p>` : ""}
-      ${accepted.length ? `<p class="hint good">Aceites: ${accepted.map((row) => escapeHtml(row.requester_name)).join(", ")}</p>` : ""}
+      ` : ""}
+      ${available === undefined ? `<p class="hint">A procurar jogadores disponiveis...</p>` : `
+        <div class="join-requests">
+          <strong>Disponiveis para este dia e hora (${compatible.length})</strong>
+          ${availableList(compatible) || `<p class="hint">Ninguem disponivel a esta hora.</p>`}
+        </div>
+        ${others.length ? `
+          <div class="join-requests">
+            <strong>Disponiveis noutras horas ou dias desta semana (${others.length})</strong>
+            ${availableList(others)}
+          </div>
+        ` : ""}
+      `}
+      ${accepted.length ? `<p class="hint good">Vem jogar: ${accepted.map((row) => escapeHtml(row.requester_name)).join(", ")}</p>` : ""}
     </div>
   `;
+}
+
+function renderAvailableRow(row, eventData) {
+  const fits = eventData.publicNeeds && traitsFitNeeds(row.player_position, eventData.publicNeeds);
+  const traitText = [
+    TRAIT_LABELS.position[row.player_position],
+    TRAIT_LABELS.fitness[row.fitness],
+    row.age_band ? `${row.age_band} anos` : "",
+  ].filter(Boolean).join(" · ") || "Sem caracteristicas";
+  const status = row.request_status;
+  const action = status === "invited"
+    ? `<span class="metric">Convite enviado</span>`
+    : status === "pending"
+      ? `<span class="metric warn-pill">Pediu - ve acima</span>`
+      : status === "accepted"
+        ? `<span class="metric good-pill">Vem jogar</span>`
+        : `<button class="mini-btn" data-invite-player="${escapeHtml(row.user_id)}" data-event-id="${eventData.id}">Convidar</button>`;
+  return `
+    <div class="join-request-row">
+      <div>
+        <strong>${escapeHtml(row.name || "Jogador")}</strong>
+        ${fits ? `<span class="metric good-pill">Encaixa</span>` : ""}
+        <p>${escapeHtml(formatAvailabilitySlot(row))} · ${escapeHtml(traitText)}</p>
+      </div>
+      <div class="roster-actions">${action}</div>
+    </div>
+  `;
+}
+
+function formatAvailabilitySlot(row) {
+  const day = new Date(`${row.day}T12:00:00`);
+  return `${WEEKDAY_SHORT[day.getDay()]} ${day.getDate()} · ${row.from_hour}h-${row.to_hour}h`;
+}
+
+async function toggleRecruit(eventId) {
+  if (recruitOpen.has(eventId)) {
+    recruitOpen.delete(eventId);
+    renderEventsList();
+    return;
+  }
+  recruitOpen.add(eventId);
+  renderEventsList();
+  await loadAvailableForEvent(eventId);
+  renderEventsList();
+}
+
+async function loadAvailableForEvent(eventId) {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.rpc("list_available_players", { p_event_id: eventId });
+  if (error) {
+    console.warn("Available players load failed. Run supabase/availability-migration.sql.", error);
+    availableByEvent.set(eventId, []);
+    return;
+  }
+  availableByEvent.set(eventId, data || []);
+}
+
+async function invitePlayerToEvent(eventId, userId) {
+  if (!requireAdmin() || !supabaseClient) return;
+  const { error } = await supabaseClient.rpc("invite_to_event", { p_event_id: eventId, p_user_id: userId });
+  if (error) {
+    alert(`Nao consegui convidar: ${getPublicGameErrorMessage(error)}`);
+    return;
+  }
+  await loadAvailableForEvent(eventId);
+  await loadJoinRequests();
+  renderEventsList();
 }
 
 function renderJoinRequestRow(row, eventData) {
@@ -5802,11 +6091,11 @@ async function saveEventPublicSettings(eventId) {
   if (!requireAdmin()) return;
   const eventData = (state.events || []).find((item) => item.id === eventId);
   if (!eventData) return;
-  const visibility = els.eventsList?.querySelector(`[data-event-visibility="${eventId}"]`)?.value === "public" ? "public" : "group";
+  const visibility = els.eventsList?.querySelector(`[data-event-public-toggle="${eventId}"]`)?.checked ? "public" : "group";
   const needs = els.eventsList?.querySelector(`[data-event-needs="${eventId}"]`)?.value || null;
   const previous = { visibility: eventData.visibility, publicNeeds: eventData.publicNeeds };
   eventData.visibility = visibility;
-  eventData.publicNeeds = visibility === "public" ? needs : null;
+  eventData.publicNeeds = needs;
   if (remoteEnabled && supabaseClient) {
     const { error } = await supabaseClient.from("events").upsert(eventToRow(eventData));
     if (error) {
@@ -5850,7 +6139,7 @@ function renderPublicGames() {
   const hasTraits = Boolean(myTraits?.fitness && myTraits?.position && myTraits?.age_band);
   list.innerHTML = `
     ${hasTraits ? "" : `<div class="hint warn">Para pedires um lugar, preenche primeiro as tuas caracteristicas na Conta.</div>`}
-    ${publicEvents.map((row) => {
+    ${[...publicEvents].sort((a, b) => (b.my_status === "invited") - (a.my_status === "invited")).map((row) => {
       const status = row.my_status;
       const fits = row.needs && traitsFitNeeds(myTraits?.position, row.needs);
       return `
@@ -5866,11 +6155,15 @@ function renderPublicGames() {
           <div class="event-counts">
             ${row.needs ? `<span class="metric">Precisam de: ${escapeHtml(NEEDS_LABELS[row.needs] || row.needs)}</span>` : ""}
             ${fits ? `<span class="metric good-pill">Encaixas</span>` : ""}
+            ${status === "invited" ? `<span class="metric warn-pill">Convidaram-te</span>` : ""}
             ${status === "pending" ? `<span class="metric warn-pill">Pedido enviado</span>` : ""}
             ${status === "accepted" ? `<span class="metric good-pill">Aceite - contamos contigo</span>` : ""}
           </div>
           <div class="actions">
-            ${status === "pending"
+            ${status === "invited"
+              ? `<button class="primary-btn" data-invite-respond="${escapeHtml(row.event_id)}" data-accept="true">Aceitar convite</button>
+                 <button class="ghost-btn" data-invite-respond="${escapeHtml(row.event_id)}" data-accept="false">Recusar</button>`
+              : status === "pending"
               ? `<button class="ghost-btn" data-public-cancel="${escapeHtml(row.event_id)}">Cancelar pedido</button>`
               : status === "accepted"
                 ? ""
@@ -5886,6 +6179,22 @@ function renderPublicGames() {
   list.querySelectorAll("[data-public-cancel]").forEach((button) => {
     button.addEventListener("click", () => changePublicRequest(button.dataset.publicCancel, false));
   });
+  list.querySelectorAll("[data-invite-respond]").forEach((button) => {
+    button.addEventListener("click", () => respondToInvite(button.dataset.inviteRespond, button.dataset.accept === "true"));
+  });
+}
+
+async function respondToInvite(eventId, accept) {
+  if (!supabaseClient) return;
+  if (!accept && !confirm("Recusar este convite?")) return;
+  const { error } = await supabaseClient.rpc("respond_event_invite", { p_event_id: eventId, p_accept: accept });
+  if (error) {
+    alert(getPublicGameErrorMessage(error));
+    return;
+  }
+  await loadPublicEvents();
+  renderPublicGames();
+  renderGamesTabBadge();
 }
 
 async function changePublicRequest(eventId, request) {

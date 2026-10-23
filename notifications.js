@@ -8,6 +8,17 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.7.0",
+      date: "2026-10-23",
+      title: "Disponibilidade e convites",
+      items: [
+        "Em Jogos públicos dizes em que dias e horas podes jogar esta semana ou na próxima.",
+        "Os admins com vagas veem quem está disponível, primeiro quem encaixa no dia e hora, e podem convidar-te.",
+        "Os convites aparecem em Jogos públicos para aceitares ou recusares.",
+        "A bolinha vermelha em Jogos avisa de convites, pedidos e jogos públicos novos.",
+      ],
+    },
+    {
       version: "1.6.0",
       date: "2026-10-23",
       title: "Separador Jogos",

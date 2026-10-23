@@ -39,6 +39,7 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 3. 3.2 Convites e onboarding do jogador.
 4. 3.3 Criar grupo com aprovacao + wizard do admin.
 5. 3.4 Piloto de 4 a 6 semanas.
+6. 3.9 Apps, dominio proprio e precos - proposta em [[10 - Fase 3.9 - Apps, dominio e precos]].
 
 ## Passo 3.0 - estado
 
@@ -82,6 +83,14 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 - `group_requests` + RPCs `request_group` (um pendente por conta), `cancel_group_request`, `decide_group_request` (so dono da app; aprovar cria o grupo com slug `nome-xxxxx` e quem pediu fica owner).
 - App (v1.5.0): cartao "Criar um grupo" na Conta (e atalho na faixa de quem nao tem grupo); "Pedidos de grupos novos" em Admin > Pedidos so para o dono da app; cartao "Primeiros passos" no separador Jogo para o admin de um grupo novo (colar jogadores "Nome 75", sem nota = media das notas dadas ou 60; link de convite; primeira convocatoria). Some com 6+ jogadores e uma convocatoria/jogo.
 - Proximo: piloto com o grupo do campo ao lado.
+
+## Disponibilidade e convites (2026-10-23)
+
+- Migracao `supabase/availability-migration.sql` ensaiada numa transacao anulada e aplicada (`availability_and_invites_phase_3`).
+- `player_availability` (dia + das/as, hora de Portugal; so a propria conta le/escreve). Ao oferecer-se, os admins de grupos com vagas veem nome, caracteristicas e disponibilidade.
+- `list_available_players(evento)` (so admin do grupo do evento; contas de fora do grupo, semana do jogo, compativeis com dia e hora primeiro), `invite_to_event`, `respond_event_invite`; pedidos ganham estados `invited` e `declined`; aceitar pedido ou convite passa por `private.accept_join_request` (ficha de convidado + "Vou").
+- App (v1.7.0): separador Jogos com bolinha vermelha (pedidos por decidir para admin, convites recebidos, jogos publicos ainda nao vistos neste dispositivo); bloco "Faltam X - Procurar jogadores" na convocatoria (precisamos de, mostrar em Jogos publicos, pedidos, disponiveis compativeis, disponiveis noutras horas/dias, Convidar); "A minha disponibilidade" (esta/proxima semana, dias, das/as) e convites com Aceitar/Recusar em Jogos publicos.
+- "Precisamos de" fica guardado mesmo sem o jogo ser publico (serve para assinalar quem encaixa nos convites).
 
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 

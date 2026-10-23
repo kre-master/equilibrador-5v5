@@ -5883,3 +5883,117 @@ body.stage-open .profile-section {
 .event-team.team-b strong {
   color: var(--orange);
 }
+
+/* Bolinha no separador Jogos, procurar jogadores (admin) e disponibilidade semanal */
+.tab {
+  position: relative;
+}
+
+.tab-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tab-badge.hidden {
+  display: none;
+}
+
+.event-recruit {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(120,165,255,.053);
+}
+
+.event-recruit.needs-players {
+  border-color: rgba(255, 154, 77, .45);
+  background: var(--orange-2);
+}
+
+.recruit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recruit-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.recruit-body {
+  display: grid;
+  gap: 10px;
+}
+
+.recruit-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.availability-panel .panel {
+  margin-bottom: 16px;
+}
+
+.availability-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.week-switch,
+.day-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.week-switch .selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.day-chip input {
+  display: none;
+}
+
+.day-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.day-chip.disabled {
+  opacity: .4;
+  cursor: default;
+}
