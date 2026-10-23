@@ -5842,3 +5842,44 @@ body.stage-open .profile-section {
 .onboarding-steps textarea {
   width: 100%;
 }
+
+/* Jogos: o jogador comum ve so as convocatorias; fazer equipas e so para admins */
+.non-admin-mode #view-today {
+  display: none !important;
+}
+
+.event-teams {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.event-teams .eyebrow {
+  margin: 0;
+}
+
+.event-teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.event-team {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(120,165,255,.053);
+}
+
+.event-team span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.event-team.team-b strong {
+  color: var(--orange);
+}

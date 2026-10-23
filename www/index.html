@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261023-grupos3">
+    <link rel="stylesheet" href="styles.css?v=20261023-jogos1">
   </head>
   <body>
     <div class="app-shell">
@@ -51,7 +51,7 @@
           </button>
           <button class="tab active" type="button" data-view="events">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg>
-            <span>Jogo</span>
+            <span>Jogos</span>
           </button>
           <button class="tab" type="button" data-view="games">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -69,6 +69,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>
             <span>Admin</span>
           </button>
+        </nav>
+        <nav class="subtabs hidden" data-group="game" aria-label="Jogos">
+          <button class="subtab" type="button" data-view="events">O meu grupo</button>
+          <button class="subtab" type="button" data-view="public-games" id="public-games-subtab">Jogos publicos</button>
         </nav>
         <nav class="subtabs hidden" data-group="stats" aria-label="Stats">
           <button class="subtab" type="button" data-view="stats">Hall of Fame</button>
@@ -99,16 +103,6 @@
               <div id="events-list" class="events-list"></div>
             </section>
 
-            <section class="panel public-games-panel hidden" id="public-games-panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Comunidade</p>
-                  <h2>Jogos publicos</h2>
-                </div>
-              </div>
-              <div id="public-games-list" class="public-games-list"></div>
-            </section>
-
             <details class="panel new-game-panel admin-only">
               <summary class="panel-head">
                 <div>
@@ -125,6 +119,18 @@
               </form>
             </details>
           </div>
+        </section>
+
+        <section class="view" id="view-public-games">
+          <section class="panel public-games-panel" id="public-games-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Comunidade</p>
+                <h2>Jogos publicos</h2>
+              </div>
+            </div>
+            <div id="public-games-list" class="public-games-list"></div>
+          </section>
         </section>
 
         <section class="view active" id="view-today">
@@ -503,7 +509,7 @@
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="player-insights.js?v=20261021-profile1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="notifications.js?v=20261023-grupos3"></script>
-    <script src="app.js?v=20261023-grupos3"></script>
+    <script src="notifications.js?v=20261023-jogos1"></script>
+    <script src="app.js?v=20261023-jogos1"></script>
   </body>
 </html>

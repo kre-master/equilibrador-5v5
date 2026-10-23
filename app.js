@@ -1425,11 +1425,15 @@ function renderGroupBanner() {
   } else if (remoteEnabled && currentSession?.user && groupsLoadedOk && !myGroups.length) {
     html = `
       <div><strong>Ainda nao pertences a nenhum grupo.</strong><p>Pede ao admin do teu grupo o link de convite, ou cria um grupo novo. Entretanto podes ver os jogos publicos.</p></div>
-      <div class="actions"><button class="ghost-btn" data-open-new-group>Criar um grupo</button></div>`;
+      <div class="actions">
+        <button class="ghost-btn" data-open-public-games>Ver jogos publicos</button>
+        <button class="ghost-btn" data-open-new-group>Criar um grupo</button>
+      </div>`;
   }
   banner.classList.toggle("hidden", !html);
   banner.innerHTML = html;
   banner.querySelector("[data-invite-accept]")?.addEventListener("click", acceptPendingInvite);
+  banner.querySelector("[data-open-public-games]")?.addEventListener("click", () => showView("public-games"));
   banner.querySelector("[data-open-new-group]")?.addEventListener("click", () => {
     newGroupFormOpen = true;
     showView("account");
@@ -2294,6 +2298,7 @@ const VIEW_GROUPS = {
   "player-profile": "profile",
   events: "game",
   today: "game",
+  "public-games": "game",
   games: "history",
   "history-game": "history",
   gallery: "gallery",
@@ -2317,11 +2322,13 @@ function showView(viewName, options = {}) {
     previewGame = null;
   }
   currentViewName = viewName;
-  const visibleViews = group === "game" ? ["events", "today"] : [viewName];
+  const visibleViews = group === "game" && viewName !== "public-games" ? ["events", "today"] : [viewName];
   els.tabs.forEach((tab) => tab.classList.toggle("active", VIEW_GROUPS[tab.dataset.view] === group));
   els.views.forEach((view) => view.classList.toggle("active", visibleViews.includes(view.id.replace(/^view-/, ""))));
   document.querySelectorAll(".subtabs").forEach((nav) => nav.classList.toggle("hidden", nav.dataset.group !== group));
-  document.querySelectorAll(".subtab").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
+  // "Fazer equipas" (today) conta como "O meu grupo" no mini-separador.
+  const activeSubtab = viewName === "today" ? "events" : viewName;
+  document.querySelectorAll(".subtab").forEach((button) => button.classList.toggle("active", button.dataset.view === activeSubtab));
   if (viewName === "today") {
     // Vindo de "abrir jogo" ou de importar confirmados: leva o utilizador ate as equipas.
     requestAnimationFrame(() => document.querySelector("#generate-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -5702,6 +5709,28 @@ function renderEventsList() {
   });
 }
 
+// Depois de o admin confirmar, todos veem as equipas na propria convocatoria.
+function renderEventTeams(game) {
+  const team = (label, ids, className) => {
+    const players = hydrate(ids);
+    return `
+      <div class="event-team ${className}">
+        <strong>${label} (${players.length})</strong>
+        <span>${players.map((p) => escapeHtml(p.name)).join(", ") || "-"}</span>
+      </div>
+    `;
+  };
+  return `
+    <div class="event-teams">
+      <p class="eyebrow">Equipas confirmadas</p>
+      <div class="event-teams-grid">
+        ${team("Equipa A", [...(game.teamA || []), ...getBenchA(game)], "team-a")}
+        ${team("Equipa B", [...(game.teamB || []), ...getBenchB(game)], "team-b")}
+      </div>
+    </div>
+  `;
+}
+
 // Admin: abrir o jogo a quem nao e do grupo, dizer o que falta e decidir os pedidos.
 function renderEventPublicSection(eventData) {
   if (!isAdmin || !remoteEnabled || ["cancelled", "completed"].includes(eventData.status)) return "";
@@ -5810,9 +5839,12 @@ function renderPublicGames() {
   const panel = document.querySelector("#public-games-panel");
   const list = document.querySelector("#public-games-list");
   if (!panel || !list) return;
-  panel.classList.toggle("hidden", !publicEvents.length);
+  const subtab = document.querySelector("#public-games-subtab");
+  if (subtab) subtab.textContent = publicEvents.length ? `Jogos publicos (${publicEvents.length})` : "Jogos publicos";
   if (!publicEvents.length) {
-    list.innerHTML = "";
+    list.innerHTML = `<div class="empty-state">${currentSession?.user
+      ? "Sem jogos publicos de momento. Quando um grupo abrir um jogo a quem nao e do grupo, aparece aqui."
+      : "Entra na tua conta para veres jogos publicos."}</div>`;
     return;
   }
   const hasTraits = Boolean(myTraits?.fitness && myTraits?.position && myTraits?.age_band);
@@ -5961,6 +5993,7 @@ function renderEventCard(eventData) {
         ${renderRosterMini("Talvez", maybe, eventData, "maybe")}
         ${renderRosterMini("Nao vou", notGoing, eventData, "not_going")}
       </div>
+      ${confirmedGame ? renderEventTeams(confirmedGame) : ""}
       ${renderEventAdminAdds(eventData)}
       ${renderEventPublicSection(eventData)}
       <div class="actions admin-actions">

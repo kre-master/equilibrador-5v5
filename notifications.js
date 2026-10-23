@@ -8,6 +8,16 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.6.0",
+      date: "2026-10-23",
+      title: "Separador Jogos",
+      items: [
+        "O separador Jogo passa a Jogos: \"O meu grupo\" e \"Jogos públicos\".",
+        "As equipas confirmadas aparecem na própria convocatória.",
+        "Fazer equipas fica só para os admins.",
+      ],
+    },
+    {
       version: "1.5.0",
       date: "2026-10-23",
       title: "Cria o teu grupo",
