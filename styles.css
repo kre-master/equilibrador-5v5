@@ -4721,8 +4721,41 @@ body.stage-open .profile-section {
 
 .pp-hero {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 20px;
+}
+
+.pp-card-col {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.pp-club {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.pp-club-text {
+  display: grid;
+  min-width: 0;
+}
+
+.pp-club-text small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.pp-club-text strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
 }
 
 .pp-card-thumb {
@@ -4779,9 +4812,9 @@ body.stage-open .profile-section {
 }
 
 .pp-last5 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
 }
 
 .pp-last5 small {
@@ -5996,4 +6029,285 @@ body.stage-open .profile-section {
 .day-chip.disabled {
   opacity: .4;
   cursor: default;
+}
+
+/* ===== Clube: simbolo, perfil e os meus clubes ===== */
+.club-symbol {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.club-symbol svg,
+.club-symbol img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tab .club-symbol svg {
+  stroke: none;
+}
+
+.club-symbol svg g {
+  fill-opacity: 1;
+}
+
+.club-symbol-initials {
+  border: 1px solid rgba(255, 154, 77, .5);
+  color: var(--orange);
+  background: rgba(255, 154, 77, .12);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+}
+
+.club-symbol-md { width: 40px; height: 40px; }
+.club-symbol-lg { width: 64px; height: 64px; font-size: 22px; }
+.club-symbol-xl { width: 80px; height: 80px; font-size: 26px; }
+.club-symbol-tab { width: 24px; height: 24px; font-size: 10px; }
+.club-symbol svg { padding: 6px; }
+.club-symbol-tab svg { padding: 2px; }
+
+.tab-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.club-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.club-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.club-hero-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.club-hero-text h3 {
+  font-size: clamp(26px, 6vw, 38px);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.club-role {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.club-bio {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.club-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.club-stat {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.club-stat b {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.club-stat span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.club-block {
+  display: grid;
+  gap: 10px;
+}
+
+.club-block h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.club-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.club-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: inherit;
+  background: var(--surface);
+}
+
+.club-player small {
+  color: #8cc4ff;
+  font-weight: 800;
+}
+
+.club-list {
+  display: grid;
+  gap: 8px;
+}
+
+.club-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.club-row.active {
+  border-color: rgba(89, 176, 255, .55);
+}
+
+.club-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.club-row-text small {
+  color: var(--muted);
+}
+
+.club-fav {
+  border: 0;
+  padding: 4px 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.club-fav.on {
+  color: #ffc247;
+}
+
+.club-editor,
+.club-editor-block {
+  display: grid;
+  gap: 12px;
+}
+
+.club-editor-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.club-emblem-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.club-emblem {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  background: var(--surface);
+}
+
+.club-emblem.selected {
+  border-color: #59b0ff;
+  box-shadow: 0 0 0 2px rgba(89, 176, 255, .35);
+}
+
+.club-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.club-upload .hint {
+  flex-basis: 100%;
+}
+
+.club-draft-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.club-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 8px;
+  text-align: center;
+}
+
+.club-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.club-search-form {
+  display: flex;
+  gap: 8px;
+}
+
+.club-search-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pitch-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pitch-picker select {
+  min-width: 0;
 }

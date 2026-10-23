@@ -23,6 +23,7 @@ for (const file of files) {
 }
 
 await cp("assets", "www/assets", { recursive: true, force: true }).catch(() => {});
+await cp("data", "www/data", { recursive: true, force: true }).catch(() => {});
 
 const generatedIndex = await readFile("www/index.html", "utf8");
 const localScriptSources = [...generatedIndex.matchAll(/<script\b[^>]*\bsrc=(["'])(.*?)\1/gi)]

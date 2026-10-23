@@ -873,6 +873,7 @@ function requireAdmin() {
 }
 
 function bindEvents() {
+  loadPitchCatalog();
   els.tabs.forEach((tab) => on(tab, "click", () => {
     if (tab === els.myProfileTab) {
       const linkedPlayer = getLinkedPlayer();
@@ -1046,20 +1047,33 @@ async function loadMyGroups() {
   myGroups = [];
   activeGroupId = null;
   if (!supabaseClient || !currentSession?.user) return false;
-  const { data, error } = await supabaseClient
+  const query = (columns) => supabaseClient
     .from("group_members")
-    .select("group_id, role, joined_at, groups(id, slug, name)")
+    .select(columns)
     .eq("user_id", currentSession.user.id)
     .order("joined_at", { ascending: true });
+  // Sem a migracao group-profile-migration.sql ainda nao existem bio, logo nem favorito.
+  let { data, error } = await query("group_id, role, joined_at, is_favorite, groups(id, slug, name, bio, logo, profile_public, default_location)");
+  if (error) ({ data, error } = await query("group_id, role, joined_at, groups(id, slug, name)"));
   if (error) {
     console.warn("Group load failed. Run supabase/groups-migration.sql.", error);
     return false;
   }
   myGroups = (data || [])
     .filter((row) => row.groups)
-    .map((row) => ({ id: row.group_id, slug: row.groups.slug, name: row.groups.name, role: row.role }));
+    .map((row) => ({
+      id: row.group_id,
+      slug: row.groups.slug,
+      name: row.groups.name,
+      bio: row.groups.bio || "",
+      logo: row.groups.logo || "",
+      isPublic: row.groups.profile_public !== false,
+      defaultLocation: row.groups.default_location || "",
+      isFavorite: Boolean(row.is_favorite),
+      role: row.role,
+    }));
   const savedId = readActiveGroupId();
-  activeGroupId = (myGroups.find((group) => group.id === savedId) || myGroups[0])?.id || null;
+  activeGroupId = (myGroups.find((group) => group.isFavorite) || myGroups.find((group) => group.id === savedId) || myGroups[0])?.id || null;
   return true;
 }
 
@@ -2478,7 +2492,9 @@ const VIEW_GROUPS = {
   "public-games": "game",
   games: "history",
   "history-game": "history",
+  "my-games": "history",
   gallery: "gallery",
+  club: "stats",
   stats: "stats",
   players: "stats",
   monthly: "stats",
@@ -2507,6 +2523,8 @@ function showView(viewName, options = {}) {
   const activeSubtab = viewName === "today" ? "events" : viewName;
   document.querySelectorAll(".subtab").forEach((button) => button.classList.toggle("active", button.dataset.view === activeSubtab));
   if (viewName === "public-games") markPublicGamesSeen();
+  if (viewName === "my-games") loadMyGames();
+  if (viewName === "club") renderClubPanel();
   if (viewName === "today") {
     // Vindo de "abrir jogo" ou de importar confirmados: leva o utilizador ate as equipas.
     requestAnimationFrame(() => document.querySelector("#generate-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -3044,6 +3062,8 @@ function render() {
   renderCurrentGame();
   renderGamesList();
   renderHistoryGameDetail();
+  renderClubTab();
+  prefillEventLocation();
   renderGallery();
   renderAccountPanel();
   renderClaimsList();
@@ -3517,16 +3537,19 @@ function renderProfileHero(playerData, form, variant) {
   const lastFive = getPlayerAppearanceRecord(playerData.id, 5).map((item) => item.outcome);
   return `
     <section class="pp-hero">
-      <button type="button" class="pp-card-thumb" data-profile-card aria-label="Ver a carta de ${escapeHtml(playerData.name)}">
-        ${renderPlayerCard(playerData, { mode: "field", form, variant })}
-      </button>
+      <div class="pp-card-col">
+        <button type="button" class="pp-card-thumb" data-profile-card aria-label="Ver a carta de ${escapeHtml(playerData.name)}">
+          ${renderPlayerCard(playerData, { mode: "field", form, variant })}
+        </button>
+        ${lastFive.length ? `<span class="pp-last5"><small>Ult. ${lastFive.length}</small>${renderRecordDots(lastFive, { chronological: true })}</span>` : ""}
+      </div>
       <div class="pp-identity">
         <p class="eyebrow">Jogador</p>
         <h2>${escapeHtml(playerData.name)}</h2>
         <div class="pp-meta">
           <span class="pp-ovr"><b>${rating}</b> OVR</span>
-          ${lastFive.length ? `<span class="pp-last5"><small>Ult. ${lastFive.length}</small>${renderRecordDots(lastFive, { chronological: true })}</span>` : ""}
         </div>
+        ${renderClubBadge(getActiveGroup())}
       </div>
     </section>`;
 }
@@ -8323,6 +8346,482 @@ function renderGamesList() {
   });
   els.gamesList.querySelectorAll("[data-delete-game]").forEach((button) => {
     button.addEventListener("click", () => deleteGame(button.dataset.deleteGame));
+  });
+}
+
+// ---- Clube: simbolo, bio, plantel e os meus clubes ----
+// Emblemas da lista: desenhados a 24x24, legiveis a tamanho de icone. O valor guardado e "preset:<chave>".
+const CLUB_EMBLEMS = {
+  shield: { label: "Escudo", color: "#4da3ff", path: '<path d="M12 3 5 6v5c0 4.5 3 7.7 7 10 4-2.3 7-5.5 7-10V6z"/>' },
+  star: { label: "Estrela", color: "#ffc247", path: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>' },
+  bolt: { label: "Raio", color: "#ffd93d", path: '<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>' },
+  flame: { label: "Chama", color: "#ff7a45", path: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.3 3.8-8.8 2 1.3 2.6 3.3 2.4 5 1.1-.6 2-1.9 2.2-3.4 2.4 2 4.6 4.6 4.6 7.4 0 3.5-2.6 6-6.5 6z"/>' },
+  crown: { label: "Coroa", color: "#f0b429", path: '<path d="M4 18 3 7l5 4 4-6 4 6 5-4-1 11z"/>' },
+  ball: { label: "Bola", color: "#e8eefc", path: '<circle cx="12" cy="12" r="9"/><path d="m12 8 3.2 2.3-1.2 3.7h-4l-1.2-3.7z" fill="#0b1630" stroke="#0b1630"/>' },
+  diamond: { label: "Diamante", color: "#59d3e0", path: '<path d="M12 3 21 12 12 21 3 12z"/>' },
+  heart: { label: "Coracao", color: "#ff5a7a", path: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/>' },
+  mountain: { label: "Monte", color: "#7ed6a5", path: '<path d="M2 19 9 7l4 6 3-4 6 10z"/>' },
+  moon: { label: "Lua", color: "#b69cff", path: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>' },
+  wave: { label: "Onda", color: "#4fc3f7", path: '<path d="M2 14c3 0 3-4 6-4s3 4 6 4 3-4 8-4v8H2z"/>' },
+  triangle: { label: "Triangulo", color: "#ff9a4d", path: '<path d="M12 3 22 20H2z"/>' },
+};
+
+function groupInitials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || "?").slice(0, 2)).toUpperCase();
+}
+
+// Simbolo do clube a qualquer tamanho: imagem enviada, emblema da lista ou, sem nada, as iniciais.
+function renderClubSymbol(group, extraClass = "") {
+  const cls = `club-symbol ${extraClass}`.trim();
+  const logo = group?.logo || "";
+  if (logo.startsWith("data:image/")) return `<span class="${cls}"><img src="${escapeHtml(logo)}" alt=""></span>`;
+  const emblem = logo.startsWith("preset:") ? CLUB_EMBLEMS[logo.slice(7)] : null;
+  if (emblem) {
+    return `<span class="${cls}"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="${emblem.color}" stroke="${emblem.color}" stroke-width="1" stroke-linejoin="round">${emblem.path}</g></svg></span>`;
+  }
+  return `<span class="${cls} club-symbol-initials" aria-hidden="true">${group ? escapeHtml(groupInitials(group.name)) : "?"}</span>`;
+}
+
+// O separador usa o simbolo do clube ativo; sem clube mantem o icone de estatisticas.
+// Lista de campos da regiao Norte (OpenStreetMap, scripts/fetch-pitches.mjs): concelho -> campo -> campo "Local".
+async function loadPitchCatalog() {
+  const picker = document.querySelector("#pitch-picker");
+  const municipalitySelect = document.querySelector("#pitch-municipality");
+  const pitchSelect = document.querySelector("#pitch-select");
+  if (!picker || !municipalitySelect || !pitchSelect) return;
+  let pitches = [];
+  try {
+    const response = await fetch("data/pitches-norte.json");
+    if (response.ok) pitches = (await response.json()).pitches || [];
+  } catch (error) {
+    pitches = [];
+  }
+  if (!pitches.length) return;
+
+  const byDistrict = new Map();
+  pitches.forEach((pitch) => {
+    if (!byDistrict.has(pitch.district)) byDistrict.set(pitch.district, new Set());
+    byDistrict.get(pitch.district).add(pitch.municipality);
+  });
+  municipalitySelect.innerHTML = `<option value="">Concelho</option>${[...byDistrict].map(([district, municipalities]) => `
+    <optgroup label="${escapeHtml(district)}">${[...municipalities].sort((a, b) => a.localeCompare(b, "pt")).map((name) =>
+      `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}</optgroup>`).join("")}`;
+  picker.classList.remove("hidden");
+
+  on(municipalitySelect, "change", () => {
+    const list = pitches.filter((pitch) => pitch.municipality === municipalitySelect.value);
+    pitchSelect.disabled = !list.length;
+    pitchSelect.innerHTML = `<option value="">Campo</option>${list.map((pitch) => {
+      const kind = pitch.kind === "pavilhao" ? "Pavilhao" : "Campo";
+      const label = pitch.name || `${kind} sem nome (${pitch.surface || pitch.lat + ", " + pitch.lon})`;
+      return `<option value="${escapeHtml(pitch.id)}">${escapeHtml(label)}</option>`;
+    }).join("")}`;
+  });
+  on(pitchSelect, "change", () => {
+    const pitch = pitches.find((item) => item.id === pitchSelect.value);
+    if (!pitch || !els.eventLocation) return;
+    els.eventLocation.value = pitch.name ? `${pitch.name}, ${pitch.municipality}` : `Campo em ${pitch.municipality}`;
+  });
+}
+
+// Local habitual do clube: pre-preenche a convocatoria enquanto o campo estiver vazio.
+function prefillEventLocation() {
+  const field = els.eventLocation;
+  const habitual = getActiveGroup()?.defaultLocation;
+  if (field && habitual && !field.value && document.activeElement !== field) field.value = habitual;
+}
+
+function renderClubTab() {
+  const tab = document.querySelector("#club-tab");
+  if (!tab) return;
+  const group = getActiveGroup();
+  const icon = tab.querySelector("[data-club-tab-icon]");
+  if (icon) {
+    icon.innerHTML = group
+      ? renderClubSymbol(group, "club-symbol-tab")
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>';
+  }
+  if (currentViewName === "club") renderClubPanel();
+}
+
+function renderClubBadge(group) {
+  return `
+    <div class="pp-club">
+      ${renderClubSymbol(group, "club-symbol-md")}
+      <div class="pp-club-text">
+        <small>Clube</small>
+        <strong>${escapeHtml(group?.name || "Sem clube")}</strong>
+      </div>
+    </div>`;
+}
+
+let clubEditing = false;
+let clubDraftLogo = "";
+
+// 128x128 em corte central: chega para ecras 3x a 40 px e fica abaixo de ~15 KB.
+function resizeClubLogo(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const size = 128;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const side = Math.min(img.width, img.height);
+        canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        let url = canvas.toDataURL("image/webp", 0.9);
+        if (!url.startsWith("data:image/webp")) url = canvas.toDataURL("image/png");
+        resolve(url);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderClubEditor(group) {
+  const draft = clubDraftLogo;
+  const preview = { logo: draft, name: group.name };
+  return `
+    <form class="club-editor" data-club-editor>
+      <label class="auth-field"><span>Bio (ate 300 caracteres)</span>
+        <textarea name="bio" maxlength="300" rows="3">${escapeHtml(group.bio)}</textarea></label>
+      <label class="auth-field"><span>Local habitual (entra automatico nas convocatorias)</span>
+        <input name="location" type="text" maxlength="80" value="${escapeHtml(group.defaultLocation)}" placeholder="Ex.: Pavilhao Municipal, Maia"></label>
+      <label class="club-check"><input name="public" type="checkbox" ${group.isPublic ? "checked" : ""}>
+        <span>Perfil publico: qualquer pessoa pode encontrar o clube e ver so o nome, simbolo e bio.</span></label>
+      <div class="club-editor-block">
+        <span class="club-editor-label">Simbolo</span>
+        <div class="club-emblem-grid">
+          ${Object.entries(CLUB_EMBLEMS).map(([key, emblem]) => `
+            <button type="button" class="club-emblem ${draft === `preset:${key}` ? "selected" : ""}" data-emblem="${key}" aria-label="${emblem.label}" aria-pressed="${draft === `preset:${key}`}">
+              ${renderClubSymbol({ logo: `preset:${key}` })}</button>`).join("")}
+        </div>
+        <div class="club-upload">
+          <label class="ghost-btn club-upload-btn">Carregar imagem
+            <input type="file" accept="image/png,image/jpeg,image/webp" data-club-upload hidden></label>
+          ${draft ? '<button type="button" class="ghost-btn" data-clear-logo>Remover simbolo</button>' : ""}
+          <span class="hint">Melhor: imagem <b>quadrada, 256x256 px ou mais</b>, simbolo centrado, forma simples e sem letras pequenas, com fundo transparente ou liso. Fica reduzida a 128x128 e e vista a 24-40 px.</span>
+        </div>
+        <div class="club-draft-preview">${renderClubSymbol(preview, "club-symbol-lg")}${renderClubSymbol(preview, "club-symbol-md")}${renderClubSymbol(preview, "club-symbol-tab")}</div>
+      </div>
+      <div class="actions">
+        <button type="submit" class="primary-btn">Guardar</button>
+        <button type="button" class="ghost-btn" data-cancel-club-edit>Cancelar</button>
+      </div>
+    </form>`;
+}
+
+function renderClubPanel() {
+  const panel = document.querySelector("#club-panel");
+  if (!panel) return;
+  const group = getActiveGroup();
+  if (!group) {
+    panel.innerHTML = `
+      <div class="club-empty">
+        ${renderClubSymbol(null, "club-symbol-lg")}
+        <h3>Ainda nao tens clube</h3>
+        <p>Procura um clube e pede para entrar, ou pede um convite a um admin.</p>
+      </div>
+      ${renderClubSearchSection()}`;
+    bindClubSearch(panel);
+    return;
+  }
+  const canEdit = isGroupAdminRole(group.role) && remoteEnabled;
+  const roster = state.players.filter((item) => !item.isGuest).slice().sort((a, b) => (b.overall || 0) - (a.overall || 0));
+  const finished = getFinishedGames().length;
+  panel.innerHTML = `
+    <section class="club-hero">
+      ${renderClubSymbol(group, "club-symbol-xl")}
+      <div class="club-hero-text">
+        <p class="eyebrow">${group.isFavorite ? "Clube favorito" : "Clube"}</p>
+        <h3>${escapeHtml(group.name)}</h3>
+        <span class="club-role">${escapeHtml(ROLE_LABELS[group.role] || "jogador")}</span>
+      </div>
+      ${canEdit && !clubEditing ? '<button type="button" class="ghost-btn" data-edit-club>Editar</button>' : ""}
+    </section>
+    ${clubEditing && canEdit ? renderClubEditor(group) : (group.bio ? `<p class="club-bio">${escapeHtml(group.bio)}</p>` : (canEdit ? '<p class="hint">Sem bio ainda. Usa Editar para escrever uma.</p>' : ""))}
+    <section class="club-stats">
+      <div class="club-stat"><b>${roster.length}</b><span>jogadores</span></div>
+      <div class="club-stat"><b>${finished}</b><span>jogos</span></div>
+      <div class="club-stat"><b>${getMvpHistoryRows(999).length}</b><span>MVPs</span></div>
+    </section>
+    <section class="club-block">
+      <h4>Plantel</h4>
+      ${roster.length ? `<div class="club-roster">${roster.map((item) => `
+        <button type="button" class="club-player" data-club-player="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${item.overall ?? "-"}</small></button>`).join("")}</div>` : '<p class="hint">Sem jogadores.</p>'}
+    </section>
+    <div class="actions"><button type="button" class="ghost-btn" data-club-hof>Ver Hall of Fame</button></div>
+    <section class="club-block">
+      <h4>Os meus clubes</h4>
+      <div class="club-list">
+        ${myGroups.map((item) => `
+          <div class="club-row ${item.id === group.id ? "active" : ""}">
+            ${renderClubSymbol(item, "club-symbol-md")}
+            <div class="club-row-text"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(ROLE_LABELS[item.role] || "jogador")}${item.id === group.id ? " - ativo" : ""}</small></div>
+            ${remoteEnabled ? `<button type="button" class="club-fav ${item.isFavorite ? "on" : ""}" data-club-fav="${escapeHtml(item.id)}" aria-pressed="${item.isFavorite}" aria-label="${item.isFavorite ? "Clube favorito" : "Definir como favorito"}">${item.isFavorite ? "★" : "☆"}</button>` : ""}
+            ${item.id !== group.id ? `<button type="button" class="ghost-btn" data-club-switch="${escapeHtml(item.id)}">Mudar</button>` : ""}
+            ${item.role !== "owner" && remoteEnabled ? `<button type="button" class="ghost-btn danger" data-club-leave="${escapeHtml(item.id)}">Sair</button>` : ""}
+          </div>`).join("")}
+      </div>
+    </section>
+    ${canEdit ? '<section class="club-block" id="club-join-requests"></section>' : ""}
+    ${renderClubSearchSection()}`;
+  bindClubSearch(panel);
+  if (canEdit) loadClubJoinRequests(group);
+
+  panel.querySelector("[data-edit-club]")?.addEventListener("click", () => {
+    clubEditing = true;
+    clubDraftLogo = group.logo;
+    renderClubPanel();
+  });
+  panel.querySelector("[data-club-hof]")?.addEventListener("click", () => showView("stats"));
+  panel.querySelectorAll("[data-club-player]").forEach((button) => button.addEventListener("click", () => openPlayerProfile(button.dataset.clubPlayer)));
+  panel.querySelectorAll("[data-club-switch]").forEach((button) => button.addEventListener("click", () => switchActiveGroup(button.dataset.clubSwitch)));
+  panel.querySelectorAll("[data-club-fav]").forEach((button) => button.addEventListener("click", () => setFavoriteClub(button.dataset.clubFav)));
+  panel.querySelectorAll("[data-club-leave]").forEach((button) => button.addEventListener("click", () => leaveClub(button.dataset.clubLeave)));
+
+  const editor = panel.querySelector("[data-club-editor]");
+  if (!editor) return;
+  const keepBio = () => {
+    const data = new FormData(editor);
+    group.bio = String(data.get("bio") || "");
+    group.defaultLocation = String(data.get("location") || "");
+    group.isPublic = data.has("public");
+  };
+  editor.querySelectorAll("[data-emblem]").forEach((button) => button.addEventListener("click", () => {
+    clubDraftLogo = `preset:${button.dataset.emblem}`;
+    keepBio();
+    renderClubPanel();
+  }));
+  editor.querySelector("[data-clear-logo]")?.addEventListener("click", () => {
+    clubDraftLogo = "";
+    keepBio();
+    renderClubPanel();
+  });
+  editor.querySelector("[data-club-upload]")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      clubDraftLogo = await resizeClubLogo(file);
+    } catch (error) {
+      alert("Nao consegui ler essa imagem.");
+      return;
+    }
+    keepBio();
+    renderClubPanel();
+  });
+  editor.querySelector("[data-cancel-club-edit]")?.addEventListener("click", () => {
+    clubEditing = false;
+    renderClubPanel();
+  });
+  editor.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(editor);
+    const bio = String(data.get("bio") || "");
+    const defaultLocation = String(data.get("location") || "").trim().slice(0, 80);
+    const isPublic = data.has("public");
+    const { error } = await supabaseClient.rpc("update_group_profile", {
+      p_group_id: group.id, p_bio: bio, p_logo: clubDraftLogo, p_public: isPublic, p_default_location: defaultLocation,
+    });
+    if (error) {
+      alert(`Nao consegui guardar: ${error.message}. Confirma que a migracao group-profile-migration.sql foi aplicada.`);
+      return;
+    }
+    Object.assign(group, { bio: bio.trim().slice(0, 300), logo: clubDraftLogo, isPublic, defaultLocation });
+    clubEditing = false;
+    renderClubTab();
+    renderClubPanel();
+  });
+}
+
+// ---- Pesquisa de clubes e pedidos de entrada ----
+let clubSearchResults = null;
+let clubSearchQuery = "";
+
+function renderClubSearchSection() {
+  const results = clubSearchResults;
+  return `
+    <section class="club-block club-search">
+      <h4>Procurar clubes</h4>
+      ${remoteEnabled ? `
+        <form class="club-search-form" data-club-search>
+          <input type="search" name="q" value="${escapeHtml(clubSearchQuery)}" placeholder="Nome do clube" maxlength="40" aria-label="Nome do clube">
+          <button type="submit" class="ghost-btn">Procurar</button>
+        </form>
+        <div class="club-list" data-club-results>
+          ${results === null ? "" : results.length ? results.map((club) => `
+            <div class="club-row">
+              ${renderClubSymbol(club, "club-symbol-md")}
+              <div class="club-row-text"><strong>${escapeHtml(club.name)}</strong>
+                <small>${club.member_count} membros${club.bio ? ` - ${escapeHtml(club.bio)}` : ""}</small></div>
+              ${club.is_member ? '<small class="hint">Ja es membro</small>'
+                : club.request_status === "pending" ? '<small class="hint">Pedido enviado</small>'
+                : `<button type="button" class="ghost-btn" data-join-club="${escapeHtml(club.id)}">Pedir para entrar</button>`}
+            </div>`).join("") : '<p class="hint">Nenhum clube encontrado.</p>'}
+        </div>` : '<p class="hint">A pesquisa precisa de ligacao ao Supabase e de sessao iniciada.</p>'}
+    </section>`;
+}
+
+async function searchClubs(query) {
+  clubSearchQuery = query;
+  const { data, error } = await supabaseClient.rpc("search_clubs", { p_query: query });
+  if (error) {
+    alert(`Nao consegui pesquisar clubes: ${error.message}. Confirma que a migracao group-profile-migration.sql foi aplicada.`);
+    return;
+  }
+  clubSearchResults = (data || []).map((row) => ({ ...row, logo: row.logo || "" }));
+  renderClubPanel();
+}
+
+function bindClubSearch(panel) {
+  panel.querySelector("[data-club-search]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    searchClubs(String(new FormData(event.currentTarget).get("q") || "").trim());
+  });
+  panel.querySelectorAll("[data-join-club]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    const { error } = await supabaseClient.rpc("request_join_group", { p_group_id: button.dataset.joinClub });
+    if (error) {
+      alert(`Nao consegui enviar o pedido: ${error.message}`);
+      button.disabled = false;
+      return;
+    }
+    await searchClubs(clubSearchQuery);
+  }));
+}
+
+// Admins: pedidos de entrada pendentes no clube ativo.
+async function loadClubJoinRequests(group) {
+  const section = document.querySelector("#club-join-requests");
+  if (!section || !supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("group_join_requests")
+    .select("id, requester_name, created_at")
+    .eq("group_id", group.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error || !data?.length || group.id !== activeGroupId) return;
+  section.innerHTML = `
+    <h4>Pedidos para entrar (${data.length})</h4>
+    <div class="club-list">
+      ${data.map((request) => `
+        <div class="club-row">
+          <div class="club-row-text"><strong>${escapeHtml(request.requester_name || "Jogador")}</strong><small>${escapeHtml(formatDate(request.created_at))}</small></div>
+          <button type="button" class="primary-btn" data-join-decide="${escapeHtml(request.id)}" data-approve="1">Aceitar</button>
+          <button type="button" class="ghost-btn" data-join-decide="${escapeHtml(request.id)}" data-approve="0">Recusar</button>
+        </div>`).join("")}
+    </div>`;
+  section.querySelectorAll("[data-join-decide]").forEach((button) => button.addEventListener("click", async () => {
+    const { error: decideError } = await supabaseClient.rpc("decide_join_group_request", {
+      p_request_id: button.dataset.joinDecide, p_approve: button.dataset.approve === "1",
+    });
+    if (decideError) {
+      alert(`Nao consegui decidir o pedido: ${decideError.message}`);
+      return;
+    }
+    renderClubPanel();
+  }));
+}
+
+async function setFavoriteClub(groupId) {
+  const { error } = await supabaseClient.rpc("set_favorite_group", { p_group_id: groupId });
+  if (error) {
+    alert(`Nao consegui definir o favorito: ${error.message}`);
+    return;
+  }
+  myGroups.forEach((group) => { group.isFavorite = group.id === groupId; });
+  renderClubPanel();
+}
+
+async function leaveClub(groupId) {
+  const group = myGroups.find((item) => item.id === groupId);
+  if (!group || !confirm(`Sair de ${group.name}? Perdes o acesso aos jogos e dados deste grupo e o teu perfil de jogador deixa de estar ligado a esta conta.`)) return;
+  const { error } = await supabaseClient.rpc("leave_group", { p_group_id: groupId });
+  if (error) {
+    alert(String(error.message || "").includes("owner_cannot_leave") ? "O dono do grupo nao pode sair." : `Nao consegui sair: ${error.message}`);
+    return;
+  }
+  window.location.reload();
+}
+
+// Historico do jogador: jogos de todos os grupos a que pertence (o RLS ja limita aos seus grupos).
+let myGamesAll = null;
+let myGamesLoading = false;
+
+async function loadMyGames() {
+  renderMyGames();
+  if (myGamesLoading) return;
+  const userId = currentSession?.user?.id;
+  if (!remoteEnabled || !supabaseClient || !userId) {
+    myGamesAll = getLinkedPlayer()
+      ? getPlayerAppearanceRecord(getLinkedPlayer().id).map((item) => ({ game: item.game, outcome: item.outcome, groupId: activeGroupId }))
+      : [];
+    renderMyGames();
+    return;
+  }
+  myGamesLoading = true;
+  try {
+    const [{ data: playerRows, error: playerError }, { data: gameRows, error: gameError }] = await Promise.all([
+      supabaseClient.from("players").select("id, group_id").eq("linked_user_id", userId),
+      supabaseClient.from("games").select("*").eq("status", "finished").order("date", { ascending: false }),
+    ]);
+    if (playerError || gameError) throw playerError || gameError;
+    const playerByGroup = new Map((playerRows || []).map((row) => [row.group_id, row.id]));
+    myGamesAll = (gameRows || []).map((row) => {
+      const playerId = playerByGroup.get(row.group_id);
+      if (!playerId) return null;
+      const game = gameFromRow(row);
+      const participation = getPlayerParticipation(game, playerId);
+      if (!participation) return null;
+      return { game, outcome: getPlayerOutcome(game, participation.side), groupId: row.group_id };
+    }).filter(Boolean);
+  } catch (error) {
+    console.warn("My games load failed", error);
+    myGamesAll = [];
+  } finally {
+    myGamesLoading = false;
+    renderMyGames();
+  }
+}
+
+function renderMyGames() {
+  const list = document.querySelector("#my-games-list");
+  if (!list) return;
+  if (myGamesAll === null) {
+    list.innerHTML = `<div class="empty-state">A carregar...</div>`;
+    return;
+  }
+  if (!myGamesAll.length) {
+    list.innerHTML = `<div class="empty-state">Ainda nao tens jogos no historico.</div>`;
+    return;
+  }
+  const outcomeLabel = { win: "V", draw: "E", loss: "D" };
+  list.innerHTML = myGamesAll.map(({ game, outcome, groupId }) => {
+    const group = myGroups.find((item) => item.id === groupId);
+    const result = game.scoreA == null || game.scoreB == null ? "Resultado em aberto" : `${game.scoreA} - ${game.scoreB}`;
+    return `
+      <article class="game-card">
+        <div>
+          <p class="eyebrow">${escapeHtml(group?.name || "Grupo")}</p>
+          <strong>${formatDate(game.date)} - ${result}</strong>
+          <span><span class="record-dot ${outcome || "absent"}">${outcomeLabel[outcome] || "-"}</span></span>
+        </div>
+        ${state.games.some((item) => item.id === game.id) ? `<div class="game-actions"><button class="primary-btn" data-open-my-game="${escapeHtml(game.id)}">Abrir</button></div>` : ""}
+      </article>`;
+  }).join("");
+  list.querySelectorAll("[data-open-my-game]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentHistoryGameId = button.dataset.openMyGame;
+      currentGameId = null;
+      showView("history-game");
+      renderHistoryGameDetail();
+    });
   });
 }
 
