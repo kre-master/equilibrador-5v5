@@ -148,6 +148,11 @@ const TRAIT_LABELS = {
   age_band: { "18-24": "18-24", "25-34": "25-34", "35-44": "35-44", "45+": "45+" },
 };
 const NEEDS_LABELS = { outfield: "Jogador de campo", mixed: "Misto", goalkeeper: "Guarda-redes" };
+// Convites (fase 3.2): o codigo do link ?convite= fica guardado ate a pessoa entrar e aceitar.
+const PENDING_INVITE_KEY = "footer-pending-invite-v1";
+let pendingInvite = null;
+let groupsLoadedOk = false;
+let currentInviteCode = null;
 const PUBLIC_GAME_ERRORS = {
   traits_required: "Preenche primeiro as tuas caracteristicas na Conta.",
   event_full: "O jogo ja esta cheio.",
@@ -350,11 +355,12 @@ function getAwardRevealKey(playerId, gameId, awardKey) {
   return `${playerId}:${gameId}:${awardKey}`;
 }
 
-function migrateState(saved) {
+// Os jogadores de exemplo so servem o modo local; um grupo remoto vazio fica vazio.
+function migrateState(saved, options = {}) {
   saved.players = saved.players
     .map((p, index) => normalizePlayerRecord(p, index))
     .filter(Boolean);
-  if (!saved.players.length) {
+  if (!saved.players.length && options.allowSample !== false) {
     saved.players = samplePlayers.map((p) => ({ ...p }));
   }
   saved.games = saved.games.map((game) => ensureGameShape({ ...game }));
@@ -899,6 +905,7 @@ function bindEvents() {
 }
 
 async function initApp() {
+  capturePendingInviteFromUrl();
   await initRemote();
   applyLandingRoute();
   render();
@@ -978,6 +985,7 @@ async function initRemote() {
   remoteEnabled = true;
   await loadAccountState();
   await loadRemoteState();
+  await refreshPendingInvite();
   updateAccessUi();
 }
 
@@ -1068,6 +1076,7 @@ async function switchActiveGroup(groupId) {
   activeGroupId = groupId;
   writeActiveGroupId(groupId);
   isAdmin = isGroupAdminRole(getActiveGroup()?.role);
+  currentInviteCode = null;
   await loadGroupMemberRoles();
   selectedIds.clear();
   previewGame = null;
@@ -1087,6 +1096,8 @@ async function loadAccountState() {
   currentProfile = null;
   knownProfiles = [];
   playerClaims = [];
+  groupsLoadedOk = false;
+  currentInviteCode = null;
   myGroups = [];
   activeGroupId = null;
   isAdmin = false;
@@ -1134,6 +1145,7 @@ async function loadAccountState() {
   }
 
   const groupsLoaded = await loadMyGroups();
+  groupsLoadedOk = groupsLoaded;
   isAdmin = groupsLoaded ? isGroupAdminRole(getActiveGroup()?.role) : currentProfile?.role === "admin";
   await loadGroupMemberRoles();
   await loadMyTraits();
@@ -1252,13 +1264,13 @@ async function loadRemoteState() {
   }
 
   // So na base antiga sem grupos: um grupo novo vazio nunca recebe dados guardados no dispositivo.
-  if (!activeGroupId && !players.length && isAdmin && state.players.length) {
+  if (!groupsLoadedOk && !players.length && isAdmin && state.players.length) {
     await saveRemoteState();
     updateAccessUi("Online: dados locais publicados");
     return;
   }
 
-  if (!activeGroupId && !players.length && state.players.length) {
+  if (!groupsLoadedOk && !players.length && state.players.length) {
     updateAccessUi("Online: sem dados remotos");
     return;
   }
@@ -1278,7 +1290,7 @@ async function loadRemoteState() {
     attendanceOverrides: (remoteAttendanceOverrides || []).filter(inGroupGame).map(attendanceOverrideFromRow).filter(Boolean),
     gameFinanceOverrides: (remoteGameFinanceOverrides || []).filter(inGroupGame).map(gameFinanceOverrideFromRow).filter(Boolean),
     financeSettings,
-  });
+  }, { allowSample: !groupsLoadedOk });
   await repairDuplicatePlayerLinks();
   eventResponses = (responses || [])
     .filter((row) => !activeGroupId || groupEventIds.has(row.event_id))
@@ -1299,7 +1311,182 @@ async function loadRemoteState() {
   await loadRemoteBookmarks();
   await loadJoinRequests();
   await loadPublicEvents();
+  await refreshPendingInvite();
   saveState();
+}
+
+function capturePendingInviteFromUrl() {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("convite");
+  if (!code) return;
+  try {
+    window.localStorage.setItem(PENDING_INVITE_KEY, code.trim().toLowerCase());
+  } catch {
+    // Sem armazenamento local: o convite vale so nesta visita.
+    pendingInvite = { code: code.trim().toLowerCase() };
+  }
+  url.searchParams.delete("convite");
+  history.replaceState(history.state, "", url.toString());
+}
+
+function readPendingInviteCode() {
+  try {
+    return window.localStorage.getItem(PENDING_INVITE_KEY) || pendingInvite?.code || null;
+  } catch {
+    return pendingInvite?.code || null;
+  }
+}
+
+function clearPendingInvite() {
+  pendingInvite = null;
+  try {
+    window.localStorage.removeItem(PENDING_INVITE_KEY);
+  } catch {
+    // Nada a limpar.
+  }
+}
+
+// Mostra o nome do grupo mesmo antes de entrar; com conta, a pessoa confirma e entra.
+async function refreshPendingInvite() {
+  const code = readPendingInviteCode();
+  if (!code || !supabaseClient) {
+    pendingInvite = null;
+    return;
+  }
+  const { data, error } = await supabaseClient.rpc("preview_group_invite", { p_code: code });
+  if (error) {
+    console.warn("Invite preview failed. Run supabase/group-invites-migration.sql.", error);
+    pendingInvite = null;
+    return;
+  }
+  const row = data?.[0] || { valid: false };
+  if (row.valid && row.already_member) {
+    clearPendingInvite();
+    return;
+  }
+  pendingInvite = { code, groupName: row.group_name, valid: Boolean(row.valid) };
+}
+
+async function acceptPendingInvite() {
+  if (!pendingInvite?.code || !supabaseClient || !currentSession?.user) return;
+  const { data: groupId, error } = await supabaseClient.rpc("accept_group_invite", { p_code: pendingInvite.code });
+  if (error) {
+    alert(String(error.message || "").includes("invite_not_valid")
+      ? "Este convite ja nao e valido. Pede um link novo ao admin."
+      : `Nao consegui entrar no grupo: ${error.message}`);
+    clearPendingInvite();
+    render();
+    return;
+  }
+  clearPendingInvite();
+  try {
+    window.localStorage.setItem(`${ACTIVE_GROUP_KEY}:${currentSession.user.id}`, groupId);
+  } catch {
+    // Fica no primeiro grupo.
+  }
+  await loadAccountState();
+  await loadRemoteState();
+  // A seguir escolhe o seu perfil na lista do grupo ("Qual destes es tu?").
+  showView(getLinkedPlayer() ? "player-profile" : "account");
+  updateAccessUi();
+  render();
+}
+
+// Faixa no topo: convite por aceitar, ou conta ainda sem grupo.
+function renderGroupBanner() {
+  const banner = document.querySelector("#group-banner");
+  if (!banner) return;
+  let html = "";
+  if (pendingInvite && !pendingInvite.valid) {
+    html = `
+      <div><strong>Este convite ja nao e valido.</strong><p>Pede um link novo ao admin do grupo.</p></div>
+      <div class="actions"><button class="ghost-btn" data-invite-dismiss>Fechar</button></div>`;
+  } else if (pendingInvite && !currentSession?.user) {
+    html = `
+      <div><strong>Foste convidado para ${escapeHtml(pendingInvite.groupName || "um grupo")}.</strong><p>Entra ou cria conta para aceitar.</p></div>
+      <div class="actions">
+        <button class="primary-btn" data-invite-login>Entrar</button>
+        <button class="ghost-btn" data-invite-signup>Criar conta</button>
+      </div>`;
+  } else if (pendingInvite) {
+    html = `
+      <div><strong>Foste convidado para ${escapeHtml(pendingInvite.groupName || "um grupo")}.</strong><p>Entras como jogador; depois escolhes o teu perfil.</p></div>
+      <div class="actions">
+        <button class="primary-btn" data-invite-accept>Entrar no grupo</button>
+        <button class="ghost-btn" data-invite-dismiss>Agora nao</button>
+      </div>`;
+  } else if (remoteEnabled && currentSession?.user && groupsLoadedOk && !myGroups.length) {
+    html = `
+      <div><strong>Ainda nao pertences a nenhum grupo.</strong><p>Pede ao admin do teu grupo o link de convite. Entretanto podes ver os jogos publicos.</p></div>`;
+  }
+  banner.classList.toggle("hidden", !html);
+  banner.innerHTML = html;
+  banner.querySelector("[data-invite-accept]")?.addEventListener("click", acceptPendingInvite);
+  banner.querySelector("[data-invite-login]")?.addEventListener("click", openLoginModal);
+  banner.querySelector("[data-invite-signup]")?.addEventListener("click", createAccount);
+  banner.querySelector("[data-invite-dismiss]")?.addEventListener("click", () => {
+    clearPendingInvite();
+    renderGroupBanner();
+  });
+}
+
+// Admin: link de convite do grupo ativo, carregado so quando o admin o pede.
+function renderInvitePanel() {
+  const panel = document.querySelector("#invite-panel");
+  if (!panel) return;
+  if (!isAdmin || !activeGroupId || !remoteEnabled) {
+    panel.innerHTML = `<div class="empty-state">So admins de um grupo conseguem convidar.</div>`;
+    return;
+  }
+  const link = currentInviteCode ? getInviteLink(currentInviteCode) : "";
+  panel.innerHTML = `
+    <div class="account-card">
+      <p>Partilha o link no grupo do WhatsApp. Quem entrar fica como jogador de ${escapeHtml(getActiveGroup()?.name || "o grupo")} e escolhe o seu perfil; tu aprovas em Pedidos.</p>
+      ${link ? `
+        <input class="invite-link" type="text" readonly value="${escapeHtml(link)}" aria-label="Link de convite">
+        <div class="actions">
+          <button class="primary-btn" data-invite-share>Enviar para WhatsApp</button>
+          <button class="ghost-btn" data-invite-copy>Copiar</button>
+          <button class="ghost-btn" data-invite-renew>Gerar novo link</button>
+        </div>
+        <p class="hint">Gerar um novo link anula o anterior.</p>
+      ` : `<div class="actions"><button class="primary-btn" data-invite-load>Mostrar link de convite</button></div>`}
+    </div>
+  `;
+  panel.querySelector("[data-invite-load]")?.addEventListener("click", () => loadInviteCode(false));
+  panel.querySelector("[data-invite-renew]")?.addEventListener("click", () => {
+    if (confirm("Gerar um novo link? O link atual deixa de funcionar.")) loadInviteCode(true);
+  });
+  panel.querySelector("[data-invite-copy]")?.addEventListener("click", async (event) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      event.currentTarget.textContent = "Copiado";
+    } catch {
+      window.prompt("Copia o link de convite:", link);
+    }
+  });
+  panel.querySelector("[data-invite-share]")?.addEventListener("click", () => {
+    const text = `Junta-te a ${getActiveGroup()?.name || "nos"} no Footer: ${link}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  });
+}
+
+async function loadInviteCode(renew) {
+  if (!requireAdmin() || !supabaseClient || !activeGroupId) return;
+  const { data, error } = await supabaseClient.rpc("get_group_invite", { p_group_id: activeGroupId, p_renew: renew });
+  if (error) {
+    alert(`Nao consegui obter o link: ${error.message}`);
+    return;
+  }
+  currentInviteCode = data;
+  renderInvitePanel();
+}
+
+function getInviteLink(code) {
+  const url = new URL(getShareAppUrl());
+  url.search = "";
+  url.searchParams.set("convite", code);
+  return url.toString();
 }
 
 async function loadMyTraits() {
@@ -2434,6 +2621,8 @@ function render() {
   renderEventsList();
   renderPublicGames();
   renderTraitsPanel();
+  renderGroupBanner();
+  renderInvitePanel();
   renderPlayerProfile();
   renderMvpVoteGate();
   renderNotifyBadges();
@@ -2526,8 +2715,8 @@ function renderAccountPanel() {
 
   els.accountPanel.innerHTML = `
     <div class="account-card">
-      <h3>Associar conta a jogador</h3>
-      <p>Escolhe o teu perfil. O admin vai aprovar antes de ficares ligado oficialmente.</p>
+      <h3>Qual destes es tu?</h3>
+      <p>Escolhe o teu perfil${getActiveGroup() ? ` em ${escapeHtml(getActiveGroup().name)}` : ""}. O admin aprova antes de ficares ligado. Se nao estas na lista, pede ao admin para te adicionar.</p>
       ${renderSecurityActions()}
       <div class="claim-grid">
         ${availablePlayers.map((p) => `

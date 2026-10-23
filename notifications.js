@@ -8,6 +8,16 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.4.0",
+      date: "2026-10-23",
+      title: "Convites para o grupo",
+      items: [
+        "Os admins têm um link de convite para partilhar no WhatsApp.",
+        "Quem abre o link entra no grupo e escolhe o seu perfil em \"Qual destes és tu?\".",
+        "Contas novas só entram num grupo através de um convite.",
+      ],
+    },
+    {
       version: "1.3.0",
       date: "2026-10-23",
       title: "Jogos públicos",

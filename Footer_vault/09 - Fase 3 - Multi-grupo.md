@@ -67,6 +67,13 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 - Limite atual: com um so grupo e contas novas a entrar nos Futeboleiros, ainda nao ha "de fora". Ganha vida com o segundo grupo.
 - Depois: pagina do jogo e equipas para o convidado aceite (hoje so ve data/hora/local e o estado).
 
+## Passo 3.2 - convites (2026-10-23)
+
+- Migracao `supabase/group-invites-migration.sql` escrita e ensaiada em producao numa transacao anulada (tudo ok). **Ainda nao aplicada**: espera OK do dono, porque muda o comportamento das contas novas.
+- `group_invites` (um link ativo por grupo, codigo de 16 caracteres); RPCs `get_group_invite` (admin; `p_renew` anula o anterior), `preview_group_invite` (qualquer pessoa, so devolve o nome do grupo), `accept_group_invite` (entra como jogador).
+- Contas novas deixam de entrar automaticamente nos Futeboleiros; `profiles.role` so sincroniza quem ja e membro.
+- App (v1.4.0, commit local): link `?convite=` guardado no dispositivo ate a pessoa entrar; faixa no topo (convite por aceitar / conta sem grupo); painel "Convidar jogadores" em Admin > Pedidos (mostrar, copiar, WhatsApp, gerar novo); depois de entrar abre "Qual destes es tu?" (pedido de perfil existente). Conta sem grupo comeca vazia (sem jogadores de exemplo).
+
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 
 - Grupo privado (como os Futeboleiros): tudo o que e do grupo so e visivel para membros.
