@@ -27,7 +27,7 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 
 - A convocatoria tem limite de jogadores, normalmente 12.
 - Ao atingir o limite, nao deve permitir mais respostas `Vou`.
-- `Gerar com confirmados` deve passar directamente para sugestoes/preview.
+- O botao `Fazer equipas` da convocatoria carrega os confirmados e poe logo no campo a divisao mais equilibrada. Se a convocatoria ja tiver equipas confirmadas (jogo por terminar), o botao passa a `Ver equipas` e abre esse jogo em vez de criar outro.
 - A data do jogo confirmado deve vir da convocatoria.
 - Admin pode alterar a data/hora de uma convocatoria depois de lancada.
 - Se a convocatoria ja tiver originado um jogo, alterar a data/hora da convocatoria deve sincronizar tambem a data/hora desse jogo.
@@ -38,6 +38,9 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 
 ## Equipas
 
+- Desde 2026-10-23 o ecra chama-se `Fazer equipas` e segue etapas: quem vai a jogo (so os confirmados; outros jogadores e convidados ficam em `Adicionar outro jogador`) -> `Auto` / `Baralhar` -> ajuste manual A<->B -> `Confirmar equipas` -> `Enviar para WhatsApp` -> `Terminar jogo` -> resultado.
+- Nao ha lista de sugestoes: `Auto` mostra a melhor divisao e `Baralhar` percorre as 6 melhores.
+- Nao ha suplentes: so Equipa A e B. Jogadores adicionados entram na equipa mais pequena. Jogos antigos com suplentes continuam a mostrar essas colunas no editor ate serem movidos.
 - Nao deve haver suplentes visuais quando ha 12 confirmados.
 - Com 12 confirmados, todos entram no campo/equipa, contando 6 por equipa para equilibrio.
 - O equilibrio deve considerar rating e forma sem sacrificar completamente a coerencia das equipas.
@@ -47,6 +50,7 @@ Quando for preciso actualizar a copia web/mobile, usar build/sync apropriado e r
 - Rating publico visivel deve aparecer como overall/form.
 - Rating actual/privado e edicao devem ficar restritos a admins.
 - Overall pode ser recalculado automaticamente a partir dos parciais.
+- A nota de um jogador novo/convidado e de 1 a 100 (desde 2026-10-23; antes 0-10). Internamente tudo ja era 0-100.
 - Forma/rating actual e interno ao grupo e nao deve ser confundido com futuro rating publico/social.
 
 ## MVP

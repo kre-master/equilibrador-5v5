@@ -147,7 +147,10 @@ let financeSettings = state.financeSettings || { ...defaultFinanceSettings, play
 let currentEventId = null;
 let currentPaymentsMonth = monthKey(new Date());
 let selectedIds = new Set();
+// Divisoes equilibradas por ordem de qualidade: "Auto" mostra a primeira, "Baralhar" percorre as seguintes.
 let currentSuggestions = [];
+let currentSuggestionIndex = 0;
+let finishingGame = false; // id do jogo cujo resultado esta a ser inserido
 let currentGameId = null;
 let currentHistoryGameId = null;
 let currentGenerationDateIso = new Date().toISOString();
@@ -173,12 +176,22 @@ const els = {
   addGuest: document.querySelector("#add-guest"),
   gameDate: document.querySelector("#game-date"),
   generateTeams: document.querySelector("#generate-teams"),
-  suggestions: document.querySelector("#suggestions"),
+  shuffleTeams: document.querySelector("#shuffle-teams"),
+  teamMakerActions: document.querySelector("#team-maker-actions"),
+  gamePanelTitle: document.querySelector("#game-panel-title"),
+  otherPlayers: document.querySelector("#other-players"),
+  otherPlayerList: document.querySelector("#other-player-list"),
   currentGameEmpty: document.querySelector("#current-game-empty"),
   currentGame: document.querySelector("#current-game"),
   fieldCard: document.querySelector("#field-card"),
+  stepConfirm: document.querySelector("#step-confirm"),
+  stepShare: document.querySelector("#step-share"),
+  stepFinish: document.querySelector("#step-finish"),
   confirmGame: document.querySelector("#confirm-game"),
+  shareTeams: document.querySelector("#share-teams"),
   exportImage: document.querySelector("#export-image"),
+  finishGame: document.querySelector("#finish-game"),
+  scoreRow: document.querySelector("#score-row"),
   scoreA: document.querySelector("#score-a"),
   scoreB: document.querySelector("#score-b"),
   saveScore: document.querySelector("#save-score"),
@@ -797,7 +810,7 @@ function canWriteOfficialData() {
 
 function requireAdmin() {
   if (canWriteOfficialData()) return true;
-  alert("Modo visitante: podes gerar sugestoes e exportar PNG, mas so o admin pode guardar/editar dados.");
+  alert("Modo visitante: podes experimentar fazer equipas e exportar PNG, mas so o admin pode guardar/editar dados.");
   return false;
 }
 
@@ -820,8 +833,11 @@ function bindEvents() {
   on(els.gameDate, "input", updatePreviewGameDate);
   on(els.gameDate, "change", updatePreviewGameDate);
   on(els.generateTeams, "click", generateAndRenderSuggestions);
+  on(els.shuffleTeams, "click", shuffleTeams);
   on(els.confirmGame, "click", confirmPreviewGame);
+  on(els.shareTeams, "click", shareTeamsOnWhatsApp);
   on(els.exportImage, "click", exportCurrentGameImage);
+  on(els.finishGame, "click", startFinishingGame);
   on(els.saveScore, "click", saveCurrentScore);
   on(els.addPlayerGameBtn, "click", addSelectedPlayerToGame);
   on(els.playerForm, "submit", savePlayerFromForm);
@@ -1692,7 +1708,7 @@ function bindNavigation() {
     const open = !view.classList.contains("show-generator");
     view.classList.toggle("show-generator", open);
     event.currentTarget.setAttribute("aria-expanded", String(open));
-    event.currentTarget.textContent = open ? "Esconder gerador" : "Experimentar gerar equipas";
+    event.currentTarget.textContent = open ? "Esconder" : "Experimentar fazer equipas";
   });
   bindVideoLightbox();
 }
@@ -4882,6 +4898,15 @@ function renderEventsList() {
   els.eventsList.querySelectorAll("[data-event-admin-response]").forEach((button) => {
     button.addEventListener("click", () => saveAdminEventResponse(button.dataset.eventId, button.dataset.playerId, button.dataset.eventAdminResponse));
   });
+  els.eventsList.querySelectorAll("[data-event-open-game]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentEventId = button.dataset.eventId;
+      currentGameId = button.dataset.eventOpenGame;
+      previewGame = null;
+      showView("today");
+      render();
+    });
+  });
   els.eventsList.querySelectorAll("[data-event-generate]").forEach((button) => {
     button.addEventListener("click", () => {
       currentEventId = button.dataset.eventGenerate;
@@ -4920,6 +4945,8 @@ function renderEventCard(eventData) {
   const missing = Math.max(0, eventData.minPlayers - going.length);
   const isFull = going.length >= eventData.maxPlayers;
   const isSelected = eventData.id === currentEventId;
+  const eventGame = findGameForEventData(eventData);
+  const confirmedGame = eventGame && !isFinishedGame(eventGame) ? eventGame : null;
   return `
     <article class="event-card ${isSelected ? "selected" : ""}">
       <div class="event-top">
@@ -4956,7 +4983,9 @@ function renderEventCard(eventData) {
         ${eventData.status === "cancelled" ? `
           <button class="danger-btn" data-event-delete="${eventData.id}">Apagar convocatoria</button>
         ` : `
-          <button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < eventData.minPlayers || going.length > Math.min(eventData.maxPlayers, 12) ? "disabled" : ""}>Gerar com confirmados</button>
+          ${confirmedGame ? `
+          <button class="primary-btn" data-event-open-game="${confirmedGame.id}" data-event-id="${eventData.id}">Ver equipas</button>
+          ` : `<button class="primary-btn" data-event-generate="${eventData.id}" ${going.length < eventData.minPlayers || going.length > Math.min(eventData.maxPlayers, 12) ? "disabled" : ""}>Fazer equipas</button>`}
           <button class="danger-btn" data-event-cancel="${eventData.id}">Cancelar</button>
         `}
       </div>
@@ -4976,7 +5005,7 @@ function renderResponseActions(eventData, myResponse) {
     return `<div class="hint warn">Associa primeiro a tua conta a um perfil de jogador.</div>`;
   }
   if (isAdmin && !linkedPlayer) {
-    return `<div class="hint">Admin sem perfil associado. Podes acompanhar e gerar equipas.</div>`;
+    return `<div class="hint">Admin sem perfil associado. Podes acompanhar e fazer equipas.</div>`;
   }
   const status = myResponse?.status || "";
   const goingDisabled = status !== "going" && isEventFullForPlayer(eventData, linkedPlayer.id);
@@ -5027,7 +5056,7 @@ function renderEventAdminAdds(eventData) {
       </div>
       <div class="add-guest-row">
         <input data-event-guest-name="${eventData.id}" placeholder="Amigo novo">
-        <input data-event-guest-score="${eventData.id}" type="number" min="0" max="10" step="0.5" placeholder="0-10" title="Nota obrigatoria para jogadores novos">
+        <input data-event-guest-score="${eventData.id}" type="number" min="1" max="100" step="1" placeholder="1-100" title="Nota de 1 a 100, obrigatoria para jogadores novos">
         <button class="ghost-btn" data-event-add-guest-btn="${eventData.id}" ${isFull ? "disabled" : ""}>Adicionar convidado</button>
       </div>
       <p class="hint">O convidado fica guardado como jogador para os proximos jogos. Se ja existir, reutilizamos o perfil.</p>
@@ -5255,6 +5284,29 @@ function shareEventOnWhatsApp(eventId) {
   window.open(url, "_blank", "noopener");
 }
 
+function shareTeamsOnWhatsApp() {
+  const game = getCurrentGame();
+  if (!game) return;
+  const eventData = game.status === "preview" ? getCurrentEvent() : findEventForGame(game);
+  const title = eventData?.title || game.title || "";
+  const teamLine = (label, ids) => {
+    const players = hydrate(ids);
+    return `${label} (${players.length}): ${players.map((p) => p.name).join(", ") || "-"}`;
+  };
+  const lines = [
+    title ? `Equipas: ${title}` : "Equipas",
+    formatDate(game.date),
+    eventData?.location ? `Local: ${eventData.location}` : "",
+    "",
+    teamLine("Equipa A", [...(game.teamA || []), ...getBenchA(game)]),
+    teamLine("Equipa B", [...(game.teamB || []), ...getBenchB(game)]),
+    "",
+    `Ver no Footer: ${getShareAppUrl()}`,
+  ].filter((line, index, all) => line || all[index - 1]);
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank", "noopener");
+}
+
 function getShareAppUrl() {
   if (location.protocol === "file:" || location.hostname === "127.0.0.1" || location.hostname === "localhost") {
     return "https://kre-master.github.io/equilibrador-5v5/";
@@ -5315,10 +5367,11 @@ function loadCurrentEventGoingPlayers(options = {}) {
   currentGameId = null;
   previewGame = null;
   currentSuggestions = [];
+  finishingGame = false;
   setGameDateInput(eventData.startsAt);
   showView("today");
   render();
-  setHint(`${goingPlayers.length} confirmados carregados da convocatoria "${eventData.title}".`, goingPlayers.length >= 10 && goingPlayers.length <= 13 ? "good" : "warn");
+  setHint(`${goingPlayers.length} confirmados carregados da convocatoria "${eventData.title}".`, goingPlayers.length >= 10 && goingPlayers.length <= 12 ? "good" : "warn");
   if (options.autoGenerate) {
     generateAndRenderSuggestions({ autoPreviewBest: true });
   }
@@ -5411,60 +5464,73 @@ async function reviewPlayerClaim(claimId, status) {
   render();
 }
 
+// Em cima ficam so os que vao a jogo; o resto da base fica escondido em "Adicionar outro jogador".
 function renderPlayerList() {
   if (!els.playerList) return;
   const query = normalize(els.playerSearch?.value || "");
-  const players = state.players
-    .filter((p) => normalize(p.name).includes(query))
-    .sort((a, b) => b.overall - a.overall || a.name.localeCompare(b.name));
+  const byRating = (a, b) => b.overall - a.overall || a.name.localeCompare(b.name);
+  const selectedPlayers = state.players.filter((p) => selectedIds.has(p.id)).sort(byRating);
+  const otherPlayers = state.players
+    .filter((p) => !selectedIds.has(p.id) && normalize(p.name).includes(query))
+    .sort(byRating);
 
-  els.playerList.innerHTML = players.map((p) => {
-    const selected = selectedIds.has(p.id);
-    const form = getPlayerForm(p);
-    const variant = getPlayerCardVariant(p, form);
-    return `
-      <label class="player-chip ${renderCardHaloClass(p, variant)} ${selected ? "selected" : ""}">
-        <input type="checkbox" data-select-player="${p.id}" ${selected ? "checked" : ""}>
-        <button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button>
-        <button class="player-meta player-open-link" data-open-player="${p.id}" type="button">
-          <strong>${escapeHtml(p.name)}</strong>
-          <span>${p.isGuest ? "Convidado" : "Jogador"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
-        </button>
-        ${renderRatingBadge(p, form)}
-      </label>
-    `;
-  }).join("");
+  els.playerList.innerHTML = selectedPlayers.map(renderPlayerChip).join("")
+    || `<div class="hint">Ninguem selecionado. Usa os confirmados da convocatoria ou adiciona jogadores abaixo.</div>`;
+  if (els.otherPlayerList) {
+    els.otherPlayerList.innerHTML = otherPlayers.map(renderPlayerChip).join("")
+      || `<div class="hint">Sem jogadores para adicionar.</div>`;
+  }
+  if (els.otherPlayers && !selectedPlayers.length) els.otherPlayers.open = true;
 
-  els.playerList.querySelectorAll("[data-select-player]").forEach((input) => {
-    input.addEventListener("change", (event) => {
-      if (event.target.checked) {
-        selectedIds.add(event.target.dataset.selectPlayer);
-      } else {
-        selectedIds.delete(event.target.dataset.selectPlayer);
-      }
-      renderPlayerList();
+  [els.playerList, els.otherPlayerList].filter(Boolean).forEach((list) => {
+    list.querySelectorAll("[data-select-player]").forEach((input) => {
+      input.addEventListener("change", (event) => {
+        if (event.target.checked) {
+          selectedIds.add(event.target.dataset.selectPlayer);
+        } else {
+          selectedIds.delete(event.target.dataset.selectPlayer);
+        }
+        renderPlayerList();
+      });
     });
-  });
-  els.playerList.querySelectorAll("[data-open-player]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openPlayerProfile(button.dataset.openPlayer);
+    list.querySelectorAll("[data-open-player]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openPlayerProfile(button.dataset.openPlayer);
+      });
     });
   });
 
   const count = selectedIds.size;
-  els.selectedCount.textContent = `${count}/13`;
+  els.selectedCount.textContent = `${count}/12`;
   els.selectionHint.className = "hint";
   if (count < 10) {
-    els.selectionHint.textContent = `Faltam ${10 - count} jogadores para gerar equipas.`;
-  } else if (count > 13) {
-    els.selectionHint.textContent = "A primeira versao suporta no maximo 13 jogadores.";
+    els.selectionHint.textContent = `Faltam ${10 - count} jogadores para fazer equipas.`;
+  } else if (count > 12) {
+    els.selectionHint.textContent = "No maximo 12 jogadores por jogo.";
     els.selectionHint.classList.add("warn");
   } else {
-    els.selectionHint.textContent = `${count} jogadores selecionados. Pronto para gerar.`;
+    els.selectionHint.textContent = `${count} jogadores vao a jogo. Pronto para fazer equipas.`;
     els.selectionHint.classList.add("good");
   }
+}
+
+function renderPlayerChip(p) {
+  const selected = selectedIds.has(p.id);
+  const form = getPlayerForm(p);
+  const variant = getPlayerCardVariant(p, form);
+  return `
+    <label class="player-chip ${renderCardHaloClass(p, variant)} ${selected ? "selected" : ""}">
+      <input type="checkbox" data-select-player="${p.id}" ${selected ? "checked" : ""}>
+      <button class="player-open-link" data-open-player="${p.id}" type="button">${renderAvatar(p)}</button>
+      <button class="player-meta player-open-link" data-open-player="${p.id}" type="button">
+        <strong>${escapeHtml(p.name)}</strong>
+        <span>${p.isGuest ? "Convidado" : "Jogador"} - PAC ${p.pace} - DEF ${p.defending} - PHY ${p.physical}</span>
+      </button>
+      ${renderRatingBadge(p, form)}
+    </label>
+  `;
 }
 
 function normalizeGuestPlayerName(name) {
@@ -5495,13 +5561,13 @@ async function createOrReuseGuestPlayer(rawName, rawScore) {
     let playerData = matches[0];
     if (!playerData) {
       const score = rawScore === null || rawScore === undefined || String(rawScore).trim() === "" ? NaN : Number(rawScore);
-      if (!Number.isFinite(score) || score < 0 || score > 10) {
-        throw new Error("Para um jogador novo, indica uma nota entre 0 e 10.");
+      if (!Number.isFinite(score) || score < 1 || score > 100) {
+        throw new Error("Para um jogador novo, indica uma nota entre 1 e 100.");
       }
-      const overall = Math.round(score * 10);
+      const overall = Math.round(score);
       playerData = { id: `p-${createUuid()}`, name, pace: overall, shooting: overall,
         passing: overall, dribbling: overall, defending: overall, physical: overall,
-        overall, photoDataUrl: "", linkedUserId: null, isGuest: false, guestScore0To10: score };
+        overall, photoDataUrl: "", linkedUserId: null, isGuest: false, guestScore0To10: overall / 10 };
       if (remoteEnabled) {
         const { data, error } = await supabaseClient.from("players")
           .insert(playerToRow(playerData)).select("*").single();
@@ -5564,52 +5630,30 @@ function generateAndRenderSuggestions(options = {}) {
 
   const selected = getSelectedPlayers();
   if (selected.length < 10 || selected.length > 12) {
-    setHint("Seleciona entre 10 e 12 jogadores antes de gerar.", "warn");
+    currentSuggestions = [];
+    renderCurrentGame();
+    setHint("Seleciona entre 10 e 12 jogadores para fazer equipas.", "warn");
     return;
   }
 
   currentSuggestions = generateSuggestions(selected, state.games).slice(0, 6);
-  renderSuggestions();
-  if (options.autoPreviewBest && currentSuggestions.length) {
-    previewSuggestion(0);
-  }
-}
-
-function renderSuggestions() {
+  currentSuggestionIndex = 0;
+  finishingGame = false;
   if (!currentSuggestions.length) {
-    els.suggestions.innerHTML = `<div class="empty-state">Nao encontrei uma combinacao valida.</div>`;
+    setHint("Nao encontrei uma divisao valida.", "warn");
     return;
   }
+  previewSuggestion(0);
+}
 
-  els.suggestions.innerHTML = currentSuggestions.map((suggestion, index) => {
-    const teamA = suggestion.teamA.map((p) => p.name).join(", ");
-    const teamB = suggestion.teamB.map((p) => p.name).join(", ");
-    return `
-      <article class="suggestion-card">
-        <div class="suggestion-top">
-          <strong>Sugestao ${index + 1}</strong>
-          <button class="primary-btn" data-preview-suggestion="${index}">Ver no campo</button>
-        </div>
-        <div class="team-preview">
-          <div class="team-line"><strong>A ${suggestion.teamAStats.total}</strong> - ${escapeHtml(teamA)}</div>
-          <div class="team-line blue"><strong>B ${suggestion.teamBStats.total}</strong> - ${escapeHtml(teamB)}</div>
-        </div>
-        ${renderTeamRadarChart(suggestion.teamA, suggestion.teamB, { compact: true })}
-        <div class="metric-row">
-          <span class="metric">Diferenca ${suggestion.diffTotal}</span>
-          <span class="metric">Plantel ${suggestion.squadDiff}</span>
-          <span class="metric">Media A ${suggestion.teamAStats.average}</span>
-          <span class="metric">Media B ${suggestion.teamBStats.average}</span>
-          <span class="metric">Repeticao ${suggestion.historyPenalty}</span>
-          <span class="metric">Forma ${suggestion.formPenalty}</span>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  els.suggestions.querySelectorAll("[data-preview-suggestion]").forEach((button) => {
-    button.addEventListener("click", () => previewSuggestion(Number(button.dataset.previewSuggestion)));
-  });
+function shuffleTeams() {
+  const game = getCurrentGame();
+  if (!currentSuggestions.length || (game && game.status !== "preview")) {
+    generateAndRenderSuggestions();
+    return;
+  }
+  currentSuggestionIndex = (currentSuggestionIndex + 1) % currentSuggestions.length;
+  previewSuggestion(currentSuggestionIndex);
 }
 
 function getTeamFormStats(players) {
@@ -5726,7 +5770,8 @@ function previewSuggestion(index) {
   previewGame = createGameFromSuggestion(suggestion, { date: getGenerationDateIso() });
   currentGameId = null;
   renderCurrentGame();
-  setHint("Sugestao no campo. Confirma so quando estiver certo.", "good");
+  const optionText = currentSuggestions.length > 1 ? ` (divisao ${index + 1} de ${currentSuggestions.length})` : "";
+  setHint(`Equipas no campo${optionText}. Ajusta se for preciso e confirma.`, "good");
 }
 
 function ensureGameDateInput() {
@@ -5790,18 +5835,40 @@ async function confirmPreviewGame() {
   await persistState();
   selectedIds.clear();
   currentSuggestions = [];
-  els.suggestions.innerHTML = `<div class="hint good">Jogo confirmado e guardado no historico.</div>`;
+  finishingGame = false;
   render();
+  setHint("Equipas confirmadas. Envia-as para o WhatsApp.", "good");
 }
 
+function startFinishingGame() {
+  if (!requireAdmin()) return;
+  finishingGame = getCurrentGame()?.id || false;
+  renderCurrentGame();
+  els.scoreA?.focus();
+}
+
+// Ecra do jogo por etapas: equipas por confirmar -> confirmadas (WhatsApp) -> terminar e inserir resultado.
 function renderCurrentGame() {
   const game = getCurrentGame();
   const hasGame = Boolean(game);
+  const isPreview = hasGame && game.status === "preview";
   els.currentGameEmpty.classList.toggle("hidden", hasGame);
   els.currentGame.classList.toggle("hidden", !hasGame);
   els.exportImage.disabled = !hasGame;
-  if (els.confirmGame) els.confirmGame.disabled = !hasGame || game.status !== "preview";
+  if (els.confirmGame) els.confirmGame.disabled = !isPreview;
+  els.teamMakerActions?.classList.toggle("hidden", hasGame && !isPreview);
+  if (els.shuffleTeams) els.shuffleTeams.disabled = !isPreview || currentSuggestions.length < 2;
+  if (els.gamePanelTitle) {
+    els.gamePanelTitle.textContent = !hasGame || isPreview ? "Equipas" : isFinishedGame(game) ? "Jogo terminado" : "Equipas confirmadas";
+  }
   if (!game) return;
+
+  els.stepConfirm?.classList.toggle("hidden", !isPreview);
+  els.stepShare?.classList.toggle("hidden", isPreview && isAdmin);
+  els.stepFinish?.classList.toggle("hidden", isPreview);
+  const isFinishing = finishingGame === game.id;
+  els.finishGame?.classList.toggle("hidden", isFinishing || isFinishedGame(game));
+  els.scoreRow?.classList.toggle("hidden", !isFinishing && !isFinishedGame(game));
 
   if (game.date && document.activeElement !== els.gameDate) {
     setGameDateInput(game.date);
@@ -6475,12 +6542,7 @@ function getPosition(side, index, teamSize = 5) {
 }
 
 function renderRosterEditor(game) {
-  const groups = [
-    ["teamA", "Equipa A"],
-    ["teamB", "Equipa B"],
-    ["benchA", "Supl. A"],
-    ["benchB", "Supl. B"],
-  ];
+  const groups = getRosterEditorGroups(game);
 
   els.rosterEditor.innerHTML = groups.map(([key, label]) => {
     const players = hydrate(game[key]);
@@ -6500,13 +6562,24 @@ function renderRosterEditor(game) {
   });
 }
 
-function renderRosterRow(playerData, currentGroup) {
-  const actions = [
-    ["teamA", "A"],
-    ["teamB", "B"],
+// Jogos antigos podem ter suplentes; so mostramos essas colunas quando tem jogadores.
+function getRosterEditorGroups(game) {
+  return [
+    ["teamA", "Equipa A"],
+    ["teamB", "Equipa B"],
     ["benchA", "Supl. A"],
     ["benchB", "Supl. B"],
-  ].filter(([key]) => key !== currentGroup);
+  ].filter(([key]) => key === "teamA" || key === "teamB" || (game[key] || []).length);
+}
+
+function getRosterMoveActions(currentGroup) {
+  if (currentGroup === "teamA") return [["teamB", "Passar para B"]];
+  if (currentGroup === "teamB") return [["teamA", "Passar para A"]];
+  return [["teamA", "Para A"], ["teamB", "Para B"]];
+}
+
+function renderRosterRow(playerData, currentGroup) {
+  const actions = getRosterMoveActions(currentGroup);
 
   return `
     <div class="roster-row">
@@ -6558,7 +6631,7 @@ function addSelectedPlayerToGame() {
   const playerId = els.addPlayerToGame.value;
   if (!game || !playerId) return;
   ensureGameShape(game);
-  game.benchA.push(playerId);
+  (game.teamA.length <= game.teamB.length ? game.teamA : game.teamB).push(playerId);
   if (game.status !== "preview") persistState();
   render();
 }
@@ -6587,9 +6660,7 @@ async function saveCurrentScore() {
     currentGameId = null;
     previewGame = null;
     currentSuggestions = [];
-    if (els.suggestions) {
-      els.suggestions.innerHTML = "";
-    }
+    finishingGame = false;
   }
   render();
 }
@@ -8444,12 +8515,7 @@ function renderHistoryGameDetail() {
 
 function renderHistoryRosterEditor(game) {
   if (!isAdmin) return "";
-  const groups = [
-    ["teamA", "Equipa A"],
-    ["teamB", "Equipa B"],
-    ["benchA", "Supl. A"],
-    ["benchB", "Supl. B"],
-  ];
+  const groups = getRosterEditorGroups(game);
   const inGame = new Set(getGamePlayerIds(game));
   const availablePlayers = state.players
     .filter((playerData) => !inGame.has(playerData.id))
@@ -8488,12 +8554,7 @@ function renderHistoryRosterEditor(game) {
 }
 
 function renderHistoryRosterRow(gameId, playerData, currentGroup) {
-  const actions = [
-    ["teamA", "A"],
-    ["teamB", "B"],
-    ["benchA", "Supl. A"],
-    ["benchB", "Supl. B"],
-  ].filter(([key]) => key !== currentGroup);
+  const actions = getRosterMoveActions(currentGroup);
 
   return `
     <div class="roster-row">

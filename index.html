@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261022-moments1">
+    <link rel="stylesheet" href="styles.css?v=20261023-fazerequipas1">
   </head>
   <body>
     <div class="app-shell">
@@ -118,92 +118,92 @@
           <div class="section-divider" id="generate-anchor">
             <div>
               <p class="eyebrow">Equipas</p>
-              <h2>Gerar equipas</h2>
+              <h2>Fazer equipas</h2>
             </div>
-            <button id="toggle-generator" class="ghost-btn non-admin-only" type="button" aria-expanded="false">Experimentar gerar equipas</button>
+            <button id="toggle-generator" class="ghost-btn non-admin-only" type="button" aria-expanded="false">Experimentar fazer equipas</button>
           </div>
           <div class="layout-grid">
             <section class="panel selection-panel">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Passo 1</p>
-                  <h2>Quem vem hoje?</h2>
+                  <h2>Quem vai a jogo</h2>
                 </div>
-                <strong class="counter" id="selected-count">0/13</strong>
+                <strong class="counter" id="selected-count">0/12</strong>
               </div>
 
               <div class="event-import">
                 <button id="load-event-going" class="ghost-btn">Usar confirmados da convocatoria</button>
               </div>
 
-              <div class="toolbar">
-                <input id="player-search" type="search" placeholder="Pesquisar jogador">
-                <button id="clear-selection" class="ghost-btn">Limpar</button>
-              </div>
-
-              <div class="guest-row">
-                <input id="guest-name" type="text" placeholder="Convidado">
-                <input id="guest-score" type="number" min="0" max="10" step="0.5" placeholder="0-10" title="Nota obrigatoria para jogadores novos">
-                <button id="add-guest" class="primary-btn">Adicionar</button>
-              </div>
-              <p class="hint">O convidado fica guardado como jogador para os proximos jogos. Se ja existir, reutilizamos o perfil.</p>
-
               <div class="hint" id="selection-hint">Seleciona entre 10 e 12 jogadores.</div>
               <div class="player-list" id="player-list"></div>
-            </section>
 
-            <section class="panel suggestions-panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Passo 2</p>
-                  <h2>Sugestoes</h2>
+              <details class="other-players" id="other-players">
+                <summary>Adicionar outro jogador</summary>
+                <div class="toolbar">
+                  <input id="player-search" type="search" placeholder="Pesquisar jogador">
+                  <button id="clear-selection" class="ghost-btn">Limpar todos</button>
                 </div>
-                <div class="generate-controls">
-                  <label class="game-date-control">
-                    <span>Data do jogo</span>
-                    <input id="game-date" type="datetime-local">
-                  </label>
-                  <button id="generate-teams" class="primary-btn">Gerar</button>
+                <div class="player-list" id="other-player-list"></div>
+                <div class="guest-row">
+                  <input id="guest-name" type="text" placeholder="Convidado">
+                  <input id="guest-score" type="number" min="1" max="100" step="1" placeholder="1-100" title="Nota de 1 a 100, obrigatoria para jogadores novos">
+                  <button id="add-guest" class="primary-btn">Adicionar</button>
                 </div>
-              </div>
-              <div class="suggestions" id="suggestions"></div>
+                <p class="hint">O convidado fica guardado como jogador para os proximos jogos. Se ja existir, reutilizamos o perfil.</p>
+              </details>
             </section>
 
             <section class="panel game-panel">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Passo 3</p>
-                  <h2>Jogo confirmado</h2>
+                  <p class="eyebrow">Passo 2</p>
+                  <h2 id="game-panel-title">Equipas</h2>
                 </div>
-                <div class="actions">
-                  <button id="confirm-game" class="primary-btn" disabled>Confirmar jogo</button>
-                  <button id="export-image" class="primary-btn" disabled>PNG</button>
+                <div class="actions" id="team-maker-actions">
+                  <button id="generate-teams" class="primary-btn" title="Equipas mais equilibradas">Auto</button>
+                  <button id="shuffle-teams" class="ghost-btn" title="Outra divisao equilibrada" disabled>Baralhar</button>
                 </div>
               </div>
               <div id="current-game-empty" class="empty-state">
-                Escolhe uma sugestao para pre-visualizar o campo e exportar o PNG.
+                Carrega em Auto para fazer as equipas mais equilibradas com quem vai a jogo.
               </div>
               <div id="current-game" class="game-detail hidden">
-                <div class="score-row">
-                  <label>
-                    Equipa A
-                    <input id="score-a" type="number" min="0" step="1" placeholder="-">
-                  </label>
-                  <strong>vs</strong>
-                  <label>
-                    Equipa B
-                    <input id="score-b" type="number" min="0" step="1" placeholder="-">
-                  </label>
-                  <button id="save-score" class="ghost-btn">Guardar</button>
-                </div>
                 <div class="field-card" id="field-card"></div>
-                <div class="edit-tools">
-                  <h3>Editar jogo</h3>
+                <div class="edit-tools admin-only" id="edit-tools">
+                  <h3>Ajustar equipas</h3>
+                  <div class="roster-editor" id="roster-editor"></div>
                   <div class="add-to-game">
                     <select id="add-player-to-game"></select>
                     <button id="add-player-game-btn" class="ghost-btn">Adicionar ao jogo</button>
                   </div>
-                  <div class="roster-editor" id="roster-editor"></div>
+                </div>
+                <div class="game-step admin-only" id="step-confirm">
+                  <label class="game-date-control">
+                    <span>Data do jogo</span>
+                    <input id="game-date" type="datetime-local">
+                  </label>
+                  <button id="confirm-game" class="primary-btn" disabled>Confirmar equipas</button>
+                </div>
+                <div class="game-step" id="step-share">
+                  <button id="share-teams" class="primary-btn">Enviar para WhatsApp</button>
+                  <button id="export-image" class="ghost-btn" disabled>PNG</button>
+                </div>
+                <div class="game-step admin-only" id="step-finish">
+                  <button id="finish-game" class="ghost-btn">Terminar jogo</button>
+                  <div class="score-row hidden" id="score-row">
+                    <label>
+                      Equipa A
+                      <input id="score-a" type="number" min="0" step="1" inputmode="numeric" placeholder="-">
+                    </label>
+                    <strong>vs</strong>
+                    <label>
+                      Equipa B
+                      <input id="score-b" type="number" min="0" step="1" inputmode="numeric" placeholder="-">
+                    </label>
+                    <button id="save-score" class="primary-btn">Guardar resultado</button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -470,7 +470,7 @@
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="player-insights.js?v=20261021-profile1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="notifications.js?v=20261022-moments1"></script>
-    <script src="app.js?v=20261022-moments1"></script>
+    <script src="notifications.js?v=20261023-fazerequipas1"></script>
+    <script src="app.js?v=20261023-fazerequipas1"></script>
   </body>
 </html>

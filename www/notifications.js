@@ -8,6 +8,17 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.2.0",
+      date: "2026-10-23",
+      title: "Equipas mais rápidas e votos só teus",
+      items: [
+        "Fazer equipas ficou mais simples: entram só os confirmados, com Auto e Baralhar.",
+        "Já não há suplentes: só Equipa A e Equipa B.",
+        "As equipas confirmadas seguem direto para o WhatsApp do grupo.",
+        "O teu voto de MVP é confidencial: só tu sabes em quem votaste.",
+      ],
+    },
+    {
       version: "1.1.0",
       date: "2026-10-22",
       title: "Partilha os melhores momentos",
