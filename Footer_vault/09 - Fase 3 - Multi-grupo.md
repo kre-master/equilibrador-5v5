@@ -50,12 +50,30 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 - Transitorio ate a 3.1: default de `group_id` = Futeboleiros; `profiles.role` sincronizado com `group_members`; contas novas entram nos Futeboleiros.
 - Para a 3.1: `submit_postgame_checkin` exige um unico jogador ligado a conta - tem de escolher o jogador do grupo do jogo; triggers de coerencia (jogador e jogo do mesmo grupo); `finance_settings` deixa de usar id `main`.
 
+## Passo 3.1 - estado
+
+- 3.1.1 (app sabe o grupo) feito a 2026-10-23: carrega `group_members` da conta, grupo ativo guardado por conta no dispositivo (`footer-active-group-v1:<user>`), admin vem do papel no grupo ativo (fallback `profiles.role` se os grupos nao carregarem), leituras de players/games/events/payments/finance filtradas por `group_id` e filhos filtrados pelos jogos/eventos do grupo, escritas levam `group_id`, financas de outros grupos com id `group-<uuid>` (Futeboleiros mantem `main`), reparacao de ligacoes duplicadas e aprovacao de pedidos so mexem no grupo ativo, novidades vistas por grupo (Futeboleiros mantem a chave antiga), seletor de grupo no menu da conta so com 2+ grupos.
+- Testado com Supabase simulado no browser (2 grupos, admin num e jogador noutro).
+- 3.1.2 aplicado em producao a 2026-10-23 (migracao `groups_integrity_phase_3_1`, ficheiro `supabase/groups-integrity-migration.sql`), ensaiado antes numa transacao anulada:
+  - `submit_postgame_checkin` usa a ficha da conta no grupo do jogo (conta com fichas em varios grupos funciona);
+  - gatilhos `*_same_group_players` em games, event_responses, payments, attendance_overrides e player_form_snapshots recusam fichas de outro grupo (`player_from_another_group`); ids inexistentes continuam aceites;
+  - `public.set_group_member_role(grupo, conta, papel)`: so admin do grupo; dono fixo; ninguem muda o proprio papel; nos Futeboleiros sincroniza `profiles.role`. A app (lista de contas) usa esta funcao e mostra so as contas do grupo ativo (dono/admin/jogador).
+- Fica para a 3.2: tirar o default Futeboleiros de `group_id` (mantido para versoes antigas da app em cache) e deixar de juntar contas novas aos Futeboleiros automaticamente (trigger `profiles_sync_legacy_membership`) quando houver convites.
+- Falta 3.1.3: jogos publicos e pedidos de entrada.
+
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 
 - Grupo privado (como os Futeboleiros): tudo o que e do grupo so e visivel para membros.
 - Um jogo/convocatoria pode ser marcado **publico**, mesmo num grupo privado (ex.: falta um jogador). Qualquer jogador da comunidade ve esse jogo e pode dizer que esta disponivel; o admin do grupo/jogo aceita ou recusa.
 - Desenho proposto: `events.visibility` (`group` | `public`); tabela de pedidos (`event_join_requests`: evento, conta, estado pendente/aceite/recusado); ao aceitar, a pessoa entra como convidado nesse jogo (perfil de jogador no grupo + resposta "Vou") e ve so esse jogo, nao o resto do grupo.
 - Pre-requisito: o perfil publico da comunidade (fase 4) - na 3.1 basta conta Footer.
+- Antes de ser aceite, quem e de fora ve: data, hora, local, quantos faltam e nome do grupo (sem lista de jogadores).
+- Caracteristicas do jogador (opcionais, da conta, so vistas pelo admin de um jogo publico a quem pede para entrar):
+  - forma autodeclarada: Descontraido / Regular / Atletico;
+  - posicao: So guarda-redes / Misto (vai a baliza e troca) / Jogador de campo;
+  - faixa etaria: 18-24, 25-34, 35-44, 45+ (nunca data de nascimento).
+- O jogo publico indica o que precisa: Campo / Misto / Redes. A app assinala quem encaixa mas nao esconde os outros; decide o admin.
+- Modelo: uma conta por pessoa; em cada grupo a pessoa tem uma ficha de jogador (rating, forma, stats, cartas desse grupo). Jogar em varios grupos e normal; num jogo so entram fichas do grupo desse jogo. Quem vem de fora e e aceite ganha ficha de convidado nesse grupo.
 
 ## Falhas de seguranca encontradas em producao (2026-10-23)
 

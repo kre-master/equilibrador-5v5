@@ -130,6 +130,13 @@ let isAdmin = false;
 let currentSession = null;
 let currentProfile = null;
 let knownProfiles = [];
+// Grupos da conta (fase 3): o grupo ativo decide que dados se veem e quem e admin.
+const ACTIVE_GROUP_KEY = "footer-active-group-v1";
+const LEGACY_GROUP_SLUG = "futeboleiros";
+let myGroups = [];
+let activeGroupId = null;
+// Papel de cada conta no grupo ativo (so carregado para admins, para a lista de contas).
+let groupMemberRoles = new Map();
 let playerClaims = [];
 let eventResponses = [];
 let gameMvpVotes = state.gameMvpVotes || [];
@@ -422,6 +429,7 @@ function playerToRow(playerData) {
     linked_user_id: playerData.linkedUserId || null,
     is_guest: Boolean(playerData.isGuest),
     guest_score_0_to_10: playerData.guestScore0To10 ?? null,
+    ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -456,6 +464,7 @@ function gameToRow(game) {
     score_b: clean.scoreB,
     score_saved_at: clean.scoreSavedAt || null,
     notes: clean.notes || "",
+    ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -504,6 +513,7 @@ function eventToRow(eventData) {
     max_players: clean.maxPlayers,
     status: clean.status,
     created_by: clean.createdBy,
+    ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -605,6 +615,7 @@ function paymentToRow(payment) {
     paid_at: clean.paidAt,
     note: clean.note || "",
     created_by: clean.createdBy || currentSession?.user?.id || null,
+    ...activeGroupColumn(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -718,7 +729,8 @@ function financeSettingsFromRow(row) {
 function financeSettingsToRow(settings) {
   const clean = normalizeFinanceSettings(settings);
   return {
-    id: "main",
+    id: getFinanceSettingsId(),
+    ...activeGroupColumn(),
     start_month: clean.startMonth,
     cash_balance: clean.cashBalance,
     player_balances: clean.playerBalances,
@@ -943,11 +955,114 @@ async function initRemote() {
   updateAccessUi();
 }
 
+function getActiveGroup() {
+  return myGroups.find((group) => group.id === activeGroupId) || null;
+}
+
+function isGroupAdminRole(role) {
+  return role === "owner" || role === "admin";
+}
+
+// Sem grupo conhecido (modo local ou base sem grupos) o Supabase usa o grupo por defeito.
+function activeGroupColumn() {
+  return activeGroupId ? { group_id: activeGroupId } : {};
+}
+
+function scopeToActiveGroup(query) {
+  return activeGroupId ? query.eq("group_id", activeGroupId) : query;
+}
+
+// Os Futeboleiros mantem o id antigo "main"; cada outro grupo tem a sua linha.
+function getFinanceSettingsId() {
+  const group = getActiveGroup();
+  return !group || group.slug === LEGACY_GROUP_SLUG ? "main" : `group-${group.id}`;
+}
+
+function readActiveGroupId() {
+  try {
+    return window.localStorage.getItem(`${ACTIVE_GROUP_KEY}:${currentSession?.user?.id}`);
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveGroupId(groupId) {
+  try {
+    window.localStorage.setItem(`${ACTIVE_GROUP_KEY}:${currentSession?.user?.id}`, groupId);
+  } catch {
+    // Sem armazenamento local: volta ao primeiro grupo na proxima visita.
+  }
+}
+
+async function loadMyGroups() {
+  myGroups = [];
+  activeGroupId = null;
+  if (!supabaseClient || !currentSession?.user) return false;
+  const { data, error } = await supabaseClient
+    .from("group_members")
+    .select("group_id, role, joined_at, groups(id, slug, name)")
+    .eq("user_id", currentSession.user.id)
+    .order("joined_at", { ascending: true });
+  if (error) {
+    console.warn("Group load failed. Run supabase/groups-migration.sql.", error);
+    return false;
+  }
+  myGroups = (data || [])
+    .filter((row) => row.groups)
+    .map((row) => ({ id: row.group_id, slug: row.groups.slug, name: row.groups.name, role: row.role }));
+  const savedId = readActiveGroupId();
+  activeGroupId = (myGroups.find((group) => group.id === savedId) || myGroups[0])?.id || null;
+  return true;
+}
+
+async function loadGroupMemberRoles() {
+  groupMemberRoles = new Map();
+  if (!supabaseClient || !activeGroupId || !isAdmin) return;
+  const { data, error } = await supabaseClient
+    .from("group_members")
+    .select("user_id, role")
+    .eq("group_id", activeGroupId);
+  if (error) {
+    console.warn("Group members load failed", error);
+    return;
+  }
+  (data || []).forEach((row) => groupMemberRoles.set(row.user_id, row.role));
+}
+
+// Com grupos, o papel vem do grupo ativo; sem grupos, do perfil antigo.
+function getAccountRole(profile) {
+  if (groupMemberRoles.size) return groupMemberRoles.get(profile.id) || "player";
+  return profile.role || "player";
+}
+
+const ROLE_LABELS = { owner: "dono", admin: "admin", player: "jogador" };
+
+async function switchActiveGroup(groupId) {
+  if (groupId === activeGroupId || !myGroups.some((group) => group.id === groupId)) return;
+  activeGroupId = groupId;
+  writeActiveGroupId(groupId);
+  isAdmin = isGroupAdminRole(getActiveGroup()?.role);
+  await loadGroupMemberRoles();
+  selectedIds.clear();
+  previewGame = null;
+  currentGameId = null;
+  currentHistoryGameId = null;
+  currentEventId = null;
+  currentSuggestions = [];
+  finishingGame = false;
+  await loadRemoteState();
+  applyLandingRoute();
+  render();
+  updateAccessUi();
+}
+
 async function loadAccountState() {
   currentSession = null;
   currentProfile = null;
   knownProfiles = [];
   playerClaims = [];
+  myGroups = [];
+  activeGroupId = null;
   isAdmin = false;
 
   if (!supabaseClient) return;
@@ -992,7 +1107,9 @@ async function loadAccountState() {
     }
   }
 
-  isAdmin = currentProfile?.role === "admin";
+  const groupsLoaded = await loadMyGroups();
+  isAdmin = groupsLoaded ? isGroupAdminRole(getActiveGroup()?.role) : currentProfile?.role === "admin";
+  await loadGroupMemberRoles();
   await loadPlayerClaims();
 }
 
@@ -1049,9 +1166,9 @@ async function loadRemoteState() {
     { data: rolloutRows, error: rolloutError },
     { data: privateMetricRows, error: privateMetricError },
   ] = await Promise.all([
-    supabaseClient.from("players").select("*").order("name", { ascending: true }),
-    supabaseClient.from("games").select("*").order("date", { ascending: false }),
-    supabaseClient.from("events").select("*").order("starts_at", { ascending: true }),
+    scopeToActiveGroup(supabaseClient.from("players").select("*")).order("name", { ascending: true }),
+    scopeToActiveGroup(supabaseClient.from("games").select("*")).order("date", { ascending: false }),
+    scopeToActiveGroup(supabaseClient.from("events").select("*")).order("starts_at", { ascending: true }),
     supabaseClient.from("event_responses").select("*").order("updated_at", { ascending: false }),
     supabaseClient.from("game_mvp_votes").select("*").order("updated_at", { ascending: false }),
     supabaseClient.rpc("mvp_vote_counts"),
@@ -1075,6 +1192,10 @@ async function loadRemoteState() {
   let remotePayments = [];
   let remoteAttendanceOverrides = [];
   let remoteGameFinanceOverrides = [];
+  // As financas de outro grupo nunca ficam em memoria; sem linha propria, o grupo comeca do zero.
+  if (activeGroupId) {
+    financeSettings = { startMonth: monthKey(new Date()), cashBalance: 0, playerBalances: {} };
+  }
   if (isAdmin) {
     const [
       { data: paymentRows, error: paymentError },
@@ -1082,10 +1203,12 @@ async function loadRemoteState() {
       { data: gameFinanceRows, error: gameFinanceError },
       { data: financeRows, error: financeError },
     ] = await Promise.all([
-      supabaseClient.from("payments").select("*").order("paid_at", { ascending: false }),
+      scopeToActiveGroup(supabaseClient.from("payments").select("*")).order("paid_at", { ascending: false }),
       supabaseClient.from("attendance_overrides").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("game_finance_overrides").select("*").order("updated_at", { ascending: false }),
-      supabaseClient.from("finance_settings").select("*").eq("id", "main"),
+      activeGroupId
+        ? supabaseClient.from("finance_settings").select("*").eq("group_id", activeGroupId)
+        : supabaseClient.from("finance_settings").select("*").eq("id", "main"),
     ]);
     if (paymentError || attendanceError || financeError) {
       console.warn("Finance load failed. Run supabase/schema.sql again.", paymentError || attendanceError || financeError);
@@ -1101,36 +1224,43 @@ async function loadRemoteState() {
     }
   }
 
-  if (!players.length && isAdmin && state.players.length) {
+  // So na base antiga sem grupos: um grupo novo vazio nunca recebe dados guardados no dispositivo.
+  if (!activeGroupId && !players.length && isAdmin && state.players.length) {
     await saveRemoteState();
     updateAccessUi("Online: dados locais publicados");
     return;
   }
 
-  if (!players.length && state.players.length) {
+  if (!activeGroupId && !players.length && state.players.length) {
     updateAccessUi("Online: sem dados remotos");
     return;
   }
 
+  // As RLS devolvem linhas de todos os grupos da conta; ficam so as do grupo ativo.
+  const groupGameIds = new Set((games || []).map((row) => row.id));
+  const groupEventIds = new Set((events || []).map((row) => row.id));
+  const inGroupGame = (row) => !activeGroupId || groupGameIds.has(row.game_id);
   state = migrateState({
     players: players.map(playerFromRow),
     games: games.map(gameFromRow),
     events: (events || []).map(eventFromRow),
-    gameMvpVotes: (mvpRows || []).map(mvpVoteFromRow).filter(Boolean),
-    gameFeedback: (feedbackRows || []).map(gameFeedbackFromRow).filter(Boolean),
+    gameMvpVotes: (mvpRows || []).filter(inGroupGame).map(mvpVoteFromRow).filter(Boolean),
+    gameFeedback: (feedbackRows || []).filter(inGroupGame).map(gameFeedbackFromRow).filter(Boolean),
     featureRollouts: (rolloutRows || []).map(normalizeFeatureRolloutRecord).filter(Boolean),
     payments: (remotePayments || []).map(paymentFromRow).filter(Boolean),
-    attendanceOverrides: (remoteAttendanceOverrides || []).map(attendanceOverrideFromRow).filter(Boolean),
-    gameFinanceOverrides: (remoteGameFinanceOverrides || []).map(gameFinanceOverrideFromRow).filter(Boolean),
+    attendanceOverrides: (remoteAttendanceOverrides || []).filter(inGroupGame).map(attendanceOverrideFromRow).filter(Boolean),
+    gameFinanceOverrides: (remoteGameFinanceOverrides || []).filter(inGroupGame).map(gameFinanceOverrideFromRow).filter(Boolean),
     financeSettings,
   });
   await repairDuplicatePlayerLinks();
-  eventResponses = (responses || []).map(responseFromRow);
+  eventResponses = (responses || [])
+    .filter((row) => !activeGroupId || groupEventIds.has(row.event_id))
+    .map(responseFromRow);
   gameMvpVotes = state.gameMvpVotes || [];
   gameFeedback = state.gameFeedback || [];
   featureRollouts = state.featureRollouts || [];
   privateWeightHistory = (privateMetricRows || []).map(normalizePrivateMetricRecord).filter(Boolean);
-  mvpVoteCounts = (mvpCountRows || []).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
+  mvpVoteCounts = (mvpCountRows || []).filter(inGroupGame).map(mvpVoteCountFromRow).filter((row) => row.gameId && row.candidatePlayerId);
   payments = state.payments || [];
   attendanceOverrides = state.attendanceOverrides || [];
   gameFinanceOverrides = state.gameFinanceOverrides || [];
@@ -1163,11 +1293,11 @@ async function repairDuplicatePlayerLinks() {
       ...playerData,
       linkedUserId: playerData.linkedUserId === userId && playerData.id !== keepId ? null : playerData.linkedUserId,
     }));
-    const { error } = await supabaseClient
+    const { error } = await scopeToActiveGroup(supabaseClient
       .from("players")
       .update({ linked_user_id: null, updated_at: new Date().toISOString() })
       .eq("linked_user_id", userId)
-      .neq("id", keepId);
+      .neq("id", keepId));
     if (error) console.warn("Duplicate link repair failed", error);
   }
 }
@@ -1181,7 +1311,8 @@ function updateAccessUi(message) {
     else if (linkedPlayer) defaultMode = `Online: ${linkedPlayer.name}`;
     else defaultMode = "Online: conta sem perfil";
   }
-  const mode = message || defaultMode;
+  const activeGroup = myGroups.length > 1 ? getActiveGroup() : null;
+  const mode = message || (activeGroup ? `${activeGroup.name} · ${defaultMode.replace(/^Online: /, "")}` : defaultMode);
   if (els.dataStatus) els.dataStatus.textContent = mode;
   document.body.classList.toggle("visitor-mode", remoteEnabled && !isAdmin);
   document.body.classList.toggle("admin-mode", canWriteOfficialData());
@@ -1191,6 +1322,32 @@ function updateAccessUi(message) {
   if (els.adminLogout) els.adminLogout.classList.toggle("hidden", !currentSession);
   if (els.myProfileTab) els.myProfileTab.classList.toggle("hidden", !linkedPlayer);
   updateAccountMenu();
+  renderGroupSwitcher();
+}
+
+// So aparece a quem pertence a mais de um grupo.
+function renderGroupSwitcher() {
+  const switcher = document.querySelector("#group-switcher");
+  if (!switcher) return;
+  const show = myGroups.length > 1;
+  switcher.classList.toggle("hidden", !show);
+  if (!show) {
+    switcher.innerHTML = "";
+    return;
+  }
+  switcher.innerHTML = `
+    <p class="menu-label">Grupo</p>
+    ${myGroups.map((group) => `
+      <button class="menu-item ${group.id === activeGroupId ? "selected" : ""}" type="button" role="menuitemradio"
+        aria-checked="${group.id === activeGroupId}" data-switch-group="${escapeHtml(group.id)}">${escapeHtml(group.name)}</button>
+    `).join("")}
+  `;
+  switcher.querySelectorAll("[data-switch-group]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      toggleAccountMenu(false);
+      await switchActiveGroup(button.dataset.switchGroup);
+    });
+  });
 }
 
 function adminLogin() {
@@ -1736,13 +1893,25 @@ const NOTIFY_ICONS = {
   mvp: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
 };
 
-function readNotifySeen() {
-  let seen = {};
+// As novidades sao por grupo (os Futeboleiros mantem a chave antiga); a versao vista e do dispositivo.
+function getNotifyFeedKey() {
+  const group = getActiveGroup();
+  return !group || group.slug === LEGACY_GROUP_SLUG ? NOTIFY_SEEN_KEY : `${NOTIFY_SEEN_KEY}:${group.id}`;
+}
+
+function readNotifyStore(key) {
   try {
-    seen = JSON.parse(window.localStorage.getItem(NOTIFY_SEEN_KEY) || "{}") || {};
+    return JSON.parse(window.localStorage.getItem(key) || "{}") || {};
   } catch {
-    seen = {};
+    return {};
   }
+}
+
+function readNotifySeen() {
+  const seen = {
+    appVersion: readNotifyStore(NOTIFY_SEEN_KEY).appVersion,
+    feedSeenAt: readNotifyStore(getNotifyFeedKey()).feedSeenAt,
+  };
   if (!seen.feedSeenAt) {
     seen.feedSeenAt = FooterNotifications.defaultSeenAt();
     writeNotifySeen(seen);
@@ -1752,7 +1921,15 @@ function readNotifySeen() {
 
 function writeNotifySeen(seen) {
   try {
-    window.localStorage.setItem(NOTIFY_SEEN_KEY, JSON.stringify(seen));
+    const feedKey = getNotifyFeedKey();
+    const base = readNotifyStore(NOTIFY_SEEN_KEY);
+    if (seen.appVersion !== undefined) base.appVersion = seen.appVersion;
+    if (feedKey === NOTIFY_SEEN_KEY) {
+      base.feedSeenAt = seen.feedSeenAt;
+    } else {
+      window.localStorage.setItem(feedKey, JSON.stringify({ feedSeenAt: seen.feedSeenAt }));
+    }
+    window.localStorage.setItem(NOTIFY_SEEN_KEY, JSON.stringify(base));
   } catch {
     // Sem armazenamento local: os contadores voltam a aparecer na proxima visita.
   }
@@ -3870,7 +4047,11 @@ function renderAccountsList() {
     return;
   }
 
-  if (!knownProfiles.length) {
+  // Com grupos, so as contas do grupo ativo.
+  const profiles = groupMemberRoles.size
+    ? knownProfiles.filter((profile) => groupMemberRoles.has(profile.id))
+    : knownProfiles;
+  if (!profiles.length) {
     els.accountsList.innerHTML = `<div class="empty-state">Ainda nao ha contas criadas.</div>`;
     return;
   }
@@ -3889,19 +4070,21 @@ function renderAccountsList() {
           </tr>
         </thead>
         <tbody>
-          ${knownProfiles.map((profile) => {
+          ${profiles.map((profile) => {
             const linkedPlayer = state.players.find((p) => p.linkedUserId === profile.id);
+            const role = getAccountRole(profile);
+            const canToggle = role !== "owner" && profile.id !== currentSession?.user?.id;
             return `
               <tr>
                 <td><strong>${escapeHtml(profile.display_name || "-")}</strong></td>
                 <td>${escapeHtml(profile.username || "-")}</td>
                 <td>${escapeHtml(profile.email || "-")}</td>
-                <td><span class="metric">${escapeHtml(profile.role || "player")}</span></td>
+                <td><span class="metric">${escapeHtml(ROLE_LABELS[role] || role)}</span></td>
                 <td>${linkedPlayer ? `${renderAvatar(linkedPlayer)} <strong>${escapeHtml(linkedPlayer.name)}</strong>` : "<span class=\"metric\">Sem perfil</span>"}</td>
                 <td>
-                  <button class="mini-btn" data-toggle-admin="${profile.id}">
-                    ${profile.role === "admin" ? "Remover admin" : "Tornar admin"}
-                  </button>
+                  ${canToggle ? `<button class="mini-btn" data-toggle-admin="${profile.id}">
+                    ${role === "admin" ? "Remover admin" : "Tornar admin"}
+                  </button>` : ""}
                 </td>
               </tr>
             `;
@@ -4673,23 +4856,40 @@ async function toggleProfileAdminRole(profileId) {
   if (!requireAdmin()) return;
   const profile = knownProfiles.find((item) => item.id === profileId);
   if (!profile) return;
-  if (profile.id === currentSession?.user?.id && profile.role === "admin") {
+  const currentRole = getAccountRole(profile);
+  if (currentRole === "owner") return;
+  if (profile.id === currentSession?.user?.id && currentRole === "admin") {
     alert("Nao removo o admin da conta com sessao iniciada.");
     return;
   }
-  const nextRole = profile.role === "admin" ? "player" : "admin";
+  const nextRole = currentRole === "admin" ? "player" : "admin";
   if (!confirm(`${nextRole === "admin" ? "Promover" : "Remover admin de"} ${profile.email || profile.username || profile.id}?`)) return;
-  if (remoteEnabled && supabaseClient) {
-    const { error } = await supabaseClient
-      .from("profiles")
-      .update({ role: nextRole, updated_at: new Date().toISOString() })
-      .eq("id", profileId);
+  if (remoteEnabled && supabaseClient && activeGroupId) {
+    // Papel no grupo ativo; nos Futeboleiros o Supabase atualiza tambem profiles.role.
+    const { error } = await supabaseClient.rpc("set_group_member_role", {
+      p_group_id: activeGroupId,
+      p_user_id: profileId,
+      p_role: nextRole,
+    });
     if (error) {
       alert(`Nao consegui atualizar role: ${error.message}`);
       return;
     }
+    groupMemberRoles.set(profileId, nextRole);
+    if (getActiveGroup()?.slug === LEGACY_GROUP_SLUG) profile.role = nextRole;
+  } else {
+    if (remoteEnabled && supabaseClient) {
+      const { error } = await supabaseClient
+        .from("profiles")
+        .update({ role: nextRole, updated_at: new Date().toISOString() })
+        .eq("id", profileId);
+      if (error) {
+        alert(`Nao consegui atualizar role: ${error.message}`);
+        return;
+      }
+    }
+    profile.role = nextRole;
   }
-  profile.role = nextRole;
   renderAccountsList();
   updateAccessUi();
 }
@@ -5435,11 +5635,11 @@ async function reviewPlayerClaim(claimId, status) {
             ? null
             : playerData.linkedUserId,
       }));
-      const { error: unlinkError } = await supabaseClient
+      const { error: unlinkError } = await scopeToActiveGroup(supabaseClient
         .from("players")
         .update({ linked_user_id: null, updated_at: new Date().toISOString() })
         .eq("linked_user_id", claim.user_id)
-        .neq("id", claim.player_id);
+        .neq("id", claim.player_id));
       if (unlinkError) {
         alert(`Nao consegui limpar ligacoes antigas: ${unlinkError.message}`);
         return;
@@ -5549,7 +5749,7 @@ async function createOrReuseGuestPlayer(rawName, rawScore) {
     let players = state.players;
     if (remoteEnabled) {
       if (!supabaseClient) throw new Error("Sem ligacao ao Supabase. Tenta novamente.");
-      const { data, error } = await supabaseClient.from("players").select("*");
+      const { data, error } = await scopeToActiveGroup(supabaseClient.from("players").select("*"));
       if (error) throw error;
       players = (data || []).map(playerFromRow);
     }
@@ -7031,7 +7231,7 @@ async function loadRemoteTracking() {
   trackingRemote = true;
   const remote = {};
   const live = {};
-  (data || []).forEach((row) => {
+  (data || []).filter(isActiveGroupGameRow).forEach((row) => {
     // Admins see the newest revision (draft or published); everyone else only the published one.
     if (!remote[row.game_id]) remote[row.game_id] = trackingEntryFromRow(row);
     if (row.status === "published" && !live[row.game_id]) live[row.game_id] = { revision: row.revision, publishedAt: row.published_at };
@@ -7741,6 +7941,10 @@ function gameVideoPartFromRow(row) {
   };
 }
 
+function isActiveGroupGameRow(row) {
+  return !activeGroupId || state.games.some((game) => game.id === row.game_id);
+}
+
 async function loadRemoteVideos() {
   if (!remoteEnabled || !supabaseClient || !currentSession?.user) return;
   const { data, error } = await supabaseClient.from("game_videos").select("*").order("position");
@@ -7751,7 +7955,7 @@ async function loadRemoteVideos() {
   }
   gameVideosRemote = true;
   const byGame = {};
-  (data || []).forEach((row) => { (byGame[row.game_id] ||= []).push(gameVideoPartFromRow(row)); });
+  (data || []).filter(isActiveGroupGameRow).forEach((row) => { (byGame[row.game_id] ||= []).push(gameVideoPartFromRow(row)); });
   gameVideos = byGame;
 }
 
@@ -7846,7 +8050,7 @@ async function loadRemoteBookmarks() {
     return;
   }
   videoBookmarksRemote = true;
-  videoBookmarks = (data || []).map(videoBookmarkFromRow);
+  videoBookmarks = (data || []).filter(isActiveGroupGameRow).map(videoBookmarkFromRow);
 }
 
 function saveLocalBookmarks() {
