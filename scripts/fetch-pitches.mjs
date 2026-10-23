@@ -10,7 +10,9 @@ const ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
-const DISTRICTS = ["Viana do Castelo", "Braga", "Porto", "Vila Real", "Bragança"];
+// Distritos a descarregar: argumentos da linha de comandos, ou o Norte todo.
+//   node scripts/fetch-pitches.mjs Porto
+const DISTRICTS = process.argv.length > 2 ? process.argv.slice(2) : ["Viana do Castelo", "Braga", "Porto", "Vila Real", "Bragança"];
 const PAUSE_MS = 4000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -26,8 +28,9 @@ async function overpass(query) {
       });
       const text = await response.text();
       if (response.ok && text.trim().startsWith("{")) return JSON.parse(text);
-    } catch {
-      // tenta o proximo servidor
+      console.warn(`${endpoint} -> ${response.status}: ${text.replace(/\s+/g, " ").slice(0, 200)}`);
+    } catch (error) {
+      console.warn(`${endpoint} -> ${error.message}`);
     }
     await sleep(Math.min(60000, 5000 * 2 ** attempt));
   }
@@ -41,7 +44,7 @@ for (const district of DISTRICTS) {
   const municipalities = await overpass(`[out:json][timeout:120];
     area["ISO3166-1"="PT"]["admin_level"="2"]->.pt;
     rel(area.pt)["boundary"="administrative"]["admin_level"="6"]["name"="${district}"]->.d;
-    map_to_area.d->.da;
+    .d map_to_area->.da;
     rel(area.da)["boundary"="administrative"]["admin_level"="7"];
     out tags;`);
   const list = municipalities.elements.map((item) => ({ id: item.id, name: item.tags.name })).filter((item) => item.name);
@@ -80,7 +83,8 @@ for (const district of DISTRICTS) {
   }
 }
 
-const rows = [...pitches.values()].sort((a, b) =>
+// So entram campos com nome e pavilhoes: os campos sem nome nao se distinguem numa lista.
+const rows = [...pitches.values()].filter((pitch) => pitch.name || pitch.kind === "pavilhao").sort((a, b) =>
   a.district.localeCompare(b.district, "pt") || a.municipality.localeCompare(b.municipality, "pt") || a.name.localeCompare(b.name, "pt"));
 await mkdir("data", { recursive: true });
 await writeFile("data/pitches-norte.json", JSON.stringify({
