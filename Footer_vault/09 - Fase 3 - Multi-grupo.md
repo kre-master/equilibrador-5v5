@@ -92,6 +92,13 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 - App (v1.7.0): separador Jogos com bolinha vermelha (pedidos por decidir para admin, convites recebidos, jogos publicos ainda nao vistos neste dispositivo); bloco "Faltam X - Procurar jogadores" na convocatoria (precisamos de, mostrar em Jogos publicos, pedidos, disponiveis compativeis, disponiveis noutras horas/dias, Convidar); "A minha disponibilidade" (esta/proxima semana, dias, das/as) e convites com Aceitar/Recusar em Jogos publicos.
 - "Precisamos de" fica guardado mesmo sem o jogo ser publico (serve para assinalar quem encaixa nos convites).
 
+## Piloto (a partir de 2026-10-23)
+
+- Grupo: o que joga a mesma hora no campo ao lado. Duracao: 4 a 6 semanas.
+- Passos: admin deles cria conta -> Conta > Criar um grupo -> dono aprova em Admin > Pedidos -> Primeiros passos (colar jogadores, link de convite, primeira convocatoria) -> jogadores entram pelo link e escolhem/criam perfil.
+- A observar: tempo ate a primeira convocatoria; quantos jogadores entram pelo link sem ajuda; duvidas no "Qual destes es tu?"; uso de Fazer equipas pelo admin deles; uso de jogos publicos/disponibilidade entre os dois grupos.
+- Pendentes conhecidos: protecao de passwords expostas no Supabase (plano Pro) ou regras de password; convidado aceite ainda nao ve a pagina do jogo/equipas; horas fixas em Europe/Lisbon.
+
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 
 - Grupo privado (como os Futeboleiros): tudo o que e do grupo so e visivel para membros.
