@@ -153,6 +153,10 @@ const PENDING_INVITE_KEY = "footer-pending-invite-v1";
 let pendingInvite = null;
 let groupsLoadedOk = false;
 let currentInviteCode = null;
+// Grupos novos (fase 3.3): pedidos da propria conta e, para o dono da app, todos os pendentes.
+let isPlatformAdmin = false;
+let groupRequests = [];
+let newGroupFormOpen = false;
 const PUBLIC_GAME_ERRORS = {
   traits_required: "Preenche primeiro as tuas caracteristicas na Conta.",
   event_full: "O jogo ja esta cheio.",
@@ -1098,6 +1102,8 @@ async function loadAccountState() {
   playerClaims = [];
   groupsLoadedOk = false;
   currentInviteCode = null;
+  isPlatformAdmin = false;
+  groupRequests = [];
   myGroups = [];
   activeGroupId = null;
   isAdmin = false;
@@ -1149,6 +1155,7 @@ async function loadAccountState() {
   isAdmin = groupsLoaded ? isGroupAdminRole(getActiveGroup()?.role) : currentProfile?.role === "admin";
   await loadGroupMemberRoles();
   await loadMyTraits();
+  await loadGroupRequests();
   await loadPlayerClaims();
 }
 
@@ -1417,11 +1424,17 @@ function renderGroupBanner() {
       </div>`;
   } else if (remoteEnabled && currentSession?.user && groupsLoadedOk && !myGroups.length) {
     html = `
-      <div><strong>Ainda nao pertences a nenhum grupo.</strong><p>Pede ao admin do teu grupo o link de convite. Entretanto podes ver os jogos publicos.</p></div>`;
+      <div><strong>Ainda nao pertences a nenhum grupo.</strong><p>Pede ao admin do teu grupo o link de convite, ou cria um grupo novo. Entretanto podes ver os jogos publicos.</p></div>
+      <div class="actions"><button class="ghost-btn" data-open-new-group>Criar um grupo</button></div>`;
   }
   banner.classList.toggle("hidden", !html);
   banner.innerHTML = html;
   banner.querySelector("[data-invite-accept]")?.addEventListener("click", acceptPendingInvite);
+  banner.querySelector("[data-open-new-group]")?.addEventListener("click", () => {
+    newGroupFormOpen = true;
+    showView("account");
+    renderNewGroupPanel();
+  });
   banner.querySelector("[data-invite-login]")?.addEventListener("click", openLoginModal);
   banner.querySelector("[data-invite-signup]")?.addEventListener("click", createAccount);
   banner.querySelector("[data-invite-dismiss]")?.addEventListener("click", () => {
@@ -1482,11 +1495,246 @@ async function loadInviteCode(renew) {
   renderInvitePanel();
 }
 
+// Conta: pedir um grupo novo (o dono da app aprova).
+function renderNewGroupPanel() {
+  const panel = document.querySelector("#new-group-panel");
+  if (!panel) return;
+  if (!remoteEnabled || !currentSession?.user) {
+    panel.innerHTML = "";
+    return;
+  }
+  const mine = groupRequests.filter((row) => row.requested_by === currentSession.user.id);
+  const pending = mine.find((row) => row.status === "pending");
+  const lastDecided = mine.find((row) => row.status === "approved" || row.status === "rejected");
+  let body;
+  if (pending) {
+    body = `
+      <p>Pediste o grupo <strong>${escapeHtml(pending.name)}</strong>. Fica ativo quando o dono da app aprovar.</p>
+      <div class="actions"><button class="ghost-btn" data-cancel-group-request="${pending.id}">Cancelar pedido</button></div>`;
+  } else if (newGroupFormOpen) {
+    body = `
+      <div class="new-group-form">
+        <input data-new-group="name" maxlength="60" placeholder="Nome do grupo">
+        <input data-new-group="location" maxlength="80" placeholder="Campo / local">
+        <input data-new-group="schedule" maxlength="80" placeholder="Dia e hora habituais (ex.: quartas 21h)">
+        <textarea data-new-group="notes" maxlength="300" rows="2" placeholder="Notas (opcional)"></textarea>
+      </div>
+      <div class="actions">
+        <button class="primary-btn" data-submit-new-group>Pedir grupo</button>
+        <button class="ghost-btn" data-close-new-group>Cancelar</button>
+      </div>`;
+  } else {
+    body = `
+      ${lastDecided?.status === "approved" ? `<p class="hint good">O grupo ${escapeHtml(lastDecided.name)} foi aprovado.</p>` : ""}
+      ${lastDecided?.status === "rejected" ? `<p class="hint warn">O pedido do grupo ${escapeHtml(lastDecided.name)} nao foi aprovado.</p>` : ""}
+      <p>Tens um grupo de amigos que joga com regularidade? Pede um grupo proprio, com convocatorias e perfis privados.</p>
+      <div class="actions"><button class="ghost-btn" data-open-new-group>Criar um grupo novo</button></div>`;
+  }
+  panel.innerHTML = `<div class="account-card"><h3>Criar um grupo</h3>${body}</div>`;
+  panel.querySelector("[data-open-new-group]")?.addEventListener("click", () => {
+    newGroupFormOpen = true;
+    renderNewGroupPanel();
+  });
+  panel.querySelector("[data-close-new-group]")?.addEventListener("click", () => {
+    newGroupFormOpen = false;
+    renderNewGroupPanel();
+  });
+  panel.querySelector("[data-submit-new-group]")?.addEventListener("click", submitNewGroupRequest);
+  panel.querySelector("[data-cancel-group-request]")?.addEventListener("click", async (event) => {
+    if (!confirm("Cancelar o pedido do grupo?")) return;
+    await supabaseClient.rpc("cancel_group_request", { p_request_id: event.currentTarget.dataset.cancelGroupRequest });
+    await loadGroupRequests();
+    renderNewGroupPanel();
+    renderGroupRequestsList();
+  });
+}
+
+async function submitNewGroupRequest() {
+  const panel = document.querySelector("#new-group-panel");
+  const value = (field) => panel?.querySelector(`[data-new-group="${field}"]`)?.value.trim() || "";
+  if (value("name").length < 2) {
+    alert("Escreve o nome do grupo.");
+    return;
+  }
+  const { error } = await supabaseClient.rpc("request_group", {
+    p_name: value("name"),
+    p_location: value("location"),
+    p_schedule: value("schedule"),
+    p_notes: value("notes"),
+  });
+  if (error) {
+    alert(String(error.message || "").includes("request_pending")
+      ? "Ja tens um pedido de grupo pendente."
+      : `Nao consegui enviar o pedido: ${error.message}`);
+    return;
+  }
+  newGroupFormOpen = false;
+  await loadGroupRequests();
+  renderNewGroupPanel();
+  renderGroupRequestsList();
+}
+
+// Dono da app: aprovar ou recusar grupos novos.
+function renderGroupRequestsList() {
+  const section = document.querySelector("#group-requests-section");
+  const list = document.querySelector("#group-requests-list");
+  if (!section || !list) return;
+  section.classList.toggle("hidden", !isPlatformAdmin);
+  if (!isPlatformAdmin) {
+    list.innerHTML = "";
+    return;
+  }
+  const pending = groupRequests.filter((row) => row.status === "pending");
+  list.innerHTML = pending.length ? pending.map((row) => `
+    <div class="join-request-row">
+      <div>
+        <strong>${escapeHtml(row.name)}</strong> <span class="metric">${escapeHtml(row.requester_name || "Jogador")}</span>
+        <p>${escapeHtml([row.location, row.schedule].filter(Boolean).join(" · ") || "Sem local nem horario")}</p>
+        ${row.notes ? `<p>${escapeHtml(row.notes)}</p>` : ""}
+      </div>
+      <div class="roster-actions">
+        <button class="mini-btn" data-group-request-decide="${row.id}" data-approve="true">Aprovar</button>
+        <button class="mini-btn" data-group-request-decide="${row.id}" data-approve="false">Recusar</button>
+      </div>
+    </div>
+  `).join("") : `<div class="empty-state">Nao ha pedidos de grupos.</div>`;
+  list.querySelectorAll("[data-group-request-decide]").forEach((button) => {
+    button.addEventListener("click", () => decideGroupRequest(button.dataset.groupRequestDecide, button.dataset.approve === "true"));
+  });
+}
+
+async function decideGroupRequest(requestId, approve) {
+  const row = groupRequests.find((item) => item.id === requestId);
+  if (!row || !confirm(`${approve ? "Aprovar" : "Recusar"} o grupo ${row.name}?`)) return;
+  const { error } = await supabaseClient.rpc("decide_group_request", { p_request_id: requestId, p_approve: approve });
+  if (error) {
+    alert(`Nao consegui decidir: ${error.message}`);
+    return;
+  }
+  await loadGroupRequests();
+  renderGroupRequestsList();
+}
+
+// Admin de um grupo novo: primeiros passos ate ter jogadores e a primeira convocatoria.
+function renderOnboardingPanel() {
+  const panel = document.querySelector("#onboarding-panel");
+  if (!panel) return;
+  const group = getActiveGroup();
+  const hasPlayers = state.players.length >= 6;
+  const hasGame = Boolean((state.events || []).length || state.games.length);
+  const show = remoteEnabled && isAdmin && group && group.slug !== LEGACY_GROUP_SLUG && (!hasPlayers || !hasGame);
+  panel.classList.toggle("hidden", !show);
+  if (!show) {
+    panel.innerHTML = "";
+    return;
+  }
+  panel.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">${escapeHtml(group.name)}</p>
+        <h2>Primeiros passos</h2>
+      </div>
+    </div>
+    <ol class="onboarding-steps">
+      <li class="${hasPlayers ? "done" : ""}">
+        <strong>Adicionar jogadores</strong> <span class="metric">${state.players.length} no grupo</span>
+        <p class="hint">Um por linha. Podes juntar a nota de 1 a 100 no fim (ex.: "Rui 75"). Sem nota, todos comecam iguais e a forma ajusta com os jogos.</p>
+        <textarea data-onboarding-players rows="5" placeholder="Rui 75&#10;Tiago&#10;Andre 68"></textarea>
+        <div class="actions"><button class="primary-btn" data-onboarding-add>Adicionar</button></div>
+      </li>
+      <li>
+        <strong>Convidar o grupo</strong>
+        <p class="hint">Cada um entra pelo link e escolhe o seu perfil.</p>
+        <div class="actions"><button class="ghost-btn" data-onboarding-invite>Ver link de convite</button></div>
+      </li>
+      <li class="${hasGame ? "done" : ""}">
+        <strong>Primeira convocatoria</strong>
+        <p class="hint">Em "+ Novo jogo", logo abaixo.</p>
+        <div class="actions"><button class="ghost-btn" data-onboarding-event>Criar convocatoria</button></div>
+      </li>
+    </ol>
+  `;
+  panel.querySelector("[data-onboarding-add]")?.addEventListener("click", addOnboardingPlayers);
+  panel.querySelector("[data-onboarding-invite]")?.addEventListener("click", async () => {
+    showView("claims");
+    await loadInviteCode(false);
+  });
+  panel.querySelector("[data-onboarding-event]")?.addEventListener("click", () => {
+    const details = document.querySelector(".new-game-panel");
+    if (details) {
+      details.open = true;
+      details.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+}
+
+// "Nome 75" -> nota 75; sem nota usa a media das notas dadas (ou 60 se nenhuma).
+function parseOnboardingPlayers(text) {
+  const rows = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const match = line.match(/^(.*?)[\s\-:]+(\d{1,3})$/);
+    const name = (match ? match[1] : line).trim().slice(0, 40);
+    const rating = match ? Math.min(100, Math.max(1, Number(match[2]))) : null;
+    return { name, rating };
+  }).filter((row) => row.name.length >= 2);
+  const rated = rows.filter((row) => row.rating != null);
+  const fallback = rated.length ? Math.round(rated.reduce((sum, row) => sum + row.rating, 0) / rated.length) : 60;
+  return rows.map((row) => ({ name: row.name, rating: row.rating ?? fallback }));
+}
+
+async function addOnboardingPlayers() {
+  if (!requireAdmin()) return;
+  const textarea = document.querySelector("[data-onboarding-players]");
+  const existing = new Set(state.players.map((p) => normalizeGuestPlayerName(p.name)));
+  const rows = parseOnboardingPlayers(textarea?.value).filter((row) => !existing.has(normalizeGuestPlayerName(row.name)));
+  if (!rows.length) {
+    alert("Escreve pelo menos um nome novo.");
+    return;
+  }
+  const newPlayers = rows.map((row) => ({
+    id: `p-${createUuid()}`,
+    name: row.name,
+    pace: row.rating, shooting: row.rating, passing: row.rating, dribbling: row.rating, defending: row.rating, physical: row.rating,
+    overall: row.rating,
+    photoDataUrl: "",
+    linkedUserId: null,
+    isGuest: false,
+    guestScore0To10: row.rating / 10,
+  }));
+  if (remoteEnabled && supabaseClient) {
+    const { error } = await supabaseClient.from("players").insert(newPlayers.map(playerToRow));
+    if (error) {
+      alert(`Nao consegui adicionar: ${error.message}`);
+      return;
+    }
+  }
+  state.players.push(...newPlayers);
+  saveState();
+  render();
+}
+
 function getInviteLink(code) {
   const url = new URL(getShareAppUrl());
   url.search = "";
   url.searchParams.set("convite", code);
   return url.toString();
+}
+
+async function loadGroupRequests() {
+  isPlatformAdmin = false;
+  groupRequests = [];
+  if (!supabaseClient || !currentSession?.user) return;
+  const { data: platformAdmin, error: platformError } = await supabaseClient.rpc("is_platform_admin");
+  if (platformError) {
+    console.warn("Platform admin check failed. Run supabase/group-requests-migration.sql.", platformError);
+    return;
+  }
+  isPlatformAdmin = Boolean(platformAdmin);
+  const { data, error } = await supabaseClient.from("group_requests").select("*").order("created_at", { ascending: false });
+  if (error) {
+    console.warn("Group requests load failed", error);
+    return;
+  }
+  groupRequests = data || [];
 }
 
 async function loadMyTraits() {
@@ -2623,6 +2871,9 @@ function render() {
   renderTraitsPanel();
   renderGroupBanner();
   renderInvitePanel();
+  renderNewGroupPanel();
+  renderGroupRequestsList();
+  renderOnboardingPanel();
   renderPlayerProfile();
   renderMvpVoteGate();
   renderNotifyBadges();

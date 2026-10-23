@@ -75,6 +75,14 @@ O schema Supabase e de um grupo so: `profiles.role` e global (`is_admin()`), qua
 - `create_own_player(grupo, nome)`: membro sem ficha cria a sua (nota provisoria = media do grupo) e fica com pedido de associacao pendente; o admin aprova em Pedidos e acerta a nota. Um so pedido pendente por conta.
 - App (v1.4.0): link `?convite=` guardado no dispositivo ate a pessoa entrar; faixa no topo (convite por aceitar / conta sem grupo); painel "Convidar jogadores" em Admin > Pedidos (mostrar, copiar, WhatsApp, gerar novo); depois de entrar abre "Qual destes es tu?" (pedido de perfil existente). Conta sem grupo comeca vazia (sem jogadores de exemplo).
 
+## Passo 3.3 - grupos novos (2026-10-23)
+
+- Migracao `supabase/group-requests-migration.sql` ensaiada numa transacao anulada e aplicada em producao (`group_requests_phase_3_3`).
+- `private.platform_admins` (dono da app; comeca com o owner dos Futeboleiros) e `public.is_platform_admin()`.
+- `group_requests` + RPCs `request_group` (um pendente por conta), `cancel_group_request`, `decide_group_request` (so dono da app; aprovar cria o grupo com slug `nome-xxxxx` e quem pediu fica owner).
+- App (v1.5.0): cartao "Criar um grupo" na Conta (e atalho na faixa de quem nao tem grupo); "Pedidos de grupos novos" em Admin > Pedidos so para o dono da app; cartao "Primeiros passos" no separador Jogo para o admin de um grupo novo (colar jogadores "Nome 75", sem nota = media das notas dadas ou 60; link de convite; primeira convocatoria). Some com 6+ jogadores e uma convocatoria/jogo.
+- Proximo: piloto com o grupo do campo ao lado.
+
 ## Visibilidade dos jogos (decidido 2026-10-23, para a 3.1)
 
 - Grupo privado (como os Futeboleiros): tudo o que e do grupo so e visivel para membros.

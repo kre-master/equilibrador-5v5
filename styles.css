@@ -5806,3 +5806,39 @@ body.stage-open .profile-section {
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
+
+/* Grupos novos: pedido na Conta e primeiros passos do admin */
+.new-group-form {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.onboarding-panel.hidden {
+  display: none;
+}
+
+.onboarding-panel {
+  margin-bottom: 16px;
+}
+
+.onboarding-steps {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0 18px 18px 38px;
+}
+
+.onboarding-steps li {
+  display: grid;
+  gap: 6px;
+}
+
+.onboarding-steps li.done > strong::after {
+  content: " \2713";
+  color: var(--green);
+}
+
+.onboarding-steps textarea {
+  width: 100%;
+}

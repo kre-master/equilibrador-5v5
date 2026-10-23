@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261023-convites2">
+    <link rel="stylesheet" href="styles.css?v=20261023-grupos3">
   </head>
   <body>
     <div class="app-shell">
@@ -87,6 +87,7 @@
 
       <main>
         <section class="view active" id="view-events">
+          <section class="panel onboarding-panel hidden" id="onboarding-panel"></section>
           <div class="events-grid">
             <section class="panel">
               <div class="panel-head">
@@ -232,6 +233,7 @@
             </div>
             <div id="account-panel" class="account-panel"></div>
             <div id="traits-panel" class="traits-panel"></div>
+            <div id="new-group-panel" class="traits-panel"></div>
           </section>
         </section>
 
@@ -305,6 +307,15 @@
               </div>
             </div>
             <div id="invite-panel" class="invite-panel"></div>
+          </section>
+          <section class="panel wide-panel hidden" id="group-requests-section">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Dono da app</p>
+                <h2>Pedidos de grupos novos</h2>
+              </div>
+            </div>
+            <div id="group-requests-list" class="group-requests-list"></div>
           </section>
           <section class="panel wide-panel">
             <div class="panel-head">
@@ -492,7 +503,7 @@
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="player-insights.js?v=20261021-profile1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="notifications.js?v=20261023-convites2"></script>
-    <script src="app.js?v=20261023-convites2"></script>
+    <script src="notifications.js?v=20261023-grupos3"></script>
+    <script src="app.js?v=20261023-grupos3"></script>
   </body>
 </html>

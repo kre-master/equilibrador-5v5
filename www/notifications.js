@@ -8,6 +8,15 @@
   // Cada push com mudancas para os jogadores acrescenta uma entrada no topo, em linguagem simples.
   const CHANGELOG = [
     {
+      version: "1.5.0",
+      date: "2026-10-23",
+      title: "Cria o teu grupo",
+      items: [
+        "Na Conta podes pedir um grupo novo para os teus amigos.",
+        "Depois de aprovado, os primeiros passos ajudam a juntar jogadores, convidar e marcar o primeiro jogo.",
+      ],
+    },
+    {
       version: "1.4.0",
       date: "2026-10-23",
       title: "Convites para o grupo",
