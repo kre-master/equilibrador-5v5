@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-    <link rel="stylesheet" href="styles.css?v=20261023-clube5">
+    <link rel="stylesheet" href="styles.css?v=20261024-clube6">
   </head>
   <body>
     <div class="app-shell">
@@ -119,9 +119,9 @@
               <form id="event-form" class="event-form">
                 <input id="event-title" required placeholder="Nome do jogo">
                 <input id="event-date" type="datetime-local" required>
-                <div id="pitch-picker" class="pitch-picker hidden">
-                  <select id="pitch-municipality" aria-label="Concelho"><option value="">Concelho</option></select>
-                  <select id="pitch-select" aria-label="Campo" disabled><option value="">Campo</option></select>
+                <div id="pitch-picker" class="pitch-picker hidden" data-pitch-picker>
+                  <select data-pitch-municipality aria-label="Concelho"><option value="">Concelho</option></select>
+                  <select data-pitch-select aria-label="Campo" disabled><option value="">Campo</option></select>
                 </div>
                 <input id="event-location" placeholder="Local">
                 <input id="event-max-players" type="number" min="10" max="12" value="12" placeholder="Max. jogadores">
@@ -538,7 +538,7 @@
     <script src="monthly-recap.js?v=20260913-awardcount1"></script>
     <script src="player-insights.js?v=20261021-profile1"></script>
     <script src="tracking-metrics.js?v=20261012-vel2s"></script>
-    <script src="notifications.js?v=20261023-clube5"></script>
-    <script src="app.js?v=20261023-clube5"></script>
+    <script src="notifications.js?v=20261024-clube6"></script>
+    <script src="app.js?v=20261024-clube6"></script>
   </body>
 </html>

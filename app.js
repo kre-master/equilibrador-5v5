@@ -873,7 +873,7 @@ function requireAdmin() {
 }
 
 function bindEvents() {
-  loadPitchCatalog();
+  bindPitchPicker(document.querySelector("#pitch-picker"), els.eventLocation);
   els.tabs.forEach((tab) => on(tab, "click", () => {
     if (tab === els.myProfileTab) {
       const linkedPlayer = getLinkedPlayer();
@@ -8384,20 +8384,26 @@ function renderClubSymbol(group, extraClass = "") {
 }
 
 // O separador usa o simbolo do clube ativo; sem clube mantem o icone de estatisticas.
-// Lista de campos da regiao Norte (OpenStreetMap, scripts/fetch-pitches.mjs): concelho -> campo -> campo "Local".
-async function loadPitchCatalog() {
-  const picker = document.querySelector("#pitch-picker");
-  const municipalitySelect = document.querySelector("#pitch-municipality");
-  const pitchSelect = document.querySelector("#pitch-select");
-  if (!picker || !municipalitySelect || !pitchSelect) return;
-  let pitches = [];
-  try {
-    const response = await fetch("data/pitches-norte.json");
-    if (response.ok) pitches = (await response.json()).pitches || [];
-  } catch (error) {
-    pitches = [];
+// Lista de campos da regiao Norte (OpenStreetMap, scripts/fetch-pitches.mjs): concelho -> campo -> campo de texto.
+let pitchCatalogPromise = null;
+
+function loadPitchCatalog() {
+  if (!pitchCatalogPromise) {
+    pitchCatalogPromise = fetch("data/pitches-norte.json")
+      .then((response) => (response.ok ? response.json() : { pitches: [] }))
+      .then((data) => data.pitches || [])
+      .catch(() => []);
   }
-  if (!pitches.length) return;
+  return pitchCatalogPromise;
+}
+
+// Liga um seletor [data-pitch-picker] (concelho + campo) a um campo de texto; esconde-o se nao houver lista.
+async function bindPitchPicker(picker, input) {
+  const municipalitySelect = picker?.querySelector("[data-pitch-municipality]");
+  const pitchSelect = picker?.querySelector("[data-pitch-select]");
+  if (!municipalitySelect || !pitchSelect || !input) return;
+  const pitches = await loadPitchCatalog();
+  if (!pitches.length || !picker.isConnected) return;
 
   const byDistrict = new Map();
   pitches.forEach((pitch) => {
@@ -8420,8 +8426,8 @@ async function loadPitchCatalog() {
   });
   on(pitchSelect, "change", () => {
     const pitch = pitches.find((item) => item.id === pitchSelect.value);
-    if (!pitch || !els.eventLocation) return;
-    els.eventLocation.value = pitch.name ? `${pitch.name}, ${pitch.municipality}` : `Campo em ${pitch.municipality}`;
+    if (!pitch) return;
+    input.value = (pitch.name ? `${pitch.name}, ${pitch.municipality}` : `Campo em ${pitch.municipality}`).slice(0, 80);
   });
 }
 
@@ -8491,6 +8497,10 @@ function renderClubEditor(group) {
     <form class="club-editor" data-club-editor>
       <label class="auth-field"><span>Bio (ate 300 caracteres)</span>
         <textarea name="bio" maxlength="300" rows="3">${escapeHtml(group.bio)}</textarea></label>
+      <div class="pitch-picker hidden" data-pitch-picker>
+        <select data-pitch-municipality aria-label="Concelho"><option value="">Concelho</option></select>
+        <select data-pitch-select aria-label="Campo" disabled><option value="">Campo</option></select>
+      </div>
       <label class="auth-field"><span>Local habitual (entra automatico nas convocatorias)</span>
         <input name="location" type="text" maxlength="80" value="${escapeHtml(group.defaultLocation)}" placeholder="Ex.: Pavilhao Municipal, Maia"></label>
       <label class="club-check"><input name="public" type="checkbox" ${group.isPublic ? "checked" : ""}>
@@ -8588,6 +8598,7 @@ function renderClubPanel() {
 
   const editor = panel.querySelector("[data-club-editor]");
   if (!editor) return;
+  bindPitchPicker(editor.querySelector("[data-pitch-picker]"), editor.querySelector("[name=location]"));
   const keepBio = () => {
     const data = new FormData(editor);
     group.bio = String(data.get("bio") || "");
